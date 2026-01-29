@@ -400,6 +400,9 @@
 				DEVELOPMENT_TEAM = AXK73U74AC;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "RepoMind uses Face ID to securely unlock access to your GitHub repositories.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "RepoMind needs microphone access to record voice notes for brainstorming tasks.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "RepoMind uses speech recognition to transcribe your voice notes into task cards.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -432,6 +435,9 @@
 				DEVELOPMENT_TEAM = AXK73U74AC;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "RepoMind uses Face ID to securely unlock access to your GitHub repositories.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "RepoMind needs microphone access to record voice notes for brainstorming tasks.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "RepoMind uses speech recognition to transcribe your voice notes into task cards.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
