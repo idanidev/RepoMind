@@ -36,7 +36,7 @@ final class VoiceManager {
 
         switch currentSpeechStatus {
         case .authorized:
-            break // Already good
+            break  // Already good
         case .notDetermined:
             let granted = await withCheckedContinuation { continuation in
                 SFSpeechRecognizer.requestAuthorization { status in
@@ -44,12 +44,14 @@ final class VoiceManager {
                 }
             }
             guard granted else {
-                errorMessage = "Permiso de reconocimiento de voz denegado. Activa el permiso en Ajustes."
+                errorMessage =
+                    "Permiso de reconocimiento de voz denegado. Activa el permiso en Ajustes."
                 permissionGranted = false
                 return
             }
         case .denied, .restricted:
-            errorMessage = "Permiso de reconocimiento de voz denegado. Activa el permiso en Ajustes."
+            errorMessage =
+                "Permiso de reconocimiento de voz denegado. Activa el permiso en Ajustes."
             permissionGranted = false
             return
         @unknown default:
@@ -120,10 +122,22 @@ final class VoiceManager {
             return
         }
 
-        // Check permissions without re-prompting if already decided
-        if !permissionGranted {
+        // Check authorization status FIRST
+        let status = SFSpeechRecognizer.authorizationStatus()
+        switch status {
+        case .notDetermined:
+            // Only request if we haven't asked before
             await checkAndRequestPermissions()
             guard permissionGranted else { return }
+        case .denied, .restricted:
+            // If already denied, don't ask again — just show error
+            errorMessage = "Permiso de voz denegado. Actívalo en Ajustes."
+            return
+        case .authorized:
+            // Good to go
+            break
+        @unknown default:
+            return
         }
 
         // Clean up any previous state completely
@@ -155,7 +169,8 @@ final class VoiceManager {
         self.recognitionRequest = request
 
         // Start recognition task
-        recognitionTask = speechRecognizer.recognitionTask(with: request) { [weak self] result, error in
+        recognitionTask = speechRecognizer.recognitionTask(with: request) {
+            [weak self] result, error in
             Task { @MainActor in
                 guard let self, !self.isStopping else { return }
 
@@ -167,7 +182,9 @@ final class VoiceManager {
                     let nsError = error as NSError
                     // Ignore "request canceled" (code 216) and "no speech detected" (code 1110)
                     let ignoredCodes = [216, 1110]
-                    if nsError.domain == "kAFAssistantErrorDomain" && ignoredCodes.contains(nsError.code) {
+                    if nsError.domain == "kAFAssistantErrorDomain"
+                        && ignoredCodes.contains(nsError.code)
+                    {
                         return
                     }
                     self.errorMessage = error.localizedDescription
@@ -180,7 +197,8 @@ final class VoiceManager {
         let inputNode = engine.inputNode
         let recordingFormat = inputNode.outputFormat(forBus: 0)
 
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) {
+            [weak self] buffer, _ in
             self?.recognitionRequest?.append(buffer)
 
             let channelData = buffer.floatChannelData?[0]

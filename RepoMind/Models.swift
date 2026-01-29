@@ -68,6 +68,9 @@ final class ProjectRepo {
     @Relationship(deleteRule: .cascade, inverse: \TaskItem.project)
     var tasks: [TaskItem] = []
 
+    @Relationship(deleteRule: .cascade, inverse: \KanbanColumn.project)
+    var columns: [KanbanColumn] = []
+
     init(
         repoID: Int,
         name: String,
@@ -101,13 +104,18 @@ final class TaskItem {
     var content: String
     var createdAt: Date
     var audioPath: String?
-    var status: TaskStatus
+
+    // Changing from Enum to Dynamic Column Relationship
+    var column: KanbanColumn?
+
+    // Deprecating/Removing strict enum dependence eventually
+    // var status: TaskStatus
 
     var project: ProjectRepo?
 
     init(
         content: String,
-        status: TaskStatus = .brainstorming,
+        column: KanbanColumn? = nil,
         audioPath: String? = nil,
         project: ProjectRepo? = nil
     ) {
@@ -115,7 +123,38 @@ final class TaskItem {
         self.content = content
         self.createdAt = .now
         self.audioPath = audioPath
-        self.status = status
+        self.column = column
+        self.project = project
+    }
+}
+
+// MARK: - Kanban Column
+
+@Model
+final class KanbanColumn {
+    var id: UUID
+    var name: String
+    var orderIndex: Int
+    var isCollapsed: Bool
+    var createdAt: Date
+
+    @Relationship(deleteRule: .cascade, inverse: \TaskItem.column)
+    var tasks: [TaskItem] = []
+
+    // Parent Project
+    var project: ProjectRepo?
+
+    init(
+        name: String,
+        orderIndex: Int,
+        isCollapsed: Bool = false,
+        project: ProjectRepo? = nil
+    ) {
+        self.id = UUID()
+        self.name = name
+        self.orderIndex = orderIndex
+        self.isCollapsed = isCollapsed
+        self.createdAt = .now
         self.project = project
     }
 }
