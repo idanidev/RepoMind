@@ -11,7 +11,6 @@ struct KanbanView: View {
 
     @State private var voiceManager = VoiceManager()
     @State private var editingTask: TaskItem?
-    @State private var showEditSheet = false
     @State private var showAddSheet = false
     @State private var draggedTask: TaskItem?
     @State private var newTaskContent = ""
@@ -46,7 +45,6 @@ struct KanbanView: View {
                             },
                             onEdit: { task in
                                 editingTask = task
-                                showEditSheet = true
                             },
                             onDelete: { task in
                                 deleteTask(task)
@@ -83,12 +81,10 @@ struct KanbanView: View {
                 }
             }
         }
-        .sheet(isPresented: $showEditSheet) {
-            if let task = editingTask {
-                TaskEditSheet(task: task)
-                    .presentationDetents([.medium])
-                    .presentationDragIndicator(.visible)
-            }
+        .sheet(item: $editingTask) { task in
+            TaskEditSheet(task: task)
+                .presentationDetents([.medium])
+                .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showAddSheet) {
             AddTaskSheet(
@@ -102,7 +98,7 @@ struct KanbanView: View {
             .presentationDragIndicator(.visible)
         }
         .task {
-            await voiceManager.requestPermissions()
+            await voiceManager.checkAndRequestPermissions()
         }
     }
 
@@ -160,51 +156,94 @@ struct KanbanSection: View {
 
     var body: some View {
         Section {
-            if tasks.isEmpty {
-                emptySection
-            } else {
-                ForEach(tasks) { task in
-                    TaskCard(task: task)
-                        .draggable(task.id.uuidString) {
-                            TaskCard(task: task)
-                                .frame(width: 300)
-                                .onAppear { draggedTask = task }
-                        }
-                        .contextMenu {
-                            // Move to other columns
-                            ForEach(TaskStatus.allCases.filter { $0 != status }) { targetStatus in
+            VStack(spacing: 10) {
+                if tasks.isEmpty {
+                    emptySection
+                } else {
+                    ForEach(tasks) { task in
+                        TaskCard(task: task)
+                            .draggable(task.id.uuidString) {
+                                TaskCard(task: task)
+                                    .frame(width: 300)
+                                    .onAppear { draggedTask = task }
+                            }
+                            .contextMenu {
+                                // Move to other columns
+                                ForEach(TaskStatus.allCases.filter { $0 != status }) { targetStatus in
+                                    Button {
+                                        onMove(task, targetStatus)
+                                    } label: {
+                                        Label("Mover a \(targetStatus.displayName)", systemImage: targetStatus.iconName)
+                                    }
+                                }
+
+                                Divider()
+
                                 Button {
-                                    onMove(task, targetStatus)
+                                    onEdit(task)
                                 } label: {
-                                    Label("Mover a \(targetStatus.displayName)", systemImage: targetStatus.iconName)
+                                    Label("Editar", systemImage: "pencil")
+                                }
+
+                                Divider()
+
+                                Button(role: .destructive) {
+                                    onDelete(task)
+                                } label: {
+                                    Label("Eliminar", systemImage: "trash")
                                 }
                             }
-
-                            Divider()
-
-                            Button {
-                                onEdit(task)
-                            } label: {
-                                Label("Editar", systemImage: "pencil")
-                            }
-
-                            Divider()
-
-                            Button(role: .destructive) {
-                                onDelete(task)
-                            } label: {
-                                Label("Eliminar", systemImage: "trash")
-                            }
-                        }
-                        .transition(.asymmetric(
-                            insertion: .scale(scale: 0.8).combined(with: .opacity),
-                            removal: .scale(scale: 0.5).combined(with: .opacity)
-                        ))
+                            .transition(.asymmetric(
+                                insertion: .scale(scale: 0.8).combined(with: .opacity),
+                                removal: .scale(scale: 0.5).combined(with: .opacity)
+                            ))
+                    }
                 }
             }
+            .padding(.vertical, 4)
+            .frame(maxWidth: .infinity)
         } header: {
             sectionHeader
         }
+    }
+
+    // MARK: - Section Header (Drop Target)
+
+    private var sectionHeader: some View {
+        HStack(spacing: 8) {
+            Image(systemName: status.iconName)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(sectionColor)
+
+            Text(status.sectionHeader)
+                .font(.headline)
+                .foregroundStyle(.primary)
+
+            Spacer()
+
+            if isTargeted {
+                Text("Soltar aqui")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(sectionColor)
+                    .transition(.opacity)
+            }
+
+            Text("\(tasks.count)")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(.quaternary, in: Capsule())
+        }
+        .padding(.vertical, 10)
+        .padding(.horizontal, 4)
+        .background {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(isTargeted ? sectionColor.opacity(0.12) : Color(.clear))
+                .animation(.easeInOut(duration: 0.2), value: isTargeted)
+        }
+        .background { Rectangle().fill(.bar) }
+        .contentShape(Rectangle())
         .dropDestination(for: String.self) { items, _ in
             guard let idString = items.first,
                   let task = draggedTask,
@@ -221,53 +260,17 @@ struct KanbanSection: View {
         }
     }
 
-    // MARK: - Section Header
-
-    private var sectionHeader: some View {
-        HStack(spacing: 8) {
-            Image(systemName: status.iconName)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(sectionColor)
-
-            Text(status.sectionHeader)
-                .font(.headline)
-                .foregroundStyle(.primary)
-
-            Spacer()
-
-            Text("\(tasks.count)")
-                .font(.caption.weight(.bold))
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .background(.quaternary, in: Capsule())
-        }
-        .padding(.vertical, 10)
-        .padding(.horizontal, 4)
-        .background {
-            Rectangle()
-                .fill(.bar)
-                .overlay(alignment: .bottom) {
-                    if isTargeted {
-                        Rectangle()
-                            .fill(sectionColor)
-                            .frame(height: 2)
-                    }
-                }
-        }
-    }
-
     private var emptySection: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "tray")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-            Text("Arrastra tareas aqui")
+        VStack(spacing: 6) {
+            Image(systemName: status.emptyIconName)
+                .font(.title3)
+                .foregroundStyle(.quaternary)
+            Text(status.emptyMessage)
                 .font(.caption)
                 .foregroundStyle(.tertiary)
         }
         .frame(maxWidth: .infinity, alignment: .center)
-        .padding(.vertical, 20)
+        .padding(.vertical, 24)
     }
 
     private var sectionColor: Color {
@@ -285,25 +288,19 @@ struct TaskCard: View {
     let task: TaskItem
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(task.content)
+        HStack(spacing: 8) {
+            Text(LocalizedStringKey(task.content))
                 .font(.subheadline)
                 .foregroundStyle(.primary)
                 .lineLimit(4)
                 .multilineTextAlignment(.leading)
 
-            HStack {
-                if task.audioPath != nil {
-                    Image(systemName: "waveform")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
+            Spacer(minLength: 0)
 
-                Spacer()
-
-                Text(task.createdAt, style: .relative)
+            if task.audioPath != nil {
+                Image(systemName: "waveform")
                     .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
             }
         }
         .padding(14)
@@ -311,7 +308,7 @@ struct TaskCard: View {
         .background {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(.regularMaterial)
-                .shadow(color: .black.opacity(0.08), radius: 6, x: 0, y: 3)
+                .shadow(color: Color(.label).opacity(0.06), radius: 6, x: 0, y: 3)
         }
     }
 }

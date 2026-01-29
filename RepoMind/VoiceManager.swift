@@ -18,11 +18,11 @@ final class VoiceManager {
     var speechLocale: Locale = Locale(identifier: "es-ES")
 
     // Private
-    private var audioEngine = AVAudioEngine()
+    private var audioEngine: AVAudioEngine?
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
     private var speechRecognizer: SFSpeechRecognizer?
-    private var isAudioSessionWarmed = false
+    private var isStopping = false
 
     init() {
         speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "es-ES"))
@@ -30,31 +30,37 @@ final class VoiceManager {
 
     // MARK: - Permissions
 
-    func requestPermissions() async {
-        let speechStatus = await withCheckedContinuation { continuation in
-            SFSpeechRecognizer.requestAuthorization { status in
-                continuation.resume(returning: status)
-            }
-        }
+    func checkAndRequestPermissions() async {
+        // Check current status FIRST — don't re-prompt if already decided
+        let currentSpeechStatus = SFSpeechRecognizer.authorizationStatus()
 
-        guard speechStatus == .authorized else {
+        switch currentSpeechStatus {
+        case .authorized:
+            break // Already good
+        case .notDetermined:
+            let granted = await withCheckedContinuation { continuation in
+                SFSpeechRecognizer.requestAuthorization { status in
+                    continuation.resume(returning: status == .authorized)
+                }
+            }
+            guard granted else {
+                errorMessage = "Permiso de reconocimiento de voz denegado. Activa el permiso en Ajustes."
+                permissionGranted = false
+                return
+            }
+        case .denied, .restricted:
             errorMessage = "Permiso de reconocimiento de voz denegado. Activa el permiso en Ajustes."
+            permissionGranted = false
+            return
+        @unknown default:
+            errorMessage = "Estado de permisos de voz desconocido."
             permissionGranted = false
             return
         }
 
-        let audioGranted: Bool
-        if #available(iOS 17, *) {
-            audioGranted = await AVAudioApplication.requestRecordPermission()
-        } else {
-            audioGranted = await withCheckedContinuation { continuation in
-                AVAudioSession.sharedInstance().requestRecordPermission { granted in
-                    continuation.resume(returning: granted)
-                }
-            }
-        }
-
-        guard audioGranted else {
+        // Check microphone permission
+        let micGranted = await checkAndRequestMicPermission()
+        guard micGranted else {
             errorMessage = "Permiso de microfono denegado. Activa el permiso en Ajustes."
             permissionGranted = false
             return
@@ -62,24 +68,30 @@ final class VoiceManager {
 
         permissionGranted = true
         errorMessage = nil
-
-        // Pre-warm audio session in background
-        warmUpAudioSession()
     }
 
-    // MARK: - Pre-warm Audio Session
+    // MARK: - Microphone Permission Helper
 
-    private func warmUpAudioSession() {
-        guard !isAudioSessionWarmed else { return }
-        let audioSession = AVAudioSession.sharedInstance()
-        do {
-            try audioSession.setCategory(.record, mode: .measurement, options: .duckOthers)
-            try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
-            isAudioSessionWarmed = true
-            // Deactivate immediately after warming — just caches the configuration
-            try audioSession.setActive(false, options: .notifyOthersOnDeactivation)
-        } catch {
-            // Non-fatal: will retry on actual recording
+    private func checkAndRequestMicPermission() async -> Bool {
+        if #available(iOS 17, *) {
+            switch AVAudioApplication.shared.recordPermission {
+            case .granted: return true
+            case .undetermined: return await AVAudioApplication.requestRecordPermission()
+            case .denied: return false
+            @unknown default: return false
+            }
+        } else {
+            switch AVAudioSession.sharedInstance().recordPermission {
+            case .granted: return true
+            case .undetermined:
+                return await withCheckedContinuation { continuation in
+                    AVAudioSession.sharedInstance().requestRecordPermission { granted in
+                        continuation.resume(returning: granted)
+                    }
+                }
+            case .denied: return false
+            @unknown default: return false
+            }
         }
     }
 
@@ -108,14 +120,19 @@ final class VoiceManager {
             return
         }
 
+        // Check permissions without re-prompting if already decided
         if !permissionGranted {
-            await requestPermissions()
+            await checkAndRequestPermissions()
             guard permissionGranted else { return }
         }
 
-        // Reset
+        // Clean up any previous state completely
+        cleanupAudioResources()
+
+        // Reset state
         transcribedText = ""
         errorMessage = nil
+        isStopping = false
 
         // Configure audio session
         let audioSession = AVAudioSession.sharedInstance()
@@ -127,19 +144,20 @@ final class VoiceManager {
             return
         }
 
+        // Create fresh audio engine for each recording session
+        let engine = AVAudioEngine()
+        self.audioEngine = engine
+
         // Create recognition request
-        recognitionRequest = SFSpeechAudioBufferRecognitionRequest()
-        guard let recognitionRequest else {
-            errorMessage = "Error al crear la solicitud de reconocimiento."
-            return
-        }
-        recognitionRequest.shouldReportPartialResults = true
-        recognitionRequest.addsPunctuation = true
+        let request = SFSpeechAudioBufferRecognitionRequest()
+        request.shouldReportPartialResults = true
+        request.addsPunctuation = true
+        self.recognitionRequest = request
 
         // Start recognition task
-        recognitionTask = speechRecognizer.recognitionTask(with: recognitionRequest) { [weak self] result, error in
+        recognitionTask = speechRecognizer.recognitionTask(with: request) { [weak self] result, error in
             Task { @MainActor in
-                guard let self else { return }
+                guard let self, !self.isStopping else { return }
 
                 if let result {
                     self.transcribedText = result.bestTranscription.formattedString
@@ -147,16 +165,19 @@ final class VoiceManager {
 
                 if let error {
                     let nsError = error as NSError
-                    if nsError.domain != "kAFAssistantErrorDomain" || nsError.code != 216 {
-                        self.errorMessage = error.localizedDescription
+                    // Ignore "request canceled" (code 216) and "no speech detected" (code 1110)
+                    let ignoredCodes = [216, 1110]
+                    if nsError.domain == "kAFAssistantErrorDomain" && ignoredCodes.contains(nsError.code) {
+                        return
                     }
+                    self.errorMessage = error.localizedDescription
                     self.stopRecording()
                 }
             }
         }
 
         // Install audio tap
-        let inputNode = audioEngine.inputNode
+        let inputNode = engine.inputNode
         let recordingFormat = inputNode.outputFormat(forBus: 0)
 
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
@@ -177,27 +198,42 @@ final class VoiceManager {
         }
 
         do {
-            audioEngine.prepare()
-            try audioEngine.start()
+            engine.prepare()
+            try engine.start()
             isRecording = true
         } catch {
             errorMessage = "Error al iniciar el motor de audio: \(error.localizedDescription)"
-            stopRecording()
+            cleanupAudioResources()
         }
     }
 
     // MARK: - Stop Recording
 
     func stopRecording() {
-        audioEngine.stop()
-        audioEngine.inputNode.removeTap(onBus: 0)
-        recognitionRequest?.endAudio()
-        recognitionTask?.cancel()
-        recognitionRequest = nil
-        recognitionTask = nil
+        guard !isStopping else { return }
+        isStopping = true
+
+        cleanupAudioResources()
+
         isRecording = false
         audioLevel = 0
 
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    }
+
+    // MARK: - Cleanup
+
+    private func cleanupAudioResources() {
+        if let engine = audioEngine, engine.isRunning {
+            engine.stop()
+            engine.inputNode.removeTap(onBus: 0)
+        }
+        audioEngine = nil
+
+        recognitionRequest?.endAudio()
+        recognitionRequest = nil
+
+        recognitionTask?.cancel()
+        recognitionTask = nil
     }
 }

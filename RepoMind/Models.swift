@@ -33,6 +33,22 @@ enum TaskStatus: String, Codable, CaseIterable, Identifiable {
         case .done: "Done"
         }
     }
+
+    var emptyMessage: String {
+        switch self {
+        case .brainstorming: "Sin ideas todavia... Usa el micro o pulsa +"
+        case .todo: "Nada pendiente. Mueve tareas aqui."
+        case .done: "Completa tareas para verlas aqui."
+        }
+    }
+
+    var emptyIconName: String {
+        switch self {
+        case .brainstorming: "lightbulb"
+        case .todo: "tray"
+        case .done: "checkmark.circle"
+        }
+    }
 }
 
 // MARK: - ProjectRepo

@@ -8,14 +8,19 @@ struct ContentView: View {
     @AppStorage("isAuthenticated") private var isAuthenticated = false
 
     var body: some View {
-        Group {
-            if isAuthenticated {
-                RepoListView()
-            } else {
-                LoginView(isAuthenticated: $isAuthenticated)
+        ZStack(alignment: .top) {
+            Group {
+                if isAuthenticated {
+                    RepoListView()
+                } else {
+                    LoginView(isAuthenticated: $isAuthenticated)
+                }
             }
+            .animation(.easeInOut(duration: 0.3), value: isAuthenticated)
+
+            // Toast overlay — sits on top of all navigation
+            ToastOverlay()
         }
-        .animation(.easeInOut(duration: 0.3), value: isAuthenticated)
     }
 }
 
@@ -53,7 +58,6 @@ struct RepoListView: View {
     @Query(sort: \ProjectRepo.updatedAt, order: .reverse) private var repos: [ProjectRepo]
 
     @State private var isLoading = false
-    @State private var errorMessage: String?
     @State private var searchText = ""
     @State private var activeFilter: RepoFilter = .all
 
@@ -91,8 +95,7 @@ struct RepoListView: View {
         NavigationStack {
             Group {
                 if repos.isEmpty && isLoading {
-                    ProgressView("Sincronizando repositorios...")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    skeletonList
                 } else if repos.isEmpty {
                     emptyState
                 } else {
@@ -147,20 +150,23 @@ struct RepoListView: View {
             .refreshable {
                 await syncRepos()
             }
-            .alert("Error", isPresented: .init(
-                get: { errorMessage != nil },
-                set: { if !$0 { errorMessage = nil } }
-            )) {
-                Button("OK") { errorMessage = nil }
-            } message: {
-                Text(errorMessage ?? "")
-            }
             .task {
                 if repos.isEmpty {
                     await syncRepos()
                 }
             }
         }
+    }
+
+    // MARK: - Skeleton Loading
+
+    private var skeletonList: some View {
+        List {
+            ForEach(0..<6, id: \.self) { _ in
+                SkeletonRepoRow()
+            }
+        }
+        .listStyle(.insetGrouped)
     }
 
     // MARK: - Repo List
@@ -235,9 +241,9 @@ struct RepoListView: View {
 
     private var emptyState: some View {
         ContentUnavailableView {
-            Label("Sin Repositorios", systemImage: "folder")
+            Label("No hay repositorios", systemImage: "tray")
         } description: {
-            Text("Arrastra hacia abajo o pulsa sincronizar para obtener tus repos de GitHub.")
+            Text("Añade tu token o revisa tu conexion. Arrastra hacia abajo para sincronizar.")
         } actions: {
             Button("Sincronizar") {
                 Task { await syncRepos() }
@@ -250,12 +256,14 @@ struct RepoListView: View {
 
     private func syncRepos() async {
         isLoading = true
-        errorMessage = nil
 
         do {
             try await GitHubService.shared.syncRepos(into: context)
+            if !repos.isEmpty {
+                ToastManager.shared.show("Repos sincronizados", style: .success)
+            }
         } catch {
-            errorMessage = error.localizedDescription
+            ToastManager.shared.show(error.localizedDescription, style: .error)
         }
 
         isLoading = false
@@ -266,6 +274,46 @@ struct RepoListView: View {
             try? await KeychainManager.shared.deleteToken()
             isAuthenticated = false
         }
+    }
+}
+
+// MARK: - Skeleton Repo Row
+
+struct SkeletonRepoRow: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Text("nombre-repositorio")
+                    .font(.headline)
+                Spacer()
+                Text("Swift")
+                    .font(.caption2)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(.quaternary, in: Capsule())
+            }
+
+            Text("Descripcion del repositorio placeholder que ocupa dos lineas como minimo")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+
+            HStack {
+                Text("Hace 2 horas")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                Spacer()
+                HStack(spacing: 2) {
+                    Image(systemName: "star")
+                        .font(.caption2)
+                    Text("42")
+                        .font(.caption2)
+                }
+                .foregroundStyle(.tertiary)
+            }
+        }
+        .padding(.vertical, 4)
+        .redacted(reason: .placeholder)
     }
 }
 
