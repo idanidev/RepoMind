@@ -15,7 +15,7 @@ actor KeychainManager {
 
     // MARK: - Save Token
 
-    func saveToken(_ token: String) throws {
+    func saveToken(_ token: String, for accountKey: String = "github-pat") throws {
         guard let data = token.data(using: .utf8) else {
             throw KeychainError.encodingFailed
         }
@@ -24,7 +24,8 @@ actor KeychainManager {
         let deleteQuery: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: account
+            kSecAttrAccount as String: accountKey,
+            kSecAttrSynchronizable as String: true,  // Ensure duplicate checks match sync items
         ]
         SecItemDelete(deleteQuery as CFDictionary)
 
@@ -32,9 +33,12 @@ actor KeychainManager {
         let addQuery: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
+            kSecAttrAccount as String: accountKey,
             kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+            // Allow iCloud Keychain Sync
+            kSecAttrSynchronizable as String: true,
+            // Accessible when unlocked (synced items have constraints)
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlocked,
         ]
 
         let status = SecItemAdd(addQuery as CFDictionary, nil)
@@ -45,13 +49,14 @@ actor KeychainManager {
 
     // MARK: - Retrieve Token
 
-    func retrieveToken() throws -> String? {
+    func retrieveToken(for accountKey: String = "github-pat") throws -> String? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
+            kSecAttrAccount as String: accountKey,
+            kSecAttrSynchronizable as String: true,
             kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne
+            kSecMatchLimit as String: kSecMatchLimitOne,
         ]
 
         var result: AnyObject?
@@ -60,7 +65,8 @@ actor KeychainManager {
         switch status {
         case errSecSuccess:
             guard let data = result as? Data,
-                  let token = String(data: data, encoding: .utf8) else {
+                let token = String(data: data, encoding: .utf8)
+            else {
                 throw KeychainError.decodingFailed
             }
             return token
@@ -73,11 +79,12 @@ actor KeychainManager {
 
     // MARK: - Delete Token
 
-    func deleteToken() throws {
+    func deleteToken(for accountKey: String = "github-pat") throws {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: account
+            kSecAttrAccount as String: accountKey,
+            kSecAttrSynchronizable as String: true,
         ]
 
         let status = SecItemDelete(query as CFDictionary)
@@ -88,8 +95,8 @@ actor KeychainManager {
 
     // MARK: - Check if token exists
 
-    func hasToken() -> Bool {
-        (try? retrieveToken()) != nil
+    func hasToken(for accountKey: String = "github-pat") -> Bool {
+        (try? retrieveToken(for: accountKey)) != nil
     }
 }
 
@@ -147,7 +154,8 @@ final class BiometricAuthManager {
         context.localizedCancelTitle = "Use Token"
 
         var error: NSError?
-        guard context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error) else {
+        guard context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error)
+        else {
             errorMessage = error?.localizedDescription ?? "Biometric authentication unavailable."
             return
         }

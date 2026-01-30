@@ -1,0 +1,30 @@
+disabled_rules:
+  - trailing_whitespace
+  - todo
+  - unused_closure_parameter
+opt_in_rules:
+  - empty_count
+  - empty_string
+  - fatal_error_message
+  - first_where
+  - force_unwrapping
+  - implicitly_unwrapped_optional
+  - last_where
+  - legacy_random
+  - redundant_nil_coalescing
+
+excluded:
+  - Pods
+  - Carthage
+  - PROJECT_TEMP_DIR
+  - DerivedData
+  - "*.generated.swift"
+
+line_length: 120
+function_body_length: 60
+type_body_length: 400
+file_length: 600
+
+force_cast: warning
+force_try: warning
+force_unwrapping: warning

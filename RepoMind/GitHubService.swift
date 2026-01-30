@@ -77,7 +77,7 @@ actor GitHubService {
         let config = URLSessionConfiguration.default
         config.httpAdditionalHeaders = [
             "Accept": "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2022-11-28"
+            "X-GitHub-Api-Version": "2022-11-28",
         ]
         config.timeoutIntervalForRequest = 15
         self.session = URLSession(configuration: config)
@@ -88,6 +88,23 @@ actor GitHubService {
     // MARK: - Validate Token (GET /user)
 
     func validateToken(_ token: String) async throws -> GitHubUser {
+        // Mock Scenarios
+        if token == "mock-pro" {
+            return GitHubUser(
+                login: "ProDev", avatarUrl: "person.fill.checkmark", name: "Pro Developer",
+                bio: "Mock Pro Account")
+        }
+        if token == "mock-free" {
+            return GitHubUser(
+                login: "FreeDev", avatarUrl: "person.fill", name: "Free Developer",
+                bio: "Mock Free Account")
+        }
+        if token == "mock-pro-personal" {
+            return GitHubUser(
+                login: "ProPersonal", avatarUrl: "figure.gaming", name: "Pro Personal",
+                bio: "Mock Side Projects")
+        }
+
         let request = try buildRequest(path: "/user", token: token)
         let (data, response) = try await performRequest(request)
 
@@ -112,6 +129,17 @@ actor GitHubService {
     // MARK: - Fetch Repos
 
     func fetchRepos(token: String, page: Int = 1, perPage: Int = 50) async throws -> [GitHubRepo] {
+        // Mock Scenarios
+        if token == "mock-pro" {
+            return generateMockRepos(count: 10)
+        }
+        if token == "mock-free" {
+            return generateMockRepos(count: 4)
+        }
+        if token == "mock-pro-personal" {
+            return generateMockRepos(count: 5, prefix: "Side Project")
+        }
+
         let request = try buildRequest(
             path: "/user/repos?sort=updated&per_page=\(perPage)&page=\(page)&type=all",
             token: token
@@ -137,6 +165,11 @@ actor GitHubService {
     // MARK: - Fetch Starred Repo IDs
 
     func fetchStarredRepoIDs(token: String) async throws -> Set<Int> {
+        // Mock Scenarios
+        if token == "mock-pro" || token == "mock-free" {
+            return [101, 103]  // Hardcoded favorites
+        }
+
         var starredIDs: Set<Int> = []
         var page = 1
 
@@ -168,10 +201,7 @@ actor GitHubService {
     // MARK: - Sync Repos to SwiftData
 
     @MainActor
-    func syncRepos(into context: ModelContext) async throws {
-        guard let token = try await KeychainManager.shared.retrieveToken() else {
-            throw GitHubError.noToken
-        }
+    func syncRepos(account: GitHubAccount, token: String, into context: ModelContext) async throws {
 
         // Fetch repos and starred IDs concurrently
         async let remoteReposTask = fetchRepos(token: token)
@@ -203,7 +233,8 @@ actor GitHubService {
 
             let existing = try context.fetch(fetchDescriptor)
 
-            let parsedDate = formatter.date(from: remote.updatedAt)
+            let parsedDate =
+                formatter.date(from: remote.updatedAt)
                 ?? fallbackFormatter.date(from: remote.updatedAt)
                 ?? .now
 
@@ -217,6 +248,7 @@ actor GitHubService {
                 repo.htmlURL = remote.htmlUrl
                 repo.language = remote.language
                 repo.stargazersCount = remote.stargazersCount
+                repo.account = account  // Link to account
                 // Auto-mark as favorite if user starred it on GitHub (don't un-favorite manually set ones)
                 if isStarred {
                     repo.isFavorite = true
@@ -231,7 +263,8 @@ actor GitHubService {
                     htmlURL: remote.htmlUrl,
                     isFavorite: isStarred,
                     language: remote.language,
-                    stargazersCount: remote.stargazersCount
+                    stargazersCount: remote.stargazersCount,
+                    account: account  // Link to account
                 )
                 context.insert(repo)
             }
@@ -258,5 +291,34 @@ actor GitHubService {
         } catch {
             throw GitHubError.networkError(error)
         }
+    }
+
+    // MARK: - Mock Generator
+
+    private func generateMockRepos(count: Int, prefix: String = "Project Alpha") -> [GitHubRepo] {
+        var repos: [GitHubRepo] = []
+        let languages = ["Swift", "Python", "JavaScript", "Go", "Rust"]
+
+        // Stable IDs:
+        // ProDev (count 10): 101...110
+        // FreeDev (count 4): 201...204
+        // ProPersonal (count 5): 301...305 (based on prefix)
+        let baseID = prefix == "Project Alpha" ? 100 : (prefix == "Side Project" ? 300 : 200)
+
+        for i in 1...count {
+            let repo = GitHubRepo(
+                id: baseID + i,  // Stable ID
+                name: "\(prefix) \(i)",
+                description: "This is a mock repository generated for testing loop #\(i)",
+                updatedAt: ISO8601DateFormatter().string(
+                    from: Date().addingTimeInterval(Double(-i * 3600))),
+                htmlUrl: "https://github.com/mock/project-\(i)",
+                isPrivate: i % 3 == 0,
+                language: languages[i % languages.count],
+                stargazersCount: i * 42
+            )
+            repos.append(repo)
+        }
+        return repos
     }
 }

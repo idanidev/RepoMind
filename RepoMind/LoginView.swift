@@ -1,4 +1,6 @@
+import SwiftData
 import SwiftUI
+import UIKit
 
 // MARK: - Login View (Guided Onboarding)
 
@@ -14,27 +16,34 @@ struct LoginView: View {
 
     @State private var biometricAuth = BiometricAuthManager()
 
-    private let tokenCreationURL = URL(string: "https://github.com/settings/tokens/new?scopes=repo,user")!
+    private let tokenCreationURL = URL(
+        string: "https://github.com/settings/tokens/new?scopes=repo,user")!
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 0) {
-                Spacer(minLength: 60)
+        Form {
+            Section {
+                VStack(spacing: 24) {
+                    RepoMindLogo()
+                        .frame(height: 120)
 
-                // Logo & Branding
-                headerSection
+                    Text("RepoMind")
+                        .font(.largeTitle.weight(.bold))
 
-                if showTokenInput {
-                    tokenInputSection
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                } else {
-                    onboardingActions
-                        .transition(.opacity)
+                    Text("Conecta RepoMind con GitHub\npara ver tus proyectos")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
                 }
-
-                Spacer(minLength: 40)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 20)
+                .listRowBackground(Color.clear)
             }
-            .padding(.horizontal, 28)
+
+            if showTokenInput {
+                tokenInputSection
+            } else {
+                onboardingActions
+            }
         }
         .scrollDismissesKeyboard(.interactively)
         .animation(.spring(duration: 0.45), value: showTokenInput)
@@ -44,170 +53,119 @@ struct LoginView: View {
         }
     }
 
-    // MARK: - Header
-
-    private var headerSection: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "chevron.left.forwardslash.chevron.right")
-                .font(.system(size: 52, weight: .thin))
-                .foregroundStyle(.tint)
-                .symbolEffect(.pulse, options: .repeating.speed(0.5))
-
-            Text("RepoMind")
-                .font(.largeTitle.weight(.bold))
-
-            Text("Conecta RepoMind con GitHub\npara ver tus proyectos")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-        }
-        .padding(.bottom, 44)
-    }
-
     // MARK: - Onboarding Actions (Before Token Input)
 
     private var onboardingActions: some View {
-        VStack(spacing: 16) {
+        Section("Empezar") {
             // Step 1: Create token
             Link(destination: tokenCreationURL) {
-                HStack(spacing: 12) {
-                    Image(systemName: "key.fill")
-                        .font(.title3)
-                        .frame(width: 32)
-                    VStack(alignment: .leading, spacing: 2) {
+                Label {
+                    VStack(alignment: .leading) {
                         Text("Crear Token en GitHub")
-                            .font(.headline)
+                            .foregroundStyle(.primary)
                         Text("Se abre github.com con los permisos necesarios")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
-                    Spacer()
-                    Image(systemName: "arrow.up.right")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                } icon: {
+                    Image(systemName: "key.fill")
+                        .foregroundStyle(.blue)
                 }
-                .padding(16)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
-            .buttonStyle(.plain)
 
             // Step 2: Paste token
             Button {
                 showTokenInput = true
                 pasteFromClipboard()
             } label: {
-                HStack(spacing: 12) {
-                    Image(systemName: "doc.on.clipboard.fill")
-                        .font(.title3)
-                        .frame(width: 32)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Pegar Token")
-                            .font(.headline)
-                        Text("Pega el token desde el portapapeles")
-                            .font(.caption)
-                            .foregroundStyle(.white.opacity(0.7))
-                    }
-                    Spacer()
-                }
-                .padding(16)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.accentColor, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .foregroundStyle(.white)
+                Label("Pegar Token del Portapapeles", systemImage: "doc.on.clipboard.fill")
             }
-            .buttonStyle(.plain)
 
             // Manual entry fallback
             Button {
                 showTokenInput = true
             } label: {
-                Text("Introducir token manualmente")
-                    .font(.subheadline)
+                Label("Introducir Token Manualmente", systemImage: "keyboard")
                     .foregroundStyle(.secondary)
             }
-            .padding(.top, 4)
         }
     }
 
     // MARK: - Token Input Section
 
     private var tokenInputSection: some View {
-        VStack(spacing: 20) {
-            // Token field
-            VStack(alignment: .leading, spacing: 8) {
-                Text("GitHub Personal Access Token")
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
-
-                HStack(spacing: 8) {
+        Group {
+            Section("Tu Token de Acceso") {
+                HStack {
                     SecureField("ghp_xxxxxxxxxxxx", text: $token)
-                        .textFieldStyle(.roundedBorder)
                         .textContentType(.password)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
                         .submitLabel(.go)
                         .onSubmit { Task { await validateAndSave() } }
 
-                    // Paste button inline
-                    Button {
-                        pasteFromClipboard()
-                    } label: {
-                        Image(systemName: "doc.on.clipboard")
-                            .font(.body)
-                            .padding(10)
-                            .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+                    if !token.isEmpty {
+                        Button {
+                            token = ""
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
+                }
+
+                Button {
+                    pasteFromClipboard()
+                } label: {
+                    Label("Pegar desde Portapapeles", systemImage: "doc.on.clipboard")
                 }
             }
 
             // Feedback messages
             if let errorMessage {
-                Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
-                    .font(.caption)
-                    .foregroundStyle(.red)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .transition(.opacity)
+                Section {
+                    Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.red)
+                }
             }
 
             if validationSuccess, let userName {
-                Label("Bienvenido, \(userName)!", systemImage: "checkmark.circle.fill")
-                    .font(.callout.weight(.medium))
-                    .foregroundStyle(.green)
-                    .transition(.scale.combined(with: .opacity))
+                Section {
+                    Label("Bienvenido, \(userName)!", systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                }
             }
 
             // Validate button
-            Button {
-                Task { await validateAndSave() }
-            } label: {
-                Group {
-                    if isValidating {
-                        ProgressView()
-                            .tint(.white)
-                    } else {
-                        Label("Validar y Conectar", systemImage: "arrow.right.circle.fill")
-                            .font(.headline)
+            Section {
+                Button {
+                    Task { await validateAndSave() }
+                } label: {
+                    HStack {
+                        Spacer()
+                        if isValidating {
+                            ProgressView()
+                        } else {
+                            Text("Validar y Conectar")
+                                .bold()
+                        }
+                        Spacer()
                     }
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 14)
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .disabled(token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isValidating)
+                .disabled(
+                    token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isValidating)
 
-            // Back
-            Button {
-                showTokenInput = false
-                token = ""
-                errorMessage = nil
-                validationSuccess = false
-                userName = nil
-            } label: {
-                Text("Volver")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                Button(role: .cancel) {
+                    showTokenInput = false
+                    token = ""
+                    errorMessage = nil
+                    validationSuccess = false
+                    userName = nil
+                } label: {
+                    Text("Volver")
+                        .frame(maxWidth: .infinity)
+                }
             }
         }
     }
@@ -215,8 +173,10 @@ struct LoginView: View {
     // MARK: - Clipboard Paste
 
     private func pasteFromClipboard() {
-        if let clipboard = UIPasteboard.general.string?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !clipboard.isEmpty {
+        if let clipboard = UIPasteboard.general.string?.trimmingCharacters(
+            in: .whitespacesAndNewlines),
+            !clipboard.isEmpty
+        {
             token = clipboard
         }
     }
@@ -238,6 +198,8 @@ struct LoginView: View {
 
     // MARK: - Validate Token
 
+    @Environment(\.modelContext) private var context
+
     private func validateAndSave() async {
         let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
@@ -248,15 +210,85 @@ struct LoginView: View {
         userName = nil
 
         do {
+            // 1. Validate Token with API
             let user = try await GitHubService.shared.validateToken(trimmed)
+
+            // 2. Check Subscription Limits
+            // Fetch existing accounts count
+            let descriptor = FetchDescriptor<GitHubAccount>()
+            let existingCount = (try? context.fetchCount(descriptor)) ?? 0
+
+            if trimmed != "mock-pro"
+                && !SubscriptionManager.shared.canAddAccount(currentCount: existingCount)
+            {
+                throw NSError(
+                    domain: "RepoMind", code: 403,
+                    userInfo: [
+                        NSLocalizedDescriptionKey:
+                            "Límite de cuentas alcanzado (Gratis: 1). Pásate a Pro."
+                    ])
+            }
+
             userName = user.name ?? user.login
             validationSuccess = true
+
+            // 3. Save Token to Keychain (Multi-Account Key)
+            let accountKey = "github-token-\(user.login)"
+            try await KeychainManager.shared.saveToken(trimmed, for: accountKey)
+
+            // 4. Create Account Entity
+            // 4. Upsert Account Entity (Prevent Duplicates)
+            let targetLogin = user.login  // Local var for Predicate capture
+            let existingAccount = try? context.fetch(
+                FetchDescriptor<GitHubAccount>(
+                    predicate: #Predicate { $0.username == targetLogin }
+                )
+            ).first
+
+            if let existing = existingAccount {
+                existing.avatarURL = user.avatarUrl
+                existing.tokenKey = accountKey
+                existing.isPro = trimmed == "mock-pro"
+            } else {
+                let newAccount = GitHubAccount(
+                    username: user.login,
+                    avatarURL: user.avatarUrl,
+                    tokenKey: accountKey,
+                    isPro: trimmed == "mock-pro"
+                )
+                context.insert(newAccount)
+            }
+
+            // Mock: Auto-create secondary account for Pro (Upsert)
+            if trimmed == "mock-pro" {
+                let secondaryToken = "mock-pro-personal"
+                let secondaryUser = "ProPersonal"
+                let secondaryKey = "github-token-\(secondaryUser)"
+
+                try await KeychainManager.shared.saveToken(secondaryToken, for: secondaryKey)
+
+                let existingSecondary = try? context.fetch(
+                    FetchDescriptor<GitHubAccount>(
+                        predicate: #Predicate { $0.username == secondaryUser }
+                    )
+                ).first
+
+                if let existing = existingSecondary {
+                    existing.isPro = true
+                } else {
+                    let secondaryAccount = GitHubAccount(
+                        username: secondaryUser,
+                        avatarURL: "figure.gaming",
+                        tokenKey: secondaryKey,
+                        isPro: true
+                    )
+                    context.insert(secondaryAccount)
+                }
+            }
 
             // Success haptic
             let generator = UINotificationFeedbackGenerator()
             generator.notificationOccurred(.success)
-
-            try await KeychainManager.shared.saveToken(trimmed)
 
             try? await Task.sleep(for: .milliseconds(700))
 
@@ -268,9 +300,45 @@ struct LoginView: View {
             let generator = UINotificationFeedbackGenerator()
             generator.notificationOccurred(.error)
         } catch {
-            errorMessage = "Error inesperado: \(error.localizedDescription)"
+            errorMessage = error.localizedDescription
+            let generator = UINotificationFeedbackGenerator()
+            generator.notificationOccurred(.error)
         }
 
         isValidating = false
+    }
+}
+
+// MARK: - RepoMind Logo
+
+struct RepoMindLogo: View {
+    @State private var isAnimating = false
+
+    var body: some View {
+        ZStack {
+            // Background Glow
+            Circle()
+                .fill(Color.accentColor.opacity(0.2))
+                .blur(radius: 20)
+                .scaleEffect(isAnimating ? 1.1 : 1.0)
+
+            // Main Hexagon (simplified abstract shape)
+            Image(systemName: "cube.fill")
+                .resizable()
+                .scaledToFit()
+                .foregroundStyle(
+                    .linearGradient(
+                        colors: [.accentColor, .purple],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .shadow(color: .accentColor.opacity(0.3), radius: 10, y: 5)
+        }
+        .onAppear {
+            withAnimation(.easeInOut(duration: 2.0).repeatForever(autoreverses: true)) {
+                isAnimating = true
+            }
+        }
     }
 }

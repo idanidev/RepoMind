@@ -88,30 +88,33 @@ struct ToastOverlay: View {
     }
 
     private func toastPill(_ toast: ToastItem) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: toast.style.iconName)
-                .font(.body.weight(.semibold))
-                .foregroundStyle(toast.style.tintColor)
-
-            Text(toast.message)
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(Color(.label))
-                .lineLimit(2)
-                .multilineTextAlignment(.leading)
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background {
-            Capsule()
-                .fill(.ultraThinMaterial)
-                .shadow(color: Color(.label).opacity(0.08), radius: 12, x: 0, y: 6)
-        }
-        .padding(.horizontal, 24)
-        .padding(.top, 8)
-        .onTapGesture {
+        Button {
             withAnimation(.easeOut(duration: 0.2)) {
                 toastManager.currentToast = nil
             }
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: toast.style.iconName)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(toast.style.tintColor)
+
+                Text(toast.message)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background {
+                Capsule()
+                    .fill(.ultraThinMaterial)
+                    .shadow(color: Color(.label).opacity(0.08), radius: 12, x: 0, y: 6)
+            }
+            .contentShape(Capsule())
         }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 24)
+        .padding(.top, 8)
     }
 }

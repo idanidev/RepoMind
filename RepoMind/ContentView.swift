@@ -56,10 +56,12 @@ struct RepoListView: View {
     @Environment(\.modelContext) private var context
     @AppStorage("isAuthenticated") private var isAuthenticated = false
     @Query(sort: \ProjectRepo.updatedAt, order: .reverse) private var repos: [ProjectRepo]
+    @Query private var accounts: [GitHubAccount]
 
     @State private var isLoading = false
     @State private var searchText = ""
     @State private var activeFilter: RepoFilter = .all
+    @State private var selectedAccount: GitHubAccount?  // nil = All Accounts
 
     private var filteredRepos: [ProjectRepo] {
         var result = repos
@@ -74,11 +76,16 @@ struct RepoListView: View {
             result = result.filter { $0.isArchived }
         }
 
+        // Apply Account Filter
+        if let account = selectedAccount {
+            result = result.filter { $0.account?.id == account.id }
+        }
+
         // Apply search
         if !searchText.isEmpty {
             result = result.filter {
-                $0.name.localizedCaseInsensitiveContains(searchText) ||
-                $0.repoDescription.localizedCaseInsensitiveContains(searchText)
+                $0.name.localizedCaseInsensitiveContains(searchText)
+                    || $0.repoDescription.localizedCaseInsensitiveContains(searchText)
             }
         }
 
@@ -107,14 +114,37 @@ struct RepoListView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Menu {
+                        // Account Section
+                        Picker("Cuentas", selection: $selectedAccount) {
+                            Text("Todas las Cuentas").tag(nil as GitHubAccount?)
+                            ForEach(accounts) { account in
+                                Text(account.username).tag(account as GitHubAccount?)
+                            }
+                        }
+
+                        Divider()
+
                         Button(role: .destructive) {
                             logout()
                         } label: {
-                            Label("Cerrar Sesion", systemImage: "rectangle.portrait.and.arrow.right")
+                            Label(
+                                "Cerrar Sesion", systemImage: "rectangle.portrait.and.arrow.right")
                         }
                     } label: {
-                        Image(systemName: "person.circle")
+                        // Dynamic Icon based on selection
+                        if let account = selectedAccount {
+                            // Using system images for now, could be AsyncImage if avatarURL exists
+                            Image(
+                                systemName: account.isPro
+                                    ? "person.crop.circle.badge.checkmark" : "person.crop.circle"
+                            )
+                            .symbolRenderingMode(.hierarchical)
                             .font(.title3)
+                            .foregroundStyle(account.isPro ? .purple : .primary)
+                        } else {
+                            Image(systemName: "person.2.circle")  // Icon for "All"
+                                .font(.title3)
+                        }
                     }
                 }
 
@@ -130,7 +160,10 @@ struct RepoListView: View {
                                 }
                             }
                         } label: {
-                            Image(systemName: activeFilter == .all ? "line.3.horizontal.decrease.circle" : "line.3.horizontal.decrease.circle.fill")
+                            Image(
+                                systemName: activeFilter == .all
+                                    ? "line.3.horizontal.decrease.circle"
+                                    : "line.3.horizontal.decrease.circle.fill")
                         }
 
                         // Sync button
@@ -258,7 +291,20 @@ struct RepoListView: View {
         isLoading = true
 
         do {
-            try await GitHubService.shared.syncRepos(into: context)
+            if accounts.isEmpty {
+                // No accounts logic?
+                // For now just return or throw if strictly needed, but let's just do nothing if empty
+                return
+            }
+
+            for account in accounts {
+                if let token = try await KeychainManager.shared.retrieveToken(for: account.tokenKey)
+                {
+                    try await GitHubService.shared.syncRepos(
+                        account: account, token: token, into: context)
+                }
+            }
+
             if !repos.isEmpty {
                 ToastManager.shared.show("Repos sincronizados", style: .success)
             }
@@ -271,8 +317,14 @@ struct RepoListView: View {
 
     private func logout() {
         Task {
-            try? await KeychainManager.shared.deleteToken()
-            isAuthenticated = false
+            // Wipe all data to prevent duplicates issues
+            try? context.delete(model: GitHubAccount.self)
+            try? context.delete(model: ProjectRepo.self)
+            try? await KeychainManager.shared.deleteToken()  // Legacy cleanup
+
+            withAnimation {
+                isAuthenticated = false
+            }
         }
     }
 }
@@ -346,7 +398,7 @@ struct RepoRow: View {
                         .background(.quaternary, in: Capsule())
                 }
 
-                Text("\(repo.tasks.count)")
+                Text("\(repo.tasks?.count ?? 0)")
                     .font(.caption2.weight(.bold))
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 6)

@@ -2,7 +2,7 @@ import AVFoundation
 import Speech
 import SwiftUI
 
-// MARK: - Voice Manager
+// MARK: - Voice Manager (Pro: Silence Detection & Smart Routing)
 
 @MainActor
 @Observable
@@ -14,7 +14,10 @@ final class VoiceManager {
     var errorMessage: String?
     var permissionGranted = false
 
-    // Configurable locale (default: Spanish)
+    // Smart Routing State
+    var detectedColumnName: String?
+
+    // Configurable locale
     var speechLocale: Locale = Locale(identifier: "es-ES")
 
     // Private
@@ -24,6 +27,12 @@ final class VoiceManager {
     private var speechRecognizer: SFSpeechRecognizer?
     private var isStopping = false
 
+    // Silence Detection
+    private var silenceTimer: Timer?
+    private let silenceThreshold: Float = 0.02
+    private let silenceDuration: TimeInterval = 2.0
+    private var lastAudioDetectedTime: Date = .now
+
     init() {
         speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "es-ES"))
     }
@@ -31,12 +40,11 @@ final class VoiceManager {
     // MARK: - Permissions
 
     func checkAndRequestPermissions() async {
-        // Check current status FIRST — don't re-prompt if already decided
         let currentSpeechStatus = SFSpeechRecognizer.authorizationStatus()
 
         switch currentSpeechStatus {
         case .authorized:
-            break  // Already good
+            break
         case .notDetermined:
             let granted = await withCheckedContinuation { continuation in
                 SFSpeechRecognizer.requestAuthorization { status in
@@ -44,26 +52,22 @@ final class VoiceManager {
                 }
             }
             guard granted else {
-                errorMessage =
-                    "Permiso de reconocimiento de voz denegado. Activa el permiso en Ajustes."
+                errorMessage = "Permiso denegado. Actívalo en Ajustes."
                 permissionGranted = false
                 return
             }
         case .denied, .restricted:
-            errorMessage =
-                "Permiso de reconocimiento de voz denegado. Activa el permiso en Ajustes."
+            errorMessage = "Permiso denegado. Actívalo en Ajustes."
             permissionGranted = false
             return
         @unknown default:
-            errorMessage = "Estado de permisos de voz desconocido."
             permissionGranted = false
             return
         }
 
-        // Check microphone permission
         let micGranted = await checkAndRequestMicPermission()
         guard micGranted else {
-            errorMessage = "Permiso de microfono denegado. Activa el permiso en Ajustes."
+            errorMessage = "Permiso de micrófono denegado."
             permissionGranted = false
             return
         }
@@ -71,8 +75,6 @@ final class VoiceManager {
         permissionGranted = true
         errorMessage = nil
     }
-
-    // MARK: - Microphone Permission Helper
 
     private func checkAndRequestMicPermission() async -> Bool {
         if #available(iOS 17, *) {
@@ -97,14 +99,7 @@ final class VoiceManager {
         }
     }
 
-    // MARK: - Update Locale
-
-    func updateLocale(_ identifier: String) {
-        speechLocale = Locale(identifier: identifier)
-        speechRecognizer = SFSpeechRecognizer(locale: speechLocale)
-    }
-
-    // MARK: - Toggle Recording
+    // MARK: - Actions
 
     func toggleRecording() async {
         if isRecording {
@@ -114,76 +109,59 @@ final class VoiceManager {
         }
     }
 
-    // MARK: - Start Recording
-
     private func startRecording() async {
         guard let speechRecognizer, speechRecognizer.isAvailable else {
-            errorMessage = "Reconocimiento de voz no disponible para tu idioma."
+            errorMessage = "Reconocimiento no disponible."
             return
         }
 
-        // Check authorization status FIRST
-        let status = SFSpeechRecognizer.authorizationStatus()
-        switch status {
-        case .notDetermined:
-            // Only request if we haven't asked before
+        if !permissionGranted {
             await checkAndRequestPermissions()
             guard permissionGranted else { return }
-        case .denied, .restricted:
-            // If already denied, don't ask again — just show error
-            errorMessage = "Permiso de voz denegado. Actívalo en Ajustes."
-            return
-        case .authorized:
-            // Good to go
-            break
-        @unknown default:
-            return
         }
 
-        // Clean up any previous state completely
         cleanupAudioResources()
 
-        // Reset state
         transcribedText = ""
         errorMessage = nil
         isStopping = false
+        detectedColumnName = nil  // Reset smart routing
+        lastAudioDetectedTime = .now
 
-        // Configure audio session
         let audioSession = AVAudioSession.sharedInstance()
         do {
             try audioSession.setCategory(.record, mode: .measurement, options: .duckOthers)
             try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
         } catch {
-            errorMessage = "Error al configurar audio: \(error.localizedDescription)"
+            errorMessage = "Error audio: \(error.localizedDescription)"
             return
         }
 
-        // Create fresh audio engine for each recording session
         let engine = AVAudioEngine()
         self.audioEngine = engine
 
-        // Create recognition request
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
         request.addsPunctuation = true
         self.recognitionRequest = request
 
-        // Start recognition task
         recognitionTask = speechRecognizer.recognitionTask(with: request) {
             [weak self] result, error in
             Task { @MainActor in
                 guard let self, !self.isStopping else { return }
 
                 if let result {
-                    self.transcribedText = result.bestTranscription.formattedString
+                    let text = result.bestTranscription.formattedString
+                    self.transcribedText = text
+
+                    // Smart Routing Logic (Background)
+                    self.processSmartRouting(text: text)
                 }
 
                 if let error {
                     let nsError = error as NSError
-                    // Ignore "request canceled" (code 216) and "no speech detected" (code 1110)
-                    let ignoredCodes = [216, 1110]
                     if nsError.domain == "kAFAssistantErrorDomain"
-                        && ignoredCodes.contains(nsError.code)
+                        && [216, 1110].contains(nsError.code)
                     {
                         return
                     }
@@ -193,44 +171,31 @@ final class VoiceManager {
             }
         }
 
-        // Install audio tap
         let inputNode = engine.inputNode
         let recordingFormat = inputNode.outputFormat(forBus: 0)
 
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) {
             [weak self] buffer, _ in
             self?.recognitionRequest?.append(buffer)
-
-            let channelData = buffer.floatChannelData?[0]
-            let frames = buffer.frameLength
-            if let channelData, frames > 0 {
-                var sum: Float = 0
-                for i in 0..<Int(frames) {
-                    sum += abs(channelData[i])
-                }
-                let average = sum / Float(frames)
-                Task { @MainActor in
-                    self?.audioLevel = min(average * 10, 1.0)
-                }
-            }
+            self?.measureAudioLevel(buffer: buffer)
         }
 
         do {
             engine.prepare()
             try engine.start()
             isRecording = true
+            startSilenceTimer()
         } catch {
-            errorMessage = "Error al iniciar el motor de audio: \(error.localizedDescription)"
+            errorMessage = "Error inicio motor: \(error.localizedDescription)"
             cleanupAudioResources()
         }
     }
-
-    // MARK: - Stop Recording
 
     func stopRecording() {
         guard !isStopping else { return }
         isStopping = true
 
+        stopSilenceTimer()
         cleanupAudioResources()
 
         isRecording = false
@@ -239,7 +204,79 @@ final class VoiceManager {
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 
-    // MARK: - Cleanup
+    // MARK: - Smart Routing (Expert Pattern)
+
+    private func processSmartRouting(text: String) {
+        // Run regex in detached task to avoid UI freeze
+        Task.detached(priority: .userInitiated) {
+            // Pattern: "añadir a [NombreColumna]" at the end
+            // Case insensitive
+            let pattern = "(?i)\\s+(añadir a|mover a)\\s+(.+)$"
+
+            if let regex = try? NSRegularExpression(pattern: pattern) {
+                let range = NSRange(text.startIndex..<text.endIndex, in: text)
+                if let match = regex.firstMatch(in: text, options: [], range: range) {
+                    // Group 2 is the column name
+                    if let columnRange = Range(match.range(at: 2), in: text) {
+                        let columnName = String(text[columnRange])
+
+                        // Extract cleaned text (remove command)
+                        let commandRange = Range(match.range(at: 0), in: text)!
+                        let cleanText = text.replacingCharacters(in: commandRange, with: "")
+
+                        await MainActor.run {
+                            self.transcribedText = cleanText
+                            self.detectedColumnName = columnName.trimmingCharacters(
+                                in: .whitespacesAndNewlines)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Silence Detection
+
+    private func measureAudioLevel(buffer: AVAudioPCMBuffer) {
+        guard let channelData = buffer.floatChannelData?[0] else { return }
+        let frames = buffer.frameLength
+
+        var sum: Float = 0
+        for i in 0..<Int(frames) {
+            sum += abs(channelData[i])
+        }
+        let average = sum / Float(frames)
+
+        Task { @MainActor in
+            self.audioLevel = min(average * 10, 1.0)
+
+            if self.audioLevel > self.silenceThreshold {
+                self.lastAudioDetectedTime = .now
+            }
+        }
+    }
+
+    private func startSilenceTimer() {
+        stopSilenceTimer()
+        silenceTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if self.isRecording
+                    && Date.now.timeIntervalSince(self.lastAudioDetectedTime) > self.silenceDuration
+                {
+                    // Silence detected -> Auto Stop
+                    if !self.transcribedText.isEmpty {
+                        self.stopRecording()
+                    }
+                }
+            }
+        }
+    }
+
+    private func stopSilenceTimer() {
+        silenceTimer?.invalidate()
+        silenceTimer = nil
+    }
 
     private func cleanupAudioResources() {
         if let engine = audioEngine, engine.isRunning {
@@ -247,10 +284,8 @@ final class VoiceManager {
             engine.inputNode.removeTap(onBus: 0)
         }
         audioEngine = nil
-
         recognitionRequest?.endAudio()
         recognitionRequest = nil
-
         recognitionTask?.cancel()
         recognitionTask = nil
     }

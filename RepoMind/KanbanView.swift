@@ -4,181 +4,184 @@ import UniformTypeIdentifiers
 
 // MARK: - Kanban View (Vertical Mobile-Friendly)
 
+// MARK: - Kanban View (Vertical Mobile-Friendly)
+
 struct KanbanView: View {
     @Bindable var project: ProjectRepo
+    @State private var viewModel: KanbanViewModel?
+    @State private var viewMode: ViewMode = .board
+
+    enum ViewMode: String, CaseIterable {
+        case board = "Tablero"
+        case list = "Lista"
+    }
 
     @Environment(\.modelContext) private var context
-    @Query private var tasks: [TaskItem]
-
-    @State private var voiceManager = VoiceManager()
-    @State private var editingTask: TaskItem?
-
-    // Column Management
-    @State private var showAddColumnSheet = false
-    @State private var newColumnName = ""
-    @State private var draggingTask: TaskItem?
-
-    // Task Creation
-    @State private var showAddTaskSheet = false
-    @State private var newTaskContent = ""
-    @State private var targetColumnForNewTask: KanbanColumn?
+    // Removed @Query tasks - using relationships instead for performance
 
     init(project: ProjectRepo) {
         self.project = project
-        let projectID = project.persistentModelID
-        self._tasks = Query(
-            filter: #Predicate<TaskItem> { task in
-                task.project?.persistentModelID == projectID
-            },
-            sort: [SortDescriptor(\TaskItem.createdAt, order: .reverse)]
-        )
+        // Tasks query removed
     }
 
     var body: some View {
-        ZStack(alignment: .bottomTrailing) {
-            // Horizontal scroll for columns
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(alignment: .top, spacing: 16) {
-                    ForEach(
-                        project.columns.sorted(by: { $0.orderIndex < $1.orderIndex })
-                    ) { column in
-                        KanbanColumnView(
-                            column: column,
-                            tasks: tasks.filter { $0.column == column },
-                            draggedTask: $draggingTask,
-                            onDropTask: { task in
-                                moveTask(task, to: column)
-                            },
-                            onAdd: {
-                                targetColumnForNewTask = column
-                                newTaskContent = ""
-                                showAddTaskSheet = true
-                            },
-                            onEditTask: { task in
-                                editingTask = task
-                            },
-                            onDeleteTask: { task in
-                                deleteTask(task)
-                            },
-                            onDeleteColumn: {
-                                deleteColumn(column)
-                            }
-                        )
-                        .frame(width: 320)  // Fixed width for columns
-                    }
-
-                    // Add Column Button
-                    addColumnButton
+        Group {
+            if let viewModel {
+                switch viewMode {
+                case .board:
+                    boardContent(viewModel: viewModel)
+                case .list:
+                    listContent(viewModel: viewModel)
                 }
-                .padding()
-                .padding(.bottom, 100)  // Space for FAB
+            } else {
+                ProgressView()
             }
-            // Voice FAB
-            VoiceFAB(voiceManager: voiceManager) {
-                createTaskFromVoice()
-            }
-            .padding(.trailing, 20)
-            .padding(.bottom, 24)
         }
         .navigationTitle(project.name)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button(action: { showAddColumnSheet = true }) {
-                    Label(
-                        "Añadir Columna", systemImage: "rectangle.stack.badge.plus")
+                HStack {
+                    // View Toggle Button
+                    Button(action: {
+                        withAnimation {
+                            viewMode = (viewMode == .board) ? .list : .board
+                        }
+                    }) {
+                        Label(
+                            "Cambiar Vista",
+                            systemImage: viewMode == .board ? "list.bullet" : "rectangle.grid.1x2")
+                    }
+
+                    Button(action: { viewModel?.showAddColumnSheet = true }) {
+                        Label("Añadir Columna", systemImage: "rectangle.stack.badge.plus")
+                    }
                 }
             }
         }
-        // Sheets
-        .sheet(item: $editingTask) { task in
-            TaskEditSheet(task: task, columns: project.columns)
-        }
-        .sheet(isPresented: $showAddTaskSheet) {
-            AddTaskSheet(
-                content: $newTaskContent,
-                columns: project.columns,
-                preselectedColumn: targetColumnForNewTask,
-                onSave: { content, column in
-                    createTask(content: content, column: column)
-                }
+        .sheet(
+            item: Binding(
+                get: { viewModel?.editingTask },
+                set: { viewModel?.editingTask = $0 }
             )
+        ) { task in
+            TaskEditSheet(task: task, columns: project.columns ?? [])
         }
-        .alert("Nueva Columna", isPresented: $showAddColumnSheet) {
-            TextField("Nombre de columna", text: $newColumnName)
-            Button("Cancelar", role: .cancel) { newColumnName = "" }
+        .sheet(
+            isPresented: Binding(
+                get: { viewModel?.showAddTaskSheet ?? false },
+                set: { viewModel?.showAddTaskSheet = $0 }
+            )
+        ) {
+            if let viewModel {
+                @Bindable var vm = viewModel
+                AddTaskSheet(
+                    content: $vm.newTaskContent,
+                    columns: project.columns ?? [],
+                    preselectedColumn: viewModel.targetColumnForNewTask,
+                    onSave: { content, column in
+                        viewModel.createTask(content: content, column: column)
+                    }
+                )
+            }
+        }
+        .alert(
+            "Nueva Columna",
+            isPresented: Binding(
+                get: { viewModel?.showAddColumnSheet ?? false },
+                set: { viewModel?.showAddColumnSheet = $0 }
+            )
+        ) {
+            TextField(
+                "Nombre de columna",
+                text: Binding(
+                    get: { viewModel?.newColumnName ?? "" },
+                    set: { viewModel?.newColumnName = $0 }
+                ))
+            Button("Cancelar", role: .cancel) { viewModel?.newColumnName = "" }
             Button("Crear") {
-                createColumn(name: newColumnName)
-                newColumnName = ""
+                viewModel?.createColumn()
+            }
+        }
+        .alert(
+            "Renombrar Columna",
+            isPresented: Binding(
+                get: { viewModel?.showRenameColumnAlert ?? false },
+                set: { viewModel?.showRenameColumnAlert = $0 }
+            )
+        ) {
+            TextField(
+                "Nombre de columna",
+                text: Binding(
+                    get: { viewModel?.renameColumnText ?? "" },
+                    set: { viewModel?.renameColumnText = $0 }
+                ))
+            Button("Cancelar", role: .cancel) {
+                viewModel?.renameColumnText = ""
+                viewModel?.columnToRename = nil
+            }
+            Button("Guardar") {
+                viewModel?.renameColumn()
             }
         }
         .task {
-            await voiceManager.checkAndRequestPermissions()
-            initializeDefaultColumnsIfNeeded()
+            if viewModel == nil {
+                viewModel = KanbanViewModel(project: project, modelContext: context)
+            }
+            await viewModel?.checkVoicePermissions()
+            viewModel?.initializeDefaultColumnsIfNeeded()
         }
     }
 
-    // MARK: - Actions
+    private func boardContent(viewModel: KanbanViewModel) -> some View {
+        @Bindable var viewModel = viewModel
+        // Horizontal scroll for columns
+        return ScrollView(.horizontal, showsIndicators: false) {
+            HStack(alignment: .top, spacing: 16) {
+                ForEach(
+                    (project.columns ?? []).sorted(by: { $0.orderIndex < $1.orderIndex })
+                ) { column in
+                    KanbanColumnView(
+                        column: column,
+                        draggedTask: $viewModel.draggingTask,
+                        onDropTask: { task in
+                            viewModel.moveTask(task, to: column)
+                        },
+                        onAdd: {
+                            viewModel.prepareAddTask(for: column)
+                        },
+                        onEditTask: { task in
+                            viewModel.editingTask = task
+                        },
+                        onDeleteTask: { task in
+                            viewModel.deleteTask(task)
+                        },
+                        onDeleteColumn: {
+                            viewModel.deleteColumn(column)
+                        },
+                        onRenameColumn: {
+                            viewModel.startRenaming(column)
+                        }
+                    )
+                    .frame(width: 320)
+                }
 
-    private func initializeDefaultColumnsIfNeeded() {
-        guard project.columns.isEmpty else { return }
-
-        let defaults = ["Por hacer", "En progreso", "Hecho"]
-        for (index, name) in defaults.enumerated() {
-            let col = KanbanColumn(
-                name: name, orderIndex: index, project: project)
-            context.insert(col)
+                // Add Column Button
+                addColumnButton(viewModel: viewModel)
+            }
+            .padding()
+            .padding(.bottom, 100)
+        }
+        .overlay(alignment: .bottomTrailing) {
+            VoiceFAB(voiceManager: viewModel.voiceManager) {
+                viewModel.createTaskFromVoice()
+            }
+            .padding(.trailing, 20)
+            .padding(.bottom, 24)
         }
     }
 
-    private func createColumn(name: String) {
-        let index = project.columns.count
-        let col = KanbanColumn(name: name, orderIndex: index, project: project)
-        withAnimation {
-            context.insert(col)
-        }
-    }
-
-    private func deleteColumn(_ column: KanbanColumn) {
-        withAnimation {
-            context.delete(column)
-        }
-    }
-
-    private func moveTask(_ task: TaskItem, to column: KanbanColumn) {
-        guard task.column != column else { return }
-        withAnimation(.snappy) {
-            task.column = column
-        }
-        let generator = UISelectionFeedbackGenerator()
-        generator.selectionChanged()
-    }
-
-    private func deleteTask(_ task: TaskItem) {
-        withAnimation {
-            context.delete(task)
-        }
-    }
-
-    private func createTask(content: String, column: KanbanColumn) {
-        let task = TaskItem(content: content, column: column, project: project)
-        withAnimation {
-            context.insert(task)
-        }
-    }
-
-    private func createTaskFromVoice() {
-        let text = voiceManager.transcribedText
-        guard !text.isEmpty,
-            let firstColumn = project.columns.sorted(by: {
-                $0.orderIndex < $1.orderIndex
-            }).first
-        else { return }
-
-        createTask(content: text, column: firstColumn)
-    }
-
-    private var addColumnButton: some View {
-        Button(action: { showAddColumnSheet = true }) {
+    private func addColumnButton(viewModel: KanbanViewModel) -> some View {
+        Button(action: { viewModel.showAddColumnSheet = true }) {
             VStack {
                 Image(systemName: "plus")
                     .font(.largeTitle)
@@ -186,15 +189,75 @@ struct KanbanView: View {
                     .font(.headline)
             }
             .frame(width: 320, height: 200)
-            .background(Color(.secondarySystemBackground))
-            .cornerRadius(12)
+            .glassBackground(cornerRadius: 12)
             .overlay(
                 RoundedRectangle(cornerRadius: 12)
                     .stroke(style: StrokeStyle(lineWidth: 2, dash: [5]))
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
             )
         }
         .buttonStyle(.plain)
+    }
+
+    private func listContent(viewModel: KanbanViewModel) -> some View {
+        ScrollView {
+            LazyVStack(spacing: 24) {
+                ForEach((project.columns ?? []).sorted(by: { $0.orderIndex < $1.orderIndex })) {
+                    column in
+                    Section {
+                        if let tasks = column.tasks, !tasks.isEmpty {
+                            ForEach(tasks.sorted(by: { $0.createdAt > $1.createdAt })) { task in
+                                TaskCard(task: task)
+                                    .contextMenu {
+                                        Button {
+                                            viewModel.editingTask = task
+                                        } label: {
+                                            Label("Editar", systemImage: "pencil")
+                                        }
+                                        Button(role: .destructive) {
+                                            viewModel.deleteTask(task)
+                                        } label: {
+                                            Label("Eliminar", systemImage: "trash")
+                                        }
+                                    }
+                            }
+                        } else {
+                            Text("Sin tareas")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.leading)
+                        }
+                    } header: {
+                        HStack {
+                            Text(column.name)
+                                .font(.headline)
+                                .foregroundStyle(.primary)
+
+                            Text("\(column.tasks?.count ?? 0)")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 2)
+                                .background(.quaternary, in: Capsule())
+
+                            Spacer()
+                        }
+                        .padding(.vertical, 8)
+                        .background(.ultraThinMaterial)  // Sticky header look
+                    }
+                }
+            }
+            .padding()
+            .padding(.bottom, 100)
+        }
+        .overlay(alignment: .bottomTrailing) {
+            VoiceFAB(voiceManager: viewModel.voiceManager) {
+                viewModel.createTaskFromVoice()
+            }
+            .padding(.trailing, 20)
+            .padding(.bottom, 24)
+        }
     }
 }
 
@@ -202,7 +265,6 @@ struct KanbanView: View {
 
 struct KanbanColumnView: View {
     @Bindable var column: KanbanColumn
-    let tasks: [TaskItem]
     @Binding var draggedTask: TaskItem?
 
     let onDropTask: (TaskItem) -> Void
@@ -210,8 +272,14 @@ struct KanbanColumnView: View {
     let onEditTask: (TaskItem) -> Void
     let onDeleteTask: (TaskItem) -> Void
     let onDeleteColumn: () -> Void
+    let onRenameColumn: () -> Void
 
     @State private var isTargeted = false
+
+    // Sort tasks locally to ensure consistency
+    var sortedTasks: [TaskItem] {
+        (column.tasks ?? []).sorted { $0.createdAt > $1.createdAt }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -234,7 +302,7 @@ struct KanbanColumnView: View {
                 Spacer()
 
                 if !column.isCollapsed {
-                    Text("\(tasks.count)")
+                    Text("\(column.tasks?.count ?? 0)")
                         .font(.caption.weight(.bold))
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 8)
@@ -246,6 +314,10 @@ struct KanbanColumnView: View {
                     Button(role: .destructive, action: onDeleteColumn) {
                         Label("Eliminar Columna", systemImage: "trash")
                     }
+
+                    Button(action: onRenameColumn) {
+                        Label("Renombrar", systemImage: "pencil")
+                    }
                 } label: {
                     Image(systemName: "ellipsis")
                         .padding(8)
@@ -253,7 +325,6 @@ struct KanbanColumnView: View {
             }
             .padding()
             .background(Color(.secondarySystemBackground))
-            // Drop target for empty column header
             .dropDestination(for: String.self) { items, _ in
                 guard let idString = items.first,
                     let task = draggedTask,
@@ -269,7 +340,7 @@ struct KanbanColumnView: View {
             if !column.isCollapsed {
                 ScrollView {
                     LazyVStack(spacing: 12) {
-                        if tasks.isEmpty {
+                        if column.tasks?.isEmpty ?? true {
                             ContentUnavailableView {
                                 Label("Vacio", systemImage: "tray")
                             } description: {
@@ -278,11 +349,11 @@ struct KanbanColumnView: View {
                             .frame(height: 150)
                             .opacity(0.5)
                         } else {
-                            ForEach(tasks) { task in
+                            ForEach(sortedTasks) { task in
                                 TaskCard(task: task)
+                                    .contentShape(.dragPreview, RoundedRectangle(cornerRadius: 14))
                                     .onDrag {
                                         draggedTask = task
-                                        // Pass the UUID string as the dragged item
                                         return NSItemProvider(
                                             object: task.id.uuidString as NSString)
                                     }
@@ -304,20 +375,28 @@ struct KanbanColumnView: View {
                     .padding()
                 }
                 .frame(maxHeight: .infinity)
-                .background(isTargeted ? Color.accentColor.opacity(0.1) : Color.clear)
+                .shapeContentHittable()
                 .dropDestination(for: String.self) { items, _ in
                     guard let idString = items.first,
                         let task = draggedTask,
                         task.id.uuidString == idString
                     else { return false }
-                    onDropTask(task)
+
+                    withAnimation(.snappy) {
+                        onDropTask(task)
+                    }
                     return true
                 } isTargeted: { targeted in
-                    withAnimation { isTargeted = targeted }
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isTargeted = targeted
+                    }
                 }
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(isTargeted ? Color.accentColor.opacity(0.05) : Color.clear)
+                )
             }
 
-            // Add Button Footer
             if !column.isCollapsed {
                 Button(action: onAdd) {
                     Label("Añadir tarea", systemImage: "plus")
@@ -327,9 +406,8 @@ struct KanbanColumnView: View {
                 }
             }
         }
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(color: Color.black.opacity(0.1), radius: 5, x: 0, y: 2)
+        .glassBackground(cornerRadius: 12)  // Liquid Glass
+        .shadow(color: Color.black.opacity(isTargeted ? 0.15 : 0.05), radius: 8, x: 0, y: 4)
     }
 }
 
@@ -356,11 +434,47 @@ struct TaskCard: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(.regularMaterial)
-                .shadow(color: Color(.label).opacity(0.06), radius: 6, x: 0, y: 3)
+        .glassBackground(cornerRadius: 14)  // Liquid Glass
+    }
+}
+
+extension View {
+    func shapeContentHittable() -> some View {
+        self.contentShape(Rectangle())
+    }
+}
+
+// MARK: - Liquid Glass Modifier (iOS 26+ Style)
+
+struct LiquidGlassModifier: ViewModifier {
+    var cornerRadius: CGFloat
+
+    func body(content: Content) -> some View {
+        Group {
+            if #available(iOS 26, *) {
+                content
+                    .background(
+                        RoundedRectangle(cornerRadius: cornerRadius)
+                            .fill(.regularMaterial)
+                    )
+                    .clipShape(.rect(cornerRadius: cornerRadius))
+            } else {
+                content
+                    .background(
+                        .ultraThinMaterial, in: RoundedRectangle(cornerRadius: cornerRadius)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: cornerRadius)
+                            .stroke(Color.white.opacity(0.1), lineWidth: 0.5)
+                    )
+            }
         }
+    }
+}
+
+extension View {
+    func glassBackground(cornerRadius: CGFloat = 12) -> some View {
+        modifier(LiquidGlassModifier(cornerRadius: cornerRadius))
     }
 }
 

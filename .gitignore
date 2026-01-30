@@ -1,0 +1,38 @@
+# Xcode
+.DS_Store
+*/build/
+*.derivedData
+*.moved-aside
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+*.hmap
+*.ipa
+*.pkg
+
+# Xcode 8 and later
+*.xccheckout
+*.moved-aside
+DerivedData
+*.hmap
+*.ipa
+*.pkg
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# CocoaPods
+Pods/
+
+# Agents (Keep skills!)
+.agents/*
+!.agents/skills/
+!.agents/workflows/
+# Ignore temp agent files if any
+.agents/temp/
+
+# User
+*.xcuserstate
+xcuserdata/
