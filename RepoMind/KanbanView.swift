@@ -137,23 +137,23 @@ struct KanbanView: View {
                 viewModel.createTask(content: content, column: column)
             }
         }
-        .alert("Nueva Columna", isPresented: $viewModel.showAddColumnSheet) {
-            TextField("Nombre de columna", text: $viewModel.newColumnName)
-            Button("Cancelar", role: .cancel) {
+        .alert("new_column_title", isPresented: $viewModel.showAddColumnSheet) {
+            TextField("column_name_placeholder", text: $viewModel.newColumnName)
+            Button("cancel_button", role: .cancel) {
                 viewModel.newColumnName = ""
             }
-            Button("Crear") {
+            Button("create_button") {
                 viewModel.createColumn()
                 updateSortedColumns()
             }
         }
-        .alert("Renombrar Columna", isPresented: $viewModel.showRenameColumnAlert) {
-            TextField("Nombre de columna", text: $viewModel.renameColumnText)
-            Button("Cancelar", role: .cancel) {
+        .alert("rename_column_title", isPresented: $viewModel.showRenameColumnAlert) {
+            TextField("column_name_placeholder", text: $viewModel.renameColumnText)
+            Button("cancel_button", role: .cancel) {
                 viewModel.renameColumnText = ""
                 viewModel.columnToRename = nil
             }
-            Button("Guardar") {
+            Button("save_button") {
                 viewModel.renameColumn()
             }
         }

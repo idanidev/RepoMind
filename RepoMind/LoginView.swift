@@ -103,6 +103,7 @@ struct LoginView: View {
                         .textInputAutocapitalization(.never)
                         .submitLabel(.go)
                         .onSubmit { Task { await validateAndSave() } }
+                        .accessibilityIdentifier("access_token_field")  // Added accessibilityIdentifier
 
                     if !token.isEmpty {
                         Button {
@@ -302,15 +303,25 @@ struct LoginView: View {
             }
         } catch let error as GitHubError {
             errorMessage = error.localizedDescription
-            let generator = UINotificationFeedbackGenerator()
-            generator.notificationOccurred(.error)
+            handleLoginError()
         } catch {
             errorMessage = error.localizedDescription
-            let generator = UINotificationFeedbackGenerator()
-            generator.notificationOccurred(.error)
+            handleLoginError()
         }
 
         isValidating = false
+    }
+
+    private static let feedbackGenerator = UINotificationFeedbackGenerator()
+
+    private func handleLoginSuccess() {
+        Self.feedbackGenerator.notificationOccurred(.success)
+        // isAuthenticated = true // This is handled by the withAnimation block in validateAndSave
+    }
+
+    private func handleLoginError() {
+        Self.feedbackGenerator.notificationOccurred(.error)
+        // Shake animation handled by view state change if needed
     }
 }
 

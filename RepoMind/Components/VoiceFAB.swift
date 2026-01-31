@@ -8,6 +8,57 @@ struct VoiceFAB: View {
     @State private var pulseScale: CGFloat = 1.0
     @State private var buttonScale: CGFloat = 1.0
 
+    private static let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+
+    private var fabLabel: some View {
+        ZStack {
+            // Pulse ring
+            if voiceManager.isRecording {
+                Circle()
+                    .fill(Color.red.opacity(0.2))
+                    .scaleEffect(pulseScale)
+                    .frame(width: 64, height: 64)
+            }
+
+            // Audio level ring
+            if voiceManager.isRecording {
+                Circle()
+                    .stroke(Color.red.opacity(0.5), lineWidth: 3)
+                    .scaleEffect(1.0 + CGFloat(voiceManager.audioLevel) * 0.4)
+                    .frame(width: 56, height: 56)
+            }
+
+            // Main button
+            Circle()
+                .fill(voiceManager.isRecording ? Color.red : Color.accentColor)
+                .frame(width: 56, height: 56)
+                .shadow(
+                    color: (voiceManager.isRecording ? Color.red : Color.accentColor)
+                        .opacity(0.35), radius: 10, y: 4)
+
+            Image(systemName: voiceManager.isRecording ? "stop.fill" : "mic.fill")
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(.white)
+                .contentTransition(.symbolEffect(.replace))
+        }
+        .scaleEffect(buttonScale)
+    }
+
+    private func openSettings() {
+        #if os(iOS)
+            if let url = URL(string: UIApplication.openSettingsURLString) {
+                UIApplication.shared.open(url)
+            }
+        #endif
+    }
+
+    private var isAlertPresented: Binding<Bool> {
+        Binding(
+            get: { voiceManager.errorMessage != nil },
+            set: { if !$0 { voiceManager.errorMessage = nil } }
+        )
+    }
+
     var body: some View {
         VStack(spacing: 12) {
             // Transcription preview
@@ -18,7 +69,6 @@ struct VoiceFAB: View {
                     .padding(10)
                     .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10))
                     .frame(maxWidth: 200)
-                    .frame(maxWidth: 200)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                     .accessibilityLabel("Transcripción en vivo: \(voiceManager.transcribedText)")
             }
@@ -26,8 +76,7 @@ struct VoiceFAB: View {
             // FAB button
             Button {
                 // Immediate haptic on press
-                let impact = UIImpactFeedbackGenerator(style: .medium)
-                impact.impactOccurred()
+                Self.impactFeedback.impactOccurred()
 
                 // Immediate scale animation
                 withAnimation(.spring(duration: 0.15)) {
@@ -46,37 +95,7 @@ struct VoiceFAB: View {
                     }
                 }
             } label: {
-                ZStack {
-                    // Pulse ring
-                    if voiceManager.isRecording {
-                        Circle()
-                            .fill(Color.red.opacity(0.2))
-                            .scaleEffect(pulseScale)
-                            .frame(width: 64, height: 64)
-                    }
-
-                    // Audio level ring
-                    if voiceManager.isRecording {
-                        Circle()
-                            .stroke(Color.red.opacity(0.5), lineWidth: 3)
-                            .scaleEffect(1.0 + CGFloat(voiceManager.audioLevel) * 0.4)
-                            .frame(width: 56, height: 56)
-                    }
-
-                    // Main button
-                    Circle()
-                        .fill(voiceManager.isRecording ? Color.red : Color.accentColor)
-                        .frame(width: 56, height: 56)
-                        .shadow(
-                            color: (voiceManager.isRecording ? Color.red : Color.accentColor)
-                                .opacity(0.35), radius: 10, y: 4)
-
-                    Image(systemName: voiceManager.isRecording ? "stop.fill" : "mic.fill")
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(.white)
-                        .contentTransition(.symbolEffect(.replace))
-                }
-                .scaleEffect(buttonScale)
+                fabLabel
             }
             .buttonStyle(.plain)
             .accessibilityLabel(
@@ -103,15 +122,10 @@ struct VoiceFAB: View {
         }
         .alert(
             "Permiso Requerido",
-            isPresented: .init(
-                get: { voiceManager.errorMessage != nil },
-                set: { if !$0 { voiceManager.errorMessage = nil } }
-            )
+            isPresented: isAlertPresented
         ) {
             Button("Abrir Ajustes") {
-                if let url = URL(string: UIApplication.openSettingsURLString) {
-                    UIApplication.shared.open(url)
-                }
+                openSettings()
             }
             Button("Cancelar", role: .cancel) {}
         } message: {

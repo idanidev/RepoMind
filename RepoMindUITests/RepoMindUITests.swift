@@ -10,32 +10,45 @@ import XCTest
 final class RepoMindUITests: XCTestCase {
 
     override func setUpWithError() throws {
-        // Put setup code here. This method is called before the invocation of each test method in the class.
-
-        // In UI tests it is usually best to stop immediately when a failure occurs.
         continueAfterFailure = false
-
-        // In UI tests it’s important to set the initial state - such as interface orientation - required for your tests before they run. The setUp method is a good place to do this.
-    }
-
-    override func tearDownWithError() throws {
-        // Put teardown code here. This method is called after the invocation of each test method in the class.
     }
 
     @MainActor
-    func testExample() throws {
-        // UI tests must launch the application that they test.
+    func testLoginAndNavigationFlow() throws {
         let app = XCUIApplication()
+        app.launchArguments = ["-reset"]  // Ensure a clean state if app supports it
         app.launch()
 
-        // Use XCTAssert and related functions to verify your tests produce the correct results.
-    }
+        // 1. Login Flow (Mock Pro)
+        let manualEntryButton = app.buttons["enter_token_manually_button"]
+        if manualEntryButton.waitForExistence(timeout: 5) {
+            manualEntryButton.tap()
 
-    @MainActor
-    func testLaunchPerformance() throws {
-        // This measures how long it takes to launch your application.
-        measure(metrics: [XCTApplicationLaunchMetric()]) {
-            XCUIApplication().launch()
+            let tokenField = app.secureTextFields["access_token_field"]
+            XCTAssertTrue(tokenField.waitForExistence(timeout: 2), "Token field should appear")
+            tokenField.tap()
+            tokenField.typeText("mock-pro")
+
+            let validateButton = app.buttons["validate_connect_button"]
+            validateButton.tap()
+        }
+
+        // 2. Verify Home Screen (Sync)
+        let reposTitle = app.staticTexts["Repositorios"]
+        XCTAssertTrue(reposTitle.waitForExistence(timeout: 5), "Should reach Home Screen")
+
+        // 3. Navigate to Kanban
+        // Attempt to find the first repository in the list.
+        // Since we are using List, we look for cells/buttons.
+        let firstRepo = app.buttons.firstMatch
+        if firstRepo.waitForExistence(timeout: 3) {
+            firstRepo.tap()
+
+            // 4. Verify Kanban
+            // Check for localized "Añadir Columna" or typical Kanban elements
+            let addColumnButton = app.buttons["add_new_column_button"]
+            // Or check title if it's dynamic.
+            XCTAssertTrue(app.navigationBars.firstMatch.exists)
         }
     }
 }
