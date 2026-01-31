@@ -16,7 +16,7 @@ final class KanbanTests: XCTestCase {
             for: ProjectRepo.self, TaskItem.self, KanbanColumn.self, configurations: config)
         modelContext = modelContainer.mainContext
 
-        project = ProjectRepo(name: "Test Project", summary: "Test Summary")
+        project = ProjectRepo(repoID: 1, name: "Test Project", repoDescription: "Test Summary")
         modelContext.insert(project)
 
         viewModel = KanbanViewModel(project: project, modelContext: modelContext)
@@ -24,23 +24,26 @@ final class KanbanTests: XCTestCase {
 
     func testInitializeDefaultColumns() {
         viewModel.initializeDefaultColumnsIfNeeded()
-        XCTAssertEqual(project.columns.count, 3)
+        XCTAssertEqual(project.columns?.count ?? 0, 3)
+        // Defaults: Brainstorming (0), To-Do (1), Done (2)
         XCTAssertEqual(
-            project.columns.sorted(by: { $0.orderIndex < $1.orderIndex }).first?.name, "Por hacer")
+            (project.columns ?? []).sorted(by: { $0.orderIndex < $1.orderIndex }).first?.name,
+            "Brainstorming")
     }
 
     func testAddColumn() {
         viewModel.newColumnName = "Backlog"
         viewModel.createColumn()
 
-        XCTAssertEqual(project.columns.count, 1)
-        XCTAssertEqual(project.columns.first?.name, "Backlog")
+        XCTAssertEqual(project.columns?.count ?? 0, 1)
+        XCTAssertEqual(project.columns?.first?.name, "Backlog")
         XCTAssertEqual(viewModel.newColumnName, "")  // Should be reset
     }
 
     func testCreateTask() {
         viewModel.initializeDefaultColumnsIfNeeded()
-        let column = project.columns.first!
+        // Use To-Do column (index 1)
+        let column = (project.columns ?? []).first(where: { $0.name == "To-Do" })!
 
         viewModel.createTask(content: "Test Task", column: column)
 
@@ -50,8 +53,8 @@ final class KanbanTests: XCTestCase {
 
     func testMoveTask() {
         viewModel.initializeDefaultColumnsIfNeeded()
-        let todoCol = project.columns.first(where: { $0.name == "Por hacer" })!
-        let doneCol = project.columns.first(where: { $0.name == "Hecho" })!
+        let todoCol = (project.columns ?? []).first(where: { $0.name == "To-Do" })!
+        let doneCol = (project.columns ?? []).first(where: { $0.name == "Done" })!
 
         viewModel.createTask(content: "Moving Task", column: todoCol)
         let task = todoCol.tasks!.first!
@@ -65,7 +68,7 @@ final class KanbanTests: XCTestCase {
 
     func testDeleteTask() {
         viewModel.initializeDefaultColumnsIfNeeded()
-        let column = project.columns.first!
+        let column = (project.columns ?? []).first!
         viewModel.createTask(content: "To Delete", column: column)
         let task = column.tasks!.first!
 
@@ -77,13 +80,13 @@ final class KanbanTests: XCTestCase {
     func testDeleteColumn() {
         // Cascade delete verification
         viewModel.initializeDefaultColumnsIfNeeded()
-        let column = project.columns.first!
+        let column = (project.columns ?? []).first!
         viewModel.createTask(content: "Task inside column", column: column)
 
         viewModel.deleteColumn(column)
 
         // Verify column is gone from project
-        XCTAssertEqual(project.columns.count, 2)
+        XCTAssertEqual(project.columns?.count, 2)
         // Verify task is gone (cascade) - via context or implicit knowledge
         // In unit test with in-memory context, easier to check column count.
     }

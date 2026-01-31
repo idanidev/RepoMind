@@ -227,9 +227,10 @@ actor GitHubService {
 
         for remote in remoteRepos {
             let remoteID = remote.id
-            let fetchDescriptor = FetchDescriptor<ProjectRepo>(
+            var fetchDescriptor = FetchDescriptor<ProjectRepo>(
                 predicate: #Predicate { $0.repoID == remoteID }
             )
+            fetchDescriptor.fetchLimit = 1
 
             let existing = try context.fetch(fetchDescriptor)
 

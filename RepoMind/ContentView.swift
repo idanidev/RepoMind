@@ -35,9 +35,9 @@ enum RepoFilter: String, CaseIterable, Identifiable {
 
     var displayName: String {
         switch self {
-        case .all: "Todos"
-        case .favorites: "Favoritos"
-        case .archived: "Archivados"
+        case .all: return String(localized: "filter_all")
+        case .favorites: return String(localized: "filter_favorites")
+        case .archived: return String(localized: "filter_archived")
         }
     }
 
@@ -109,14 +109,14 @@ struct RepoListView: View {
                     repoList
                 }
             }
-            .navigationTitle("Repositorios")
-            .searchable(text: $searchText, prompt: "Buscar repos...")
+            .navigationTitle("repositories_title")
+            .searchable(text: $searchText, prompt: "search_placeholder")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Menu {
                         // Account Section
-                        Picker("Cuentas", selection: $selectedAccount) {
-                            Text("Todas las Cuentas").tag(nil as GitHubAccount?)
+                        Picker("accounts_filter", selection: $selectedAccount) {
+                            Text("all_accounts").tag(nil as GitHubAccount?)
                             ForEach(accounts) { account in
                                 Text(account.username).tag(account as GitHubAccount?)
                             }
@@ -128,7 +128,7 @@ struct RepoListView: View {
                             logout()
                         } label: {
                             Label(
-                                "Cerrar Sesion", systemImage: "rectangle.portrait.and.arrow.right")
+                                "sign_out", systemImage: "rectangle.portrait.and.arrow.right")
                         }
                     } label: {
                         // Dynamic Icon based on selection
@@ -146,6 +146,9 @@ struct RepoListView: View {
                                 .font(.title3)
                         }
                     }
+                    .accessibilityLabel("account_menu_label")
+                    .accessibilityHint(
+                        selectedAccount?.username ?? String(localized: "all_accounts"))
                 }
 
                 ToolbarItem(placement: .topBarTrailing) {
@@ -165,6 +168,8 @@ struct RepoListView: View {
                                     ? "line.3.horizontal.decrease.circle"
                                     : "line.3.horizontal.decrease.circle.fill")
                         }
+                        .accessibilityLabel("filter_repos_label")
+                        .accessibilityValue(activeFilter.displayName)
 
                         // Sync button
                         Button {
@@ -177,6 +182,9 @@ struct RepoListView: View {
                             }
                         }
                         .disabled(isLoading)
+                        .accessibilityLabel("sync_repos_label")
+                        .accessibilityHint(
+                            isLoading ? "syncing" : "sync_hint")
                     }
                 }
             }
@@ -217,7 +225,7 @@ struct RepoListView: View {
                         }
                     } label: {
                         Label(
-                            repo.isFavorite ? "Quitar Favorito" : "Favorito",
+                            repo.isFavorite ? "unfavorite" : "favorite",
                             systemImage: repo.isFavorite ? "star.slash" : "star.fill"
                         )
                     }
@@ -229,7 +237,7 @@ struct RepoListView: View {
                             context.delete(repo)
                         }
                     } label: {
-                        Label("Eliminar", systemImage: "trash")
+                        Label("delete_task", systemImage: "trash")
                     }
 
                     Button {
@@ -238,7 +246,7 @@ struct RepoListView: View {
                         }
                     } label: {
                         Label(
-                            repo.isArchived ? "Desarchivar" : "Archivar",
+                            repo.isArchived ? "unarchive" : "archive",
                             systemImage: repo.isArchived ? "tray.and.arrow.up" : "archivebox"
                         )
                     }
@@ -254,16 +262,16 @@ struct RepoListView: View {
             if filteredRepos.isEmpty && !repos.isEmpty {
                 ContentUnavailableView {
                     Label(
-                        activeFilter == .archived ? "Sin Archivados" : "Sin Resultados",
+                        activeFilter == .archived ? "no_archived_title" : "no_results_title",
                         systemImage: activeFilter == .archived ? "archivebox" : "magnifyingglass"
                     )
                 } description: {
                     if activeFilter == .archived {
-                        Text("No tienes repositorios archivados.")
+                        Text("no_archived_message")
                     } else if activeFilter == .favorites {
-                        Text("No tienes repos favoritos. Desliza a la derecha para marcar uno.")
+                        Text("no_favorites_message")
                     } else {
-                        Text("No se encontraron repos con ese nombre.")
+                        Text("no_results_message")
                     }
                 }
             }
@@ -274,11 +282,11 @@ struct RepoListView: View {
 
     private var emptyState: some View {
         ContentUnavailableView {
-            Label("No hay repositorios", systemImage: "tray")
+            Label("no_repos_title", systemImage: "tray")
         } description: {
-            Text("Añade tu token o revisa tu conexion. Arrastra hacia abajo para sincronizar.")
+            Text("Conecta una cuenta para empezar")
         } actions: {
-            Button("Sincronizar") {
+            Button("sync_button") {
                 Task { await syncRepos() }
             }
             .buttonStyle(.borderedProminent)
@@ -306,7 +314,7 @@ struct RepoListView: View {
             }
 
             if !repos.isEmpty {
-                ToastManager.shared.show("Repos sincronizados", style: .success)
+                ToastManager.shared.show(String(localized: "repos_synced_toast"), style: .success)
             }
         } catch {
             ToastManager.shared.show(error.localizedDescription, style: .error)
@@ -366,6 +374,7 @@ struct SkeletonRepoRow: View {
         }
         .padding(.vertical, 4)
         .redacted(reason: .placeholder)
+        .accessibilityHidden(true)
     }
 }
 
@@ -431,6 +440,11 @@ struct RepoRow: View {
             }
         }
         .padding(.vertical, 4)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(
+            "\(repo.name), \(repo.isFavorite ? "favorito" : ""), \(repo.tasks?.count ?? 0) tareas"
+        )
+        .accessibilityHint("view_details_hint")
     }
 }
 

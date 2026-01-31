@@ -26,10 +26,11 @@ struct LoginView: View {
                     RepoMindLogo()
                         .frame(height: 120)
 
-                    Text("RepoMind")
+                    Text("app_name")
                         .font(.largeTitle.weight(.bold))
+                        .foregroundStyle(Color.accentColor)
 
-                    Text("Conecta RepoMind con GitHub\npara ver tus proyectos")
+                    Text("login_subtitle")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
@@ -56,20 +57,19 @@ struct LoginView: View {
     // MARK: - Onboarding Actions (Before Token Input)
 
     private var onboardingActions: some View {
-        Section("Empezar") {
+        Section("start_section") {
             // Step 1: Create token
             Link(destination: tokenCreationURL) {
-                Label {
+                HStack {
+                    Image(systemName: "safari")
+                        .foregroundStyle(.blue)
                     VStack(alignment: .leading) {
-                        Text("Crear Token en GitHub")
-                            .foregroundStyle(.primary)
-                        Text("Se abre github.com con los permisos necesarios")
+                        Text("create_token_button")
+                            .font(.headline)
+                        Text("create_token_hint")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
-                } icon: {
-                    Image(systemName: "key.fill")
-                        .foregroundStyle(.blue)
                 }
             }
 
@@ -78,14 +78,14 @@ struct LoginView: View {
                 showTokenInput = true
                 pasteFromClipboard()
             } label: {
-                Label("Pegar Token del Portapapeles", systemImage: "doc.on.clipboard.fill")
+                Label("paste_token_button", systemImage: "doc.on.clipboard.fill")
             }
 
             // Manual entry fallback
             Button {
-                showTokenInput = true
+                withAnimation { showTokenInput = true }  // Changed to showTokenInput for consistency
             } label: {
-                Label("Introducir Token Manualmente", systemImage: "keyboard")
+                Label("enter_token_manually", systemImage: "keyboard")
                     .foregroundStyle(.secondary)
             }
         }
@@ -95,7 +95,7 @@ struct LoginView: View {
 
     private var tokenInputSection: some View {
         Group {
-            Section("Tu Token de Acceso") {
+            Section("access_token_section") {
                 HStack {
                     SecureField("ghp_xxxxxxxxxxxx", text: $token)
                         .textContentType(.password)
@@ -115,10 +115,12 @@ struct LoginView: View {
                     }
                 }
 
-                Button {
-                    pasteFromClipboard()
-                } label: {
-                    Label("Pegar desde Portapapeles", systemImage: "doc.on.clipboard")
+                if !validationSuccess {
+                    Button {
+                        pasteFromClipboard()
+                    } label: {
+                        Label("paste_from_clipboard", systemImage: "doc.on.clipboard")
+                    }
                 }
             }
 
@@ -132,8 +134,11 @@ struct LoginView: View {
 
             if validationSuccess, let userName {
                 Section {
-                    Label("Bienvenido, \(userName)!", systemImage: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
+                    Label(
+                        String(format: String(localized: "welcome_message"), userName),
+                        systemImage: "checkmark.circle.fill"
+                    )
+                    .foregroundStyle(.green)
                 }
             }
 
@@ -147,7 +152,7 @@ struct LoginView: View {
                         if isValidating {
                             ProgressView()
                         } else {
-                            Text("Validar y Conectar")
+                            Text("validate_connect_button")
                                 .bold()
                         }
                         Spacer()
@@ -163,7 +168,7 @@ struct LoginView: View {
                     validationSuccess = false
                     userName = nil
                 } label: {
-                    Text("Volver")
+                    Text("back_button")
                         .frame(maxWidth: .infinity)
                 }
             }
@@ -225,7 +230,7 @@ struct LoginView: View {
                     domain: "RepoMind", code: 403,
                     userInfo: [
                         NSLocalizedDescriptionKey:
-                            "Límite de cuentas alcanzado (Gratis: 1). Pásate a Pro."
+                            String(localized: "account_limit_error")
                     ])
             }
 
@@ -239,11 +244,11 @@ struct LoginView: View {
             // 4. Create Account Entity
             // 4. Upsert Account Entity (Prevent Duplicates)
             let targetLogin = user.login  // Local var for Predicate capture
-            let existingAccount = try? context.fetch(
-                FetchDescriptor<GitHubAccount>(
-                    predicate: #Predicate { $0.username == targetLogin }
-                )
-            ).first
+            var accountDescriptor = FetchDescriptor<GitHubAccount>(
+                predicate: #Predicate { $0.username == targetLogin }
+            )
+            accountDescriptor.fetchLimit = 1
+            let existingAccount = try? context.fetch(accountDescriptor).first
 
             if let existing = existingAccount {
                 existing.avatarURL = user.avatarUrl
@@ -267,11 +272,11 @@ struct LoginView: View {
 
                 try await KeychainManager.shared.saveToken(secondaryToken, for: secondaryKey)
 
-                let existingSecondary = try? context.fetch(
-                    FetchDescriptor<GitHubAccount>(
-                        predicate: #Predicate { $0.username == secondaryUser }
-                    )
-                ).first
+                var secondaryDescriptor = FetchDescriptor<GitHubAccount>(
+                    predicate: #Predicate { $0.username == secondaryUser }
+                )
+                secondaryDescriptor.fetchLimit = 1
+                let existingSecondary = try? context.fetch(secondaryDescriptor).first
 
                 if let existing = existingSecondary {
                     existing.isPro = true

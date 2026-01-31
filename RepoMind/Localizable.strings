@@ -1,0 +1,74 @@
+/* Kanban Columns */
+"add_column" = "Añadir Columna";
+"add_new_column_button" = "Añadir nueva columna";
+"add_new_column_hint" = "Crea una nueva columna en el tablero";
+"expand_column" = "Expandir columna";
+"collapse_column" = "Colapsar columna";
+"delete_column" = "Eliminar Columna";
+"rename_column" = "Renombrar";
+"column_empty" = "Vacío";
+"drag_tasks_here" = "Arrastra tareas aquí";
+
+/* Tasks */
+"add_task" = "Añadir tarea";
+"edit_task" = "Editar";
+"delete_task" = "Eliminar";
+"voice_note_content" = "Contiene nota de voz";
+
+/* Task Sheets */
+"content" = "Contenido";
+"description_placeholder" = "Descripción";
+"column" = "Columna";
+"edit_task_title" = "Editar Tarea";
+"cancel" = "Cancelar";
+"save" = "Guardar";
+"task_section" = "Tarea";
+"task_placeholder" = "Algo por hacer...";
+"new_task_title" = "Nueva Tarea";
+"create" = "Crear";
+
+/* Kanban List */
+"no_tasks" = "Sin tareas";
+
+/* ContentView */
+"repositories_title" = "Repositorios";
+"search_placeholder" = "Buscar repos...";
+"accounts_filter" = "Cuentas";
+"all_accounts" = "Todas las Cuentas";
+"sign_out" = "Cerrar Sesion";
+"account_menu_label" = "Menú de cuenta";
+"filter_repos_label" = "Filtrar repositorios";
+"sync_repos_label" = "Sincronizar repositorios";
+"syncing" = "Sincronizando...";
+"sync_hint" = "Doble toque para sincronizar";
+"unfavorite" = "Quitar Favorito";
+"favorite" = "Favorito";
+"unarchive" = "Desarchivar";
+"archive" = "Archivar";
+"no_archived_title" = "Sin Archivados";
+"no_results_title" = "Sin Resultados";
+"no_archived_message" = "No tienes repositorios archivados.";
+"no_favorites_message" = "No tienes repos favoritos. Desliza a la derecha para marcar uno.";
+"no_results_message" = "No se encontraron repos con ese nombre.";
+"no_repos_title" = "No hay repositorios";
+"sync_button" = "Sincronizar";
+"repos_synced_toast" = "Repos sincronizados";
+"view_details_hint" = "Doble toque para ver detalles";
+"filter_all" = "Todos";
+"filter_favorites" = "Favoritos";
+"filter_archived" = "Archivados";
+
+/* Login View */
+"app_name" = "RepoMind";
+"login_subtitle" = "Conecta RepoMind con GitHub\npara ver tus proyectos";
+"start_section" = "Empezar";
+"create_token_button" = "Crear Token en GitHub";
+"create_token_hint" = "Se abre github.com con los permisos necesarios";
+"paste_token_button" = "Pegar Token del Portapapeles";
+"enter_token_manually" = "Introducir Token Manualmente";
+"access_token_section" = "Tu Token de Acceso";
+"paste_from_clipboard" = "Pegar desde Portapapeles";
+"welcome_message" = "Bienvenido, %@!";
+"validate_connect_button" = "Validar y Conectar";
+"back_button" = "Volver";
+"account_limit_error" = "Límite de cuentas alcanzado (Gratis: 1). Pásate a Pro.";

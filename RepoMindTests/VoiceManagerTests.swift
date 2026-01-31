@@ -3,6 +3,7 @@ import XCTest
 
 @testable import RepoMind
 
+@MainActor
 final class VoiceManagerTests: XCTestCase {
     var voiceManager: VoiceManager!
 
