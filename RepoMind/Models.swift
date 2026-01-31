@@ -8,13 +8,18 @@ final class GitHubAccount {
     var id: UUID
     var username: String
     var avatarURL: String?
-    var tokenKey: String  // Key to retrieve token from Keychain
-    var isPro: Bool = false
+    var tokenKey: String
+    var isPro: Bool
 
     @Relationship(deleteRule: .cascade, inverse: \ProjectRepo.account)
-    var repos: [ProjectRepo]? = []  // Optional for CloudKit
+    var repos: [ProjectRepo]?
 
-    init(username: String, avatarURL: String? = nil, tokenKey: String, isPro: Bool = false) {
+    init(
+        username: String,
+        avatarURL: String? = nil,
+        tokenKey: String,
+        isPro: Bool = false
+    ) {
         self.id = UUID()
         self.username = username
         self.avatarURL = avatarURL
@@ -23,28 +28,27 @@ final class GitHubAccount {
     }
 }
 
-// MARK: - ProjectRepo (RepoEntity - CloudKit Ready)
+// MARK: - ProjectRepo
 
 @Model
 final class ProjectRepo {
     @Attribute(.unique) var repoID: Int
-    var name: String = ""
-    var repoDescription: String = ""
-    var updatedAt: Date = Date.now
-    var htmlURL: String = ""
-    var isFavorite: Bool = false
-    var isArchived: Bool = false
-    var language: String? = nil
-    var stargazersCount: Int = 0
+    var name: String
+    var repoDescription: String
+    var updatedAt: Date
+    var htmlURL: String
+    var isFavorite: Bool
+    var isArchived: Bool
+    var language: String?
+    var stargazersCount: Int
 
-    // CloudKit Optimization: Optional relationship
     var account: GitHubAccount?
 
     @Relationship(deleteRule: .cascade, inverse: \TaskItem.project)
-    var tasks: [TaskItem]? = []
+    var tasks: [TaskItem]?
 
     @Relationship(deleteRule: .cascade, inverse: \KanbanColumn.project)
-    var columns: [KanbanColumn]? = []
+    var columns: [KanbanColumn]?
 
     init(
         repoID: Int,
@@ -71,18 +75,18 @@ final class ProjectRepo {
     }
 }
 
-// MARK: - Kanban Column (Dynamic & CloudKit)
+// MARK: - Kanban Column
 
 @Model
 final class KanbanColumn {
     var id: UUID
-    var name: String = ""
-    var orderIndex: Int = 0
-    var isCollapsed: Bool = false
-    var createdAt: Date = Date.now
+    var name: String
+    var orderIndex: Int
+    var isCollapsed: Bool
+    var createdAt: Date
 
     @Relationship(deleteRule: .cascade, inverse: \TaskItem.column)
-    var tasks: [TaskItem]? = []
+    var tasks: [TaskItem]?
 
     var project: ProjectRepo?
 
@@ -101,24 +105,22 @@ final class KanbanColumn {
     }
 }
 
-// MARK: - TaskItem (CloudKit Ready)
+// MARK: - TaskItem
 
 @Model
 final class TaskItem {
     @Attribute(.unique) var id: UUID
-    var content: String = ""
-    var createdAt: Date = Date.now
-    var audioPath: String? = nil
-
-    // Dynamic Status (String driven)
-    var status: String = "todo"  // "brainstorming", "todo", "done", or custom
+    var content: String
+    var createdAt: Date
+    var audioPath: String?
+    var status: String
 
     var column: KanbanColumn?
     var project: ProjectRepo?
 
     init(
         content: String,
-        status: String = "todo",  // Default status
+        status: String = "todo",
         column: KanbanColumn? = nil,
         audioPath: String? = nil,
         project: ProjectRepo? = nil

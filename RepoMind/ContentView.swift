@@ -18,7 +18,6 @@ struct ContentView: View {
             }
             .animation(.easeInOut(duration: 0.3), value: isAuthenticated)
 
-            // Toast overlay — sits on top of all navigation
             ToastOverlay()
         }
     }
@@ -33,11 +32,11 @@ enum RepoFilter: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    var displayName: String {
+    var displayName: LocalizedStringKey {
         switch self {
-        case .all: return String(localized: "filter_all")
-        case .favorites: return String(localized: "filter_favorites")
-        case .archived: return String(localized: "filter_archived")
+        case .all: "filter_all"
+        case .favorites: "filter_favorites"
+        case .archived: "filter_archived"
         }
     }
 
@@ -61,42 +60,10 @@ struct RepoListView: View {
     @State private var isLoading = false
     @State private var searchText = ""
     @State private var activeFilter: RepoFilter = .all
-    @State private var selectedAccount: GitHubAccount?  // nil = All Accounts
+    @State private var selectedAccount: GitHubAccount?
 
-    private var filteredRepos: [ProjectRepo] {
-        var result = repos
-
-        // Apply filter
-        switch activeFilter {
-        case .all:
-            result = result.filter { !$0.isArchived }
-        case .favorites:
-            result = result.filter { $0.isFavorite && !$0.isArchived }
-        case .archived:
-            result = result.filter { $0.isArchived }
-        }
-
-        // Apply Account Filter
-        if let account = selectedAccount {
-            result = result.filter { $0.account?.id == account.id }
-        }
-
-        // Apply search
-        if !searchText.isEmpty {
-            result = result.filter {
-                $0.name.localizedCaseInsensitiveContains(searchText)
-                    || $0.repoDescription.localizedCaseInsensitiveContains(searchText)
-            }
-        }
-
-        // Sort: favorites first, then by date
-        return result.sorted { lhs, rhs in
-            if lhs.isFavorite != rhs.isFavorite {
-                return lhs.isFavorite
-            }
-            return lhs.updatedAt > rhs.updatedAt
-        }
-    }
+    // ✅ FIX: Cached filtered repos (Performance)
+    @State private var filteredRepos: [ProjectRepo] = []
 
     var body: some View {
         NavigationStack {
@@ -111,92 +78,152 @@ struct RepoListView: View {
             }
             .navigationTitle("repositories_title")
             .searchable(text: $searchText, prompt: "search_placeholder")
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Menu {
-                        // Account Section
-                        Picker("accounts_filter", selection: $selectedAccount) {
-                            Text("all_accounts").tag(nil as GitHubAccount?)
-                            ForEach(accounts) { account in
-                                Text(account.username).tag(account as GitHubAccount?)
-                            }
-                        }
-
-                        Divider()
-
-                        Button(role: .destructive) {
-                            logout()
-                        } label: {
-                            Label(
-                                "sign_out", systemImage: "rectangle.portrait.and.arrow.right")
-                        }
-                    } label: {
-                        // Dynamic Icon based on selection
-                        if let account = selectedAccount {
-                            // Using system images for now, could be AsyncImage if avatarURL exists
-                            Image(
-                                systemName: account.isPro
-                                    ? "person.crop.circle.badge.checkmark" : "person.crop.circle"
-                            )
-                            .symbolRenderingMode(.hierarchical)
-                            .font(.title3)
-                            .foregroundStyle(account.isPro ? .purple : .primary)
-                        } else {
-                            Image(systemName: "person.2.circle")  // Icon for "All"
-                                .font(.title3)
-                        }
-                    }
-                    .accessibilityLabel("account_menu_label")
-                    .accessibilityHint(
-                        selectedAccount?.username ?? String(localized: "all_accounts"))
-                }
-
-                ToolbarItem(placement: .topBarTrailing) {
-                    HStack(spacing: 12) {
-                        // Filter menu
-                        Menu {
-                            ForEach(RepoFilter.allCases) { filter in
-                                Button {
-                                    withAnimation { activeFilter = filter }
-                                } label: {
-                                    Label(filter.displayName, systemImage: filter.iconName)
-                                }
-                            }
-                        } label: {
-                            Image(
-                                systemName: activeFilter == .all
-                                    ? "line.3.horizontal.decrease.circle"
-                                    : "line.3.horizontal.decrease.circle.fill")
-                        }
-                        .accessibilityLabel("filter_repos_label")
-                        .accessibilityValue(activeFilter.displayName)
-
-                        // Sync button
-                        Button {
-                            Task { await syncRepos() }
-                        } label: {
-                            if isLoading {
-                                ProgressView()
-                            } else {
-                                Image(systemName: "arrow.trianglehead.2.clockwise")
-                            }
-                        }
-                        .disabled(isLoading)
-                        .accessibilityLabel("sync_repos_label")
-                        .accessibilityHint(
-                            isLoading ? "syncing" : "sync_hint")
-                    }
-                }
-            }
+            .toolbar { toolbarContent }
             .refreshable {
                 await syncRepos()
             }
             .task {
+                updateFilteredRepos()
                 if repos.isEmpty {
                     await syncRepos()
                 }
             }
+            // ✅ FIX: Update cache when dependencies change
+            .onChange(of: repos) { _, _ in
+                updateFilteredRepos()
+            }
+            .onChange(of: activeFilter) { _, _ in
+                updateFilteredRepos()
+            }
+            .onChange(of: searchText) { _, _ in
+                updateFilteredRepos()
+            }
+            .onChange(of: selectedAccount) { _, _ in
+                updateFilteredRepos()
+            }
         }
+    }
+
+    // MARK: - Cached Filtering (Performance Fix)
+
+    private func updateFilteredRepos() {
+        var result = repos
+
+        switch activeFilter {
+        case .all:
+            result = result.filter { !$0.isArchived }
+        case .favorites:
+            result = result.filter { $0.isFavorite && !$0.isArchived }
+        case .archived:
+            result = result.filter { $0.isArchived }
+        }
+
+        if let account = selectedAccount {
+            result = result.filter { $0.account?.id == account.id }
+        }
+
+        // ✅ FIX: Use localizedStandardContains for better search
+        if !searchText.isEmpty {
+            result = result.filter {
+                $0.name.localizedStandardContains(searchText)
+                    || $0.repoDescription.localizedStandardContains(searchText)
+            }
+        }
+
+        filteredRepos = result.sorted { lhs, rhs in
+            if lhs.isFavorite != rhs.isFavorite {
+                return lhs.isFavorite
+            }
+            return lhs.updatedAt > rhs.updatedAt
+        }
+    }
+
+    // MARK: - Toolbar
+
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .topBarLeading) {
+            accountMenu
+        }
+        ToolbarItem(placement: .topBarTrailing) {
+            HStack(spacing: 12) {
+                filterMenu
+                syncButton
+            }
+        }
+    }
+
+    private var accountMenu: some View {
+        Menu {
+            Picker("accounts_filter", selection: $selectedAccount) {
+                Text("all_accounts").tag(nil as GitHubAccount?)
+                ForEach(accounts) { account in
+                    Text(account.username).tag(account as GitHubAccount?)
+                }
+            }
+
+            Divider()
+
+            Button(role: .destructive, action: logout) {
+                Label("sign_out", systemImage: "rectangle.portrait.and.arrow.right")
+            }
+        } label: {
+            Group {
+                if let account = selectedAccount {
+                    Image(
+                        systemName: account.isPro
+                            ? "person.crop.circle.badge.checkmark" : "person.crop.circle"
+                    )
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(account.isPro ? .purple : .primary)
+                } else {
+                    Image(systemName: "person.2.circle")
+                }
+            }
+            .font(.title3)
+        }
+        .accessibilityLabel("account_menu_label")
+        .accessibilityHint(selectedAccount?.username ?? String(localized: "all_accounts"))
+    }
+
+    // ✅ FIX: Use Label instead of just Image for accessibility
+    private var filterMenu: some View {
+        Menu {
+            ForEach(RepoFilter.allCases) { filter in
+                Button {
+                    withAnimation { activeFilter = filter }
+                } label: {
+                    Label(filter.displayName, systemImage: filter.iconName)
+                }
+            }
+        } label: {
+            Label(
+                "filter_repos_label",
+                systemImage: activeFilter == .all
+                    ? "line.3.horizontal.decrease.circle"
+                    : "line.3.horizontal.decrease.circle.fill"
+            )
+            .labelStyle(.iconOnly)
+        }
+        .accessibilityLabel("filter_repos_label")
+        .accessibilityValue(Text(activeFilter.displayName))
+    }
+
+    // ✅ FIX: Use Label instead of just Image for accessibility
+    private var syncButton: some View {
+        Button {
+            Task { await syncRepos() }
+        } label: {
+            if isLoading {
+                ProgressView()
+            } else {
+                Label("sync_repos_label", systemImage: "arrow.trianglehead.2.clockwise")
+                    .labelStyle(.iconOnly)
+            }
+        }
+        .disabled(isLoading)
+        .accessibilityLabel("sync_repos_label")
+        .accessibilityHint(isLoading ? "syncing" : "sync_hint")
     }
 
     // MARK: - Skeleton Loading
@@ -219,38 +246,11 @@ struct RepoListView: View {
                     RepoRow(repo: repo)
                 }
                 .swipeActions(edge: .leading) {
-                    Button {
-                        withAnimation {
-                            repo.isFavorite.toggle()
-                        }
-                    } label: {
-                        Label(
-                            repo.isFavorite ? "unfavorite" : "favorite",
-                            systemImage: repo.isFavorite ? "star.slash" : "star.fill"
-                        )
-                    }
-                    .tint(.yellow)
+                    favoriteButton(for: repo)
                 }
                 .swipeActions(edge: .trailing) {
-                    Button(role: .destructive) {
-                        withAnimation {
-                            context.delete(repo)
-                        }
-                    } label: {
-                        Label("delete_task", systemImage: "trash")
-                    }
-
-                    Button {
-                        withAnimation {
-                            repo.isArchived.toggle()
-                        }
-                    } label: {
-                        Label(
-                            repo.isArchived ? "unarchive" : "archive",
-                            systemImage: repo.isArchived ? "tray.and.arrow.up" : "archivebox"
-                        )
-                    }
-                    .tint(.indigo)
+                    deleteButton(for: repo)
+                    archiveButton(for: repo)
                 }
             }
         }
@@ -260,25 +260,64 @@ struct RepoListView: View {
         }
         .overlay {
             if filteredRepos.isEmpty && !repos.isEmpty {
-                ContentUnavailableView {
-                    Label(
-                        activeFilter == .archived ? "no_archived_title" : "no_results_title",
-                        systemImage: activeFilter == .archived ? "archivebox" : "magnifyingglass"
-                    )
-                } description: {
-                    if activeFilter == .archived {
-                        Text("no_archived_message")
-                    } else if activeFilter == .favorites {
-                        Text("no_favorites_message")
-                    } else {
-                        Text("no_results_message")
-                    }
-                }
+                emptyFilterState
             }
         }
     }
 
-    // MARK: - Empty State
+    // MARK: - Swipe Action Buttons (Extracted for clarity)
+
+    private func favoriteButton(for repo: ProjectRepo) -> some View {
+        Button {
+            withAnimation { repo.isFavorite.toggle() }
+        } label: {
+            Label(
+                repo.isFavorite ? "unfavorite" : "favorite",
+                systemImage: repo.isFavorite ? "star.slash" : "star.fill"
+            )
+        }
+        .tint(.yellow)
+    }
+
+    private func deleteButton(for repo: ProjectRepo) -> some View {
+        Button(role: .destructive) {
+            withAnimation { context.delete(repo) }
+        } label: {
+            Label("delete_task", systemImage: "trash")
+        }
+    }
+
+    private func archiveButton(for repo: ProjectRepo) -> some View {
+        Button {
+            withAnimation { repo.isArchived.toggle() }
+        } label: {
+            Label(
+                repo.isArchived ? "unarchive" : "archive",
+                systemImage: repo.isArchived ? "tray.and.arrow.up" : "archivebox"
+            )
+        }
+        .tint(.indigo)
+    }
+
+    // MARK: - Empty States
+
+    private var emptyFilterState: some View {
+        ContentUnavailableView {
+            Label(
+                activeFilter == .archived ? "no_archived_title" : "no_results_title",
+                systemImage: activeFilter == .archived ? "archivebox" : "magnifyingglass"
+            )
+        } description: {
+            switch activeFilter {
+            case .archived:
+                Text("no_archived_message")
+            case .favorites:
+                Text("no_favorites_message")
+            case .all:
+                Text("no_results_message")
+            }
+        }
+    }
 
     private var emptyState: some View {
         ContentUnavailableView {
@@ -297,19 +336,19 @@ struct RepoListView: View {
 
     private func syncRepos() async {
         isLoading = true
+        defer { isLoading = false }
+
+        guard !accounts.isEmpty else { return }
 
         do {
-            if accounts.isEmpty {
-                // No accounts logic?
-                // For now just return or throw if strictly needed, but let's just do nothing if empty
-                return
-            }
-
             for account in accounts {
                 if let token = try await KeychainManager.shared.retrieveToken(for: account.tokenKey)
                 {
                     try await GitHubService.shared.syncRepos(
-                        account: account, token: token, into: context)
+                        account: account,
+                        token: token,
+                        into: context
+                    )
                 }
             }
 
@@ -319,16 +358,13 @@ struct RepoListView: View {
         } catch {
             ToastManager.shared.show(error.localizedDescription, style: .error)
         }
-
-        isLoading = false
     }
 
     private func logout() {
         Task {
-            // Wipe all data to prevent duplicates issues
             try? context.delete(model: GitHubAccount.self)
             try? context.delete(model: ProjectRepo.self)
-            try? await KeychainManager.shared.deleteToken()  // Legacy cleanup
+            try? await KeychainManager.shared.deleteToken()
 
             withAnimation {
                 isAuthenticated = false
@@ -390,6 +426,7 @@ struct RepoRow: View {
                     Image(systemName: "star.fill")
                         .font(.caption)
                         .foregroundStyle(.yellow)
+                        .accessibilityHidden(true)
                 }
 
                 Text(repo.name)
@@ -441,10 +478,21 @@ struct RepoRow: View {
         }
         .padding(.vertical, 4)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(
-            "\(repo.name), \(repo.isFavorite ? "favorito" : ""), \(repo.tasks?.count ?? 0) tareas"
-        )
+        .accessibilityLabel(accessibilityDescription)
         .accessibilityHint("view_details_hint")
+    }
+
+    // ✅ FIX: Better accessibility description
+    private var accessibilityDescription: String {
+        var parts = [repo.name]
+        if repo.isFavorite {
+            parts.append(String(localized: "favorite"))
+        }
+        parts.append("\(repo.tasks?.count ?? 0) tareas")
+        if repo.stargazersCount > 0 {
+            parts.append("\(repo.stargazersCount) estrellas")
+        }
+        return parts.joined(separator: ", ")
     }
 }
 

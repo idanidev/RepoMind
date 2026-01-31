@@ -2,25 +2,31 @@ import AVFoundation
 import Speech
 import SwiftUI
 
-// MARK: - Voice Manager (Pro: Silence Detection & Smart Routing)
+// MARK: - Voice Manager
 
 @MainActor
 @Observable
 final class VoiceManager {
-    // State
+    // MARK: - Public State
+
     var isRecording = false
     var transcribedText = ""
     var audioLevel: Float = 0
     var errorMessage: String?
     var permissionGranted = false
-
-    // Smart Routing State
     var detectedColumnName: String?
 
-    // Configurable locale
-    var speechLocale: Locale = Locale(identifier: "es-ES")
+    // MARK: - Configuration
 
-    // Private
+    // ✅ FIX: Configurable locale (defaults to device locale)
+    var speechLocale: Locale {
+        didSet {
+            speechRecognizer = SFSpeechRecognizer(locale: speechLocale)
+        }
+    }
+
+    // MARK: - Private State
+
     private var audioEngine: AVAudioEngine?
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
@@ -33,8 +39,14 @@ final class VoiceManager {
     private let silenceDuration: TimeInterval = 2.0
     private var lastAudioDetectedTime: Date = .now
 
-    init() {
-        speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "es-ES"))
+    // ✅ FIX: Track smart routing task for cancellation
+    private var smartRoutingTask: Task<Void, Never>?
+
+    // MARK: - Initialization
+
+    init(locale: Locale = .current) {
+        self.speechLocale = locale
+        self.speechRecognizer = SFSpeechRecognizer(locale: locale)
     }
 
     // MARK: - Permissions
@@ -52,12 +64,12 @@ final class VoiceManager {
                 }
             }
             guard granted else {
-                errorMessage = "Permiso denegado. Actívalo en Ajustes."
+                errorMessage = String(localized: "Permiso denegado. Actívalo en Ajustes.")
                 permissionGranted = false
                 return
             }
         case .denied, .restricted:
-            errorMessage = "Permiso denegado. Actívalo en Ajustes."
+            errorMessage = String(localized: "Permiso denegado. Actívalo en Ajustes.")
             permissionGranted = false
             return
         @unknown default:
@@ -67,7 +79,7 @@ final class VoiceManager {
 
         let micGranted = await checkAndRequestMicPermission()
         guard micGranted else {
-            errorMessage = "Permiso de micrófono denegado."
+            errorMessage = String(localized: "Permiso de micrófono denegado.")
             permissionGranted = false
             return
         }
@@ -99,7 +111,7 @@ final class VoiceManager {
         }
     }
 
-    // MARK: - Actions
+    // MARK: - Recording Actions
 
     func toggleRecording() async {
         if isRecording {
@@ -111,7 +123,7 @@ final class VoiceManager {
 
     private func startRecording() async {
         guard let speechRecognizer, speechRecognizer.isAvailable else {
-            errorMessage = "Reconocimiento no disponible."
+            errorMessage = String(localized: "Reconocimiento no disponible.")
             return
         }
 
@@ -125,7 +137,7 @@ final class VoiceManager {
         transcribedText = ""
         errorMessage = nil
         isStopping = false
-        detectedColumnName = nil  // Reset smart routing
+        detectedColumnName = nil
         lastAudioDetectedTime = .now
 
         let audioSession = AVAudioSession.sharedInstance()
@@ -143,6 +155,12 @@ final class VoiceManager {
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
         request.addsPunctuation = true
+
+        // ✅ FIX: Use on-device recognition when available (iOS 17+)
+        if #available(iOS 17, *), speechRecognizer.supportsOnDeviceRecognition {
+            request.requiresOnDeviceRecognition = true
+        }
+
         self.recognitionRequest = request
 
         recognitionTask = speechRecognizer.recognitionTask(with: request) {
@@ -153,8 +171,6 @@ final class VoiceManager {
                 if let result {
                     let text = result.bestTranscription.formattedString
                     self.transcribedText = text
-
-                    // Smart Routing Logic (Background)
                     self.processSmartRouting(text: text)
                 }
 
@@ -196,6 +212,10 @@ final class VoiceManager {
         isStopping = true
 
         stopSilenceTimer()
+        // ✅ FIX: Cancel smart routing task
+        smartRoutingTask?.cancel()
+        smartRoutingTask = nil
+
         cleanupAudioResources()
 
         isRecording = false
@@ -204,33 +224,36 @@ final class VoiceManager {
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 
-    // MARK: - Smart Routing (Expert Pattern)
+    // MARK: - Smart Routing
 
     private func processSmartRouting(text: String) {
-        // Run regex in detached task to avoid UI freeze
-        Task.detached(priority: .userInitiated) {
-            // Pattern: "añadir a [NombreColumna]" at the end
-            // Case insensitive
+        // ✅ FIX: Cancel previous task before starting new one
+        smartRoutingTask?.cancel()
+
+        smartRoutingTask = Task.detached(priority: .userInitiated) { [weak self] in
+            guard !Task.isCancelled else { return }
+
             let pattern = "(?i)\\s+(añadir a|mover a)\\s+(.+)$"
 
-            if let regex = try? NSRegularExpression(pattern: pattern) {
-                let range = NSRange(text.startIndex..<text.endIndex, in: text)
-                if let match = regex.firstMatch(in: text, options: [], range: range) {
-                    // Group 2 is the column name
-                    if let columnRange = Range(match.range(at: 2), in: text) {
-                        let columnName = String(text[columnRange])
+            guard let regex = try? NSRegularExpression(pattern: pattern) else { return }
 
-                        // Extract cleaned text (remove command)
-                        let commandRange = Range(match.range(at: 0), in: text)!
-                        let cleanText = text.replacingCharacters(in: commandRange, with: "")
+            let range = NSRange(text.startIndex..<text.endIndex, in: text)
+            guard let match = regex.firstMatch(in: text, options: [], range: range) else { return }
 
-                        await MainActor.run {
-                            self.transcribedText = cleanText
-                            self.detectedColumnName = columnName.trimmingCharacters(
-                                in: .whitespacesAndNewlines)
-                        }
-                    }
-                }
+            guard !Task.isCancelled else { return }
+
+            guard let columnRange = Range(match.range(at: 2), in: text),
+                let commandRange = Range(match.range(at: 0), in: text)
+            else { return }
+
+            let columnName = String(text[columnRange])
+            let cleanText = text.replacingCharacters(in: commandRange, with: "")
+
+            await MainActor.run { [weak self] in
+                guard !Task.isCancelled else { return }
+                self?.transcribedText = cleanText.trimmingCharacters(in: .whitespacesAndNewlines)
+                self?.detectedColumnName = columnName.trimmingCharacters(
+                    in: .whitespacesAndNewlines)
             }
         }
     }
@@ -260,14 +283,11 @@ final class VoiceManager {
         stopSilenceTimer()
         silenceTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
-                guard let self else { return }
-                if self.isRecording
-                    && Date.now.timeIntervalSince(self.lastAudioDetectedTime) > self.silenceDuration
-                {
-                    // Silence detected -> Auto Stop
-                    if !self.transcribedText.isEmpty {
-                        self.stopRecording()
-                    }
+                guard let self, self.isRecording else { return }
+
+                let silentDuration = Date.now.timeIntervalSince(self.lastAudioDetectedTime)
+                if silentDuration > self.silenceDuration && !self.transcribedText.isEmpty {
+                    self.stopRecording()
                 }
             }
         }

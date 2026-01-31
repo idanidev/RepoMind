@@ -50,23 +50,47 @@ struct ToastItem: Equatable {
 @Observable
 final class ToastManager {
     static let shared = ToastManager()
+
     var currentToast: ToastItem?
+
+    // ✅ FIX: Track dismiss task for cancellation
+    private var dismissTask: Task<Void, Never>?
+
+    // ✅ FIX: Static feedback generator for performance
+    private static let feedbackGenerator = UINotificationFeedbackGenerator()
 
     private init() {}
 
-    func show(_ message: String, style: ToastStyle) {
-        let generator = UINotificationFeedbackGenerator()
-        generator.notificationOccurred(style.hapticType)
+    func show(_ message: String, style: ToastStyle, duration: TimeInterval = 3.0) {
+        // ✅ FIX: Cancel previous dismiss task to avoid race conditions
+        dismissTask?.cancel()
+
+        Self.feedbackGenerator.prepare()
+        Self.feedbackGenerator.notificationOccurred(style.hapticType)
 
         withAnimation(.spring(duration: 0.4, bounce: 0.2)) {
             currentToast = ToastItem(style: style, message: message)
         }
 
-        Task {
-            try? await Task.sleep(for: .seconds(3))
-            withAnimation(.easeOut(duration: 0.3)) {
-                currentToast = nil
+        dismissTask = Task {
+            try? await Task.sleep(for: .seconds(duration))
+
+            guard !Task.isCancelled else { return }
+
+            await MainActor.run {
+                withAnimation(.easeOut(duration: 0.3)) {
+                    self.currentToast = nil
+                }
             }
+        }
+    }
+
+    func dismiss() {
+        dismissTask?.cancel()
+        dismissTask = nil
+
+        withAnimation(.easeOut(duration: 0.2)) {
+            currentToast = nil
         }
     }
 }
@@ -79,20 +103,25 @@ struct ToastOverlay: View {
     var body: some View {
         ZStack(alignment: .top) {
             if let toast = toastManager.currentToast {
-                toastPill(toast)
-                    .transition(.move(edge: .top).combined(with: .opacity))
-                    .zIndex(999)
+                ToastPill(toast: toast) {
+                    toastManager.dismiss()
+                }
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .zIndex(999)
             }
         }
         .animation(.spring(duration: 0.4, bounce: 0.2), value: toastManager.currentToast)
     }
+}
 
-    private func toastPill(_ toast: ToastItem) -> some View {
-        Button {
-            withAnimation(.easeOut(duration: 0.2)) {
-                toastManager.currentToast = nil
-            }
-        } label: {
+// MARK: - Toast Pill (Extracted Subview)
+
+private struct ToastPill: View {
+    let toast: ToastItem
+    let onDismiss: () -> Void
+
+    var body: some View {
+        Button(action: onDismiss) {
             HStack(spacing: 10) {
                 Image(systemName: toast.style.iconName)
                     .font(.body.weight(.semibold))
@@ -116,5 +145,11 @@ struct ToastOverlay: View {
         .buttonStyle(.plain)
         .padding(.horizontal, 24)
         .padding(.top, 8)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(
+            "\(toast.style == .error ? "Error" : toast.style == .success ? "Éxito" : "Info"): \(toast.message)"
+        )
+        .accessibilityHint("Toca para cerrar")
+        .accessibilityAddTraits(.isButton)
     }
 }

@@ -1,15 +1,16 @@
 import SwiftData
 import SwiftUI
-import UIKit  // For UISelectionFeedbackGenerator
+import UIKit
 
 @MainActor
 @Observable
 final class KanbanViewModel {
-    var project: ProjectRepo
-    var modelContext: ModelContext
+    // ✅ FIX: private(set) for properties that shouldn't be reassigned externally
+    private(set) var project: ProjectRepo
+    private let modelContext: ModelContext
 
-    // Voice Manager
-    var voiceManager = VoiceManager()
+    // ✅ FIX: private(set) for voiceManager
+    private(set) var voiceManager = VoiceManager()
 
     // Sheet States
     var editingTask: TaskItem?
@@ -27,6 +28,9 @@ final class KanbanViewModel {
     // Drag State
     var draggingTask: TaskItem?
 
+    // ✅ FIX: Static feedback generator for performance
+    private static let selectionFeedback = UISelectionFeedbackGenerator()
+
     init(project: ProjectRepo, modelContext: ModelContext) {
         self.project = project
         self.modelContext = modelContext
@@ -39,28 +43,30 @@ final class KanbanViewModel {
     }
 
     func createTaskFromVoice() {
-        let text = voiceManager.transcribedText
+        let text = voiceManager.transcribedText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
 
-        // Smart Routing: Check if voice manager detected a target column
         var targetColumn: KanbanColumn?
 
         if let detectedName = voiceManager.detectedColumnName {
-            // Fuzzy/Exact match the column name
             targetColumn = (project.columns ?? []).first { col in
-                col.name.localizedCaseInsensitiveContains(detectedName)
+                col.name.localizedStandardContains(detectedName)
             }
         }
 
-        // Default to first column if no smart route found
         if targetColumn == nil {
             targetColumn =
-                (project.columns ?? []).sorted(by: { $0.orderIndex < $1.orderIndex }).first
+                (project.columns ?? [])
+                .sorted { $0.orderIndex < $1.orderIndex }
+                .first
         }
 
         if let targetColumn {
             createTask(content: text, column: targetColumn)
         }
+
+        // Reset voice state
+        voiceManager.transcribedText = ""
     }
 
     // MARK: - Column Actions
@@ -68,26 +74,33 @@ final class KanbanViewModel {
     func initializeDefaultColumnsIfNeeded() {
         guard project.columns?.isEmpty ?? true else { return }
 
-        // Default Columns strings
         let defaults = ["Brainstorming", "To-Do", "Done"]
         for (index, name) in defaults.enumerated() {
             let col = KanbanColumn(name: name, orderIndex: index, project: project)
             modelContext.insert(col)
         }
+
+        // Save immediately to ensure columns are available
+        try? modelContext.save()
     }
 
     func createColumn() {
-        guard !newColumnName.isEmpty else { return }
+        // ✅ FIX: Trim whitespace in validation
+        let name = newColumnName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return }
+
         let index = project.columns?.count ?? 0
-        let col = KanbanColumn(name: newColumnName, orderIndex: index, project: project)
-        withAnimation {
+        let col = KanbanColumn(name: name, orderIndex: index, project: project)
+
+        withAnimation(.snappy) {
             modelContext.insert(col)
         }
+
         newColumnName = ""
     }
 
     func deleteColumn(_ column: KanbanColumn) {
-        withAnimation {
+        withAnimation(.snappy) {
             modelContext.delete(column)
         }
     }
@@ -99,8 +112,11 @@ final class KanbanViewModel {
     }
 
     func renameColumn() {
-        guard let col = columnToRename, !renameColumnText.isEmpty else { return }
-        col.name = renameColumnText
+        // ✅ FIX: Trim whitespace in validation
+        let name = renameColumnText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let col = columnToRename, !name.isEmpty else { return }
+
+        col.name = name
         columnToRename = nil
         renameColumnText = ""
     }
@@ -114,28 +130,38 @@ final class KanbanViewModel {
     }
 
     func createTask(content: String, column: KanbanColumn) {
-        // Set status based on column name (simple logic for now)
+        // ✅ FIX: Trim and validate content
+        let trimmedContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedContent.isEmpty else { return }
+
         let status = column.name.lowercased().replacingOccurrences(of: " ", with: "_")
-        let task = TaskItem(content: content, status: status, column: column, project: project)
-        withAnimation {
+        let task = TaskItem(
+            content: trimmedContent,
+            status: status,
+            column: column,
+            project: project
+        )
+
+        withAnimation(.snappy) {
             modelContext.insert(task)
         }
     }
 
     func deleteTask(_ task: TaskItem) {
-        withAnimation {
+        withAnimation(.snappy) {
             modelContext.delete(task)
         }
     }
 
     func moveTask(_ task: TaskItem, to column: KanbanColumn) {
         guard task.column != column else { return }
+
         withAnimation(.snappy) {
             task.column = column
-            // Update status string to match new column
             task.status = column.name.lowercased().replacingOccurrences(of: " ", with: "_")
         }
-        let generator = UISelectionFeedbackGenerator()
-        generator.selectionChanged()
+
+        // ✅ FIX: Use static generator
+        Self.selectionFeedback.selectionChanged()
     }
 }

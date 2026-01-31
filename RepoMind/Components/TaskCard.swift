@@ -7,7 +7,8 @@ struct TaskCard: View {
     var body: some View {
         GlassEffectContainer(cornerRadius: 14) {
             HStack(spacing: 8) {
-                Text(LocalizedStringKey(task.content))
+                // ✅ FIX: Don't use LocalizedStringKey for user-generated content
+                Text(task.content)
                     .font(.subheadline)
                     .foregroundStyle(.primary)
                     .lineLimit(4)
@@ -19,13 +20,21 @@ struct TaskCard: View {
                     Image(systemName: "waveform")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
                 }
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(task.content)
-        .accessibilityHint(task.audioPath != nil ? "voice_note_content" : "")
+        .accessibilityLabel(accessibilityDescription)
+    }
+
+    private var accessibilityDescription: String {
+        var description = task.content
+        if task.audioPath != nil {
+            description += ", " + String(localized: "voice_note_content")
+        }
+        return description
     }
 }
