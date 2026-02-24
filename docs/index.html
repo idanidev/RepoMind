@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RepoMind - GitHub Repository Manager</title>
+    <style>
+        :root {
+            --bg: #ffffff;
+            --text: #1a1a1a;
+            --muted: #666666;
+            --accent: #8b5cf6;
+        }
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg: #0a0a0a;
+                --text: #fafafa;
+                --muted: #a3a3a3;
+            }
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+            text-align: center;
+        }
+        .logo { font-size: 4rem; margin-bottom: 1rem; }
+        h1 { font-size: 2.5rem; margin-bottom: 0.5rem; }
+        .tagline { font-size: 1.25rem; color: var(--muted); margin-bottom: 2rem; }
+        .features { display: flex; gap: 2rem; flex-wrap: wrap; justify-content: center; margin-bottom: 3rem; }
+        .feature { max-width: 200px; }
+        .feature-icon { font-size: 2rem; margin-bottom: 0.5rem; }
+        .feature-title { font-weight: 600; margin-bottom: 0.25rem; }
+        .feature-desc { font-size: 0.875rem; color: var(--muted); }
+        .links { display: flex; gap: 2rem; margin-top: 2rem; }
+        .links a { color: var(--accent); text-decoration: none; }
+        .links a:hover { text-decoration: underline; }
+        .app-store { margin-top: 2rem; }
+        .app-store img { height: 50px; }
+    </style>
+</head>
+<body>
+    <div class="logo">🧠</div>
+    <h1>RepoMind</h1>
+    <p class="tagline">Manage your GitHub repos with Kanban boards and voice notes</p>
+
+    <div class="features">
+        <div class="feature">
+            <div class="feature-icon">📋</div>
+            <div class="feature-title">Kanban Boards</div>
+            <div class="feature-desc">Organize tasks for each repository</div>
+        </div>
+        <div class="feature">
+            <div class="feature-icon">🎤</div>
+            <div class="feature-title">Voice Notes</div>
+            <div class="feature-desc">Create tasks by speaking</div>
+        </div>
+        <div class="feature">
+            <div class="feature-icon">🔒</div>
+            <div class="feature-title">Secure</div>
+            <div class="feature-desc">Biometric protection for your data</div>
+        </div>
+    </div>
+
+    <div class="app-store">
+        <p style="color: var(--muted); font-size: 0.875rem;">Coming soon to the App Store</p>
+    </div>
+
+    <div class="links">
+        <a href="privacy.html">Privacy Policy</a>
+        <a href="terms.html">Terms of Use</a>
+    </div>
+</body>
+</html>
