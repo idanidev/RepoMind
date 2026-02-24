@@ -1,0 +1,252 @@
+/* Kanban Columns */
+"add_column" = "Añadir Columna";
+"add_new_column_button" = "Añadir nueva columna";
+"add_new_column_hint" = "Crea una nueva columna en el tablero";
+"expand_column" = "Expandir columna";
+"collapse_column" = "Colapsar columna";
+"delete_column" = "Eliminar Columna";
+"rename_column" = "Renombrar";
+"column_empty" = "Vacío";
+"drag_tasks_here" = "Arrastra tareas aquí";
+"new_column_title" = "Nueva Columna";
+"rename_column_title" = "Renombrar Columna";
+"column_name_placeholder" = "Nombre de la columna";
+"cancel_button" = "Cancelar";
+"create_button" = "Crear";
+"save_button" = "Guardar";
+
+/* Tasks */
+"add_task" = "Añadir tarea";
+"edit_task" = "Editar";
+"delete_task" = "Eliminar";
+"move_task" = "Mover a...";
+"voice_note_content" = "Nota de voz";
+
+/* Task Sheets */
+"content" = "Contenido";
+"description_placeholder" = "Descripción";
+"column" = "Columna";
+"edit_task_title" = "Editar Tarea";
+"cancel" = "Cancelar";
+/* Foto de Tarea */
+"photo_section_header" = "Imagen";
+"photo_add" = "Añadir foto";
+"photo_change" = "Cambiar foto";
+"photo_remove" = "Eliminar";
+"photo_delete_confirm_title" = "¿Eliminar imagen?";
+"delete_task_button" = "Eliminar tarea";
+
+/* Pricing (faltaban en es.lproj) */
+"buy_once_button" = "Desbloquear Pro";
+"one_time_payment_label" = "Pago único. Acceso de por vida.";
+
+/* Configurar Icono del Repo */
+"icon_configure_button" = "Icono";
+"icon_configure_title" = "Configurar icono";
+"icon_current_header" = "Icono actual";
+"icon_no_icon" = "Sin icono";
+"icon_path_placeholder" = "Ruta del icono en el repo";
+"icon_path_example" = "Ejemplo: MiApp/Assets.xcassets/AppIcon.appiconset";
+"icon_path_header" = "Ruta personalizada";
+"icon_path_footer" = "Introduce la ruta dentro del repositorio donde se encuentra el icono de tu app.";
+"icon_search_button" = "Buscar icono automáticamente";
+"icon_searching" = "Buscando...";
+"icon_search_footer" = "Busca automáticamente el icono en Assets.xcassets del repositorio.";
+"icon_remove_button" = "Quitar icono personalizado";
+"icon_configured_toast" = "Icono configurado";
+"icon_found_toast" = "¡Icono encontrado!";
+"icon_not_found_error" = "No se encontró el archivo en ninguna rama (main, master, develop). Verifica que la ruta sea correcta.";
+"icon_not_found_search_error" = "No se encontró ningún icono en Assets.xcassets.";
+"icon_owner_error" = "No se pudo determinar el propietario del repositorio.";
+"icon_no_account_error" = "No hay cuenta asociada al repositorio.";
+"icon_token_error" = "No se pudo obtener el token de acceso.";
+"icon_search_error" = "Error al buscar: %@";
+
+/* ContentView */
+"connect_account_prompt" = "Conecta una cuenta para empezar";
+"tasks_count" = "%d tareas";
+"stars_count" = "%d estrellas";
+"github_sync_error" = "Error al sincronizar con GitHub";
+
+/* Settings - Iconos de Repos */
+"search_app_icons_button" = "Buscar iconos de apps";
+"search_icons_footer" = "Busca automáticamente los iconos de tus apps iOS en GitHub.";
+"no_ios_repos_icon_toast" = "No hay repos iOS sin icono";
+"searching_icons_progress" = "Buscando iconos en %d repos...";
+"icons_found_toast" = "%d iconos encontrados";
+"no_icons_found_toast" = "No se encontraron iconos";
+
+/* Permisos de Voz */
+"permission_denied_settings" = "Permiso denegado. Actívalo en Ajustes.";
+"mic_permission_denied" = "Permiso de micrófono denegado.";
+"dual_recognition_unavailable" = "Reconocimiento dual no disponible.";
+"recognition_unavailable" = "Reconocimiento no disponible.";
+"audio_error" = "Error audio: %@";
+"audio_engine_error" = "Error inicio motor: %@";
+
+/* Errores de GitHub */
+"github_token_invalid" = "El token de GitHub es inválido o ha expirado.";
+"github_network_error" = "Error de red: %@";
+"github_invalid_response" = "El servidor respondió con código %d.";
+"github_decoding_error" = "Error al procesar la respuesta: %@";
+"github_no_token" = "No se encontró token de GitHub. Inicia sesión.";
+
+/* Settings */
+"settings_title" = "Ajustes";
+"about_header" = "Acerca de";
+"pro_coming_soon_header" = "RepoMind Pro";
+"pro_coming_soon_title" = "Próximamente";
+"pro_coming_soon_description" = "Sincronización entre dispositivos, temas personalizados y más. Pago único, sin suscripciones.";
+"version_label" = "Versión";
+"privacy_policy" = "Política de Privacidad";
+"terms_of_use" = "Términos de Uso";
+"done_button" = "Listo";
+"settings_label" = "Ajustes";
+"save" = "Guardar";
+"task_section" = "Tarea";
+"task_placeholder" = "Algo por hacer...";
+"new_task_title" = "Nueva Tarea";
+"create" = "Crear";
+
+/* Vista Kanban Tablero / Lista */
+"board_view_label" = "Tablero";
+"list_view_label" = "Lista";
+"loading_board" = "Cargando tablero";
+"switch_to_list" = "Cambiar a lista";
+"switch_to_board" = "Cambiar a tablero";
+"switch_to_list_hint" = "Cambiar a vista de lista";
+"switch_to_board_hint" = "Cambiar a vista de tablero";
+"column_options_label" = "Opciones de columna";
+"Add task to %@" = "Añadir tarea a %@";
+"task_edit_hint" = "Toca para editar, mantén pulsado para arrastrar";
+
+/* Voice FAB */
+"Live transcript: %@" = "Transcripción en vivo: %@";
+"voice_stop_recording" = "Detener grabación";
+"voice_start_recording" = "Iniciar grabación de voz";
+"voice_stop_hint" = "Doble toque para detener la grabación";
+"voice_start_hint" = "Doble toque para iniciar la grabación";
+"voice_recording_value" = "Grabando";
+"voice_stopped_value" = "Detenido";
+"voice_switch_to_english" = "Switch to English";
+"voice_switch_to_spanish" = "Cambiar a Español";
+"permission_required_title" = "Permiso Requerido";
+"open_settings_button" = "Abrir Ajustes";
+
+/* Toast */
+"toast_error_label" = "Error";
+"toast_success_label" = "Éxito";
+"toast_info_label" = "Info";
+"toast_dismiss_hint" = "Toca para cerrar";
+
+/* Columnas Kanban por defecto */
+"default_column_1" = "Brainstorming";
+"default_column_2" = "Pendiente";
+"default_column_3" = "Hecho";
+
+/* Kanban List */
+"no_tasks" = "Sin tareas";
+"photo_badge" = "Foto";
+"audio_badge" = "Audio";
+"share_image" = "Compartir";
+"copy_image" = "Copiar imagen";
+"image_copied_toast" = "Imagen copiada";
+
+/* ContentView */
+"select_repo_prompt" = "Selecciona un repositorio";
+"select_repo_description" = "Elige un repositorio del menú lateral para ver su tablero Kanban.";
+"repositories_title" = "Repositorios";
+"search_placeholder" = "Buscar repos...";
+"accounts_filter" = "Cuentas";
+"all_accounts" = "Todas las Cuentas";
+"sign_out" = "Cerrar Sesion";
+"account_menu_label" = "Menú de cuenta";
+"filter_repos_label" = "Filtrar repositorios";
+"sync_repos_label" = "Sincronizar repositorios";
+"syncing" = "Sincronizando...";
+"sync_hint" = "Doble toque para sincronizar";
+"unfavorite" = "Quitar Favorito";
+"favorite" = "Favorito";
+"unarchive" = "Desarchivar";
+"archive" = "Archivar";
+"no_archived_title" = "Sin Archivados";
+"no_results_title" = "Sin Resultados";
+"no_archived_message" = "No tienes repositorios archivados.";
+"no_favorites_message" = "No tienes repos favoritos. Desliza a la derecha para marcar uno.";
+"no_results_message" = "No se encontraron repos con ese nombre.";
+"no_repos_title" = "No hay repositorios";
+"sync_button" = "Sincronizar";
+"repos_synced_toast" = "Repos sincronizados";
+"view_details_hint" = "Doble toque para ver detalles";
+"filter_all" = "Todos";
+"filter_favorites" = "Favoritos";
+"filter_archived" = "Archivados";
+
+/* Login View */
+"app_name" = "RepoMind";
+"login_subtitle" = "Conecta RepoMind con GitHub\npara ver tus proyectos";
+"start_section" = "Empezar";
+"create_token_button" = "Crear Token en GitHub";
+"create_token_hint" = "Se abre github.com con los permisos necesarios";
+"paste_token_button" = "Pegar Token del Portapapeles";
+"enter_token_manually" = "Introducir Token Manualmente";
+"access_token_section" = "Tu Token de Acceso";
+"paste_from_clipboard" = "Pegar desde Portapapeles";
+"welcome_message" = "Bienvenido, %@!";
+"validate_connect_button" = "Validar y Conectar";
+"back_button" = "Volver";
+"account_limit_error" = "Límite de cuentas alcanzado (Gratis: 1). Pásate a Pro.";
+
+/* Subscription / Paywall */
+"subscription_header" = "Suscripción";
+"current_plan_label" = "Plan Actual";
+"plan_free" = "Gratis";
+"plan_monthly" = "Pro Mensual";
+"plan_annual" = "Pro Anual";
+"manage_subscription_button" = "Gestionar Suscripción";
+"upgrade_to_pro_button" = "Mejorar a Pro";
+"restore_purchases_button" = "Restaurar Compras";
+"paywall_title" = "RepoMind Pro";
+"close_button" = "Cerrar";
+"paywall_header_title" = "Desbloquea Todo el Potencial";
+"paywall_header_subtitle" = "Acceso ilimitado a todas las funciones de RepoMind.";
+"purchase_error_title" = "Error de Compra";
+
+/* Feature Comparison */
+"feature_accounts" = "Cuentas GitHub";
+"feature_repos" = "Repositorios";
+"feature_kanban_columns" = "Columnas Kanban";
+"feature_voice" = "Transcripción de Voz";
+"feature_sync" = "Sincronización Multi-Dispositivo";
+"feature_unlimited" = "Ilimitado";
+"feature_limited" = "Limitado";
+"feature_coming_soon" = "Próximamente";
+"free_tier_label" = "Gratis";
+"pro_tier_label" = "Pro";
+
+/* Pricing */
+"monthly_label" = "Mensual";
+"annual_label" = "Anual";
+"annual_savings_badge" = "Ahorra %d%%";
+"per_month_label" = "/mes";
+"per_year_label" = "/año";
+"subscribe_button" = "Suscribirse";
+"purchase_error" = "Error al procesar la compra. Inténtalo de nuevo.";
+"purchase_success_toast" = "¡Bienvenido a RepoMind Pro!";
+"restore_success_toast" = "¡Compras restauradas! Bienvenido a Pro.";
+"restore_no_purchases_toast" = "No se encontraron suscripciones activas.";
+"restore_empty_toast" = "No se encontraron compras anteriores.";
+"paywall_legal_disclaimer" = "Pago único. Puedes restaurar tus compras desde los Ajustes de la app en otros dispositivos con la misma cuenta de Apple.";
+"products_not_available" = "Los productos no están disponibles en este momento.";
+"products_unavailable_title" = "Planes no disponibles aún";
+"products_unavailable_body" = "Las suscripciones estarán disponibles cuando la app esté publicada en la App Store. Mientras tanto, puedes probar las compras desde el simulador de Xcode.";
+"retry_button" = "Reintentar";
+"debug_activate_pro" = "Activar Pro (Test)";
+"debug_activate_pro_hint" = "Solo visible en builds de desarrollo.";
+
+/* Upgrade Prompts */
+"account_limit_upgrade" = "Necesitas Pro para añadir más cuentas.";
+"column_limit_upgrade" = "Necesitas Pro para añadir más columnas.";
+"repo_limit_upgrade" = "Necesitas Pro para añadir más repositorios.";
+"repo_limit_banner_title" = "Límite de repositorios alcanzado";
+"repo_limit_banner_subtitle" = "Tienes %d repos ocultos. Desbloquéalos con Pro.";

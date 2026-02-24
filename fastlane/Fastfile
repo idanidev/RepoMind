@@ -1,0 +1,122 @@
+default_platform(:ios)
+
+SCHEME       = "RepoMind"
+BUNDLE_ID    = "idanidev.RepoMind"
+PROJECT      = "RepoMind.xcodeproj"
+
+platform :ios do
+
+  # ── API KEY (se carga una vez y se reutiliza en todas las lanes) ─────────────
+  # Necesitas 3 variables de entorno (ponlas en ~/.zshrc):
+  #   ASC_KEY_ID       → Key ID  (ej: ABC1234567)
+  #   ASC_ISSUER_ID    → Issuer ID (ej: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
+  #   ASC_KEY_FILEPATH → Ruta al .p8 (ej: /Users/dani/.appstoreconnect/private_keys/AuthKey_ABC1234567.p8)
+  def api_key
+    app_store_connect_api_key(
+      key_id:        ENV["ASC_KEY_ID"],
+      issuer_id:     ENV["ASC_ISSUER_ID"],
+      key_filepath:  ENV["ASC_KEY_FILEPATH"],
+      duration:      1200,
+      in_house:      false
+    )
+  end
+
+
+  # ── LANE: certificates ──────────────────────────────────────────────────────
+  desc "Sincroniza certificados de distribución con match"
+  lane :certificates do
+    match(
+      type:     "appstore",
+      api_key:  api_key,
+      readonly: false
+    )
+  end
+
+
+  # ── LANE: build ─────────────────────────────────────────────────────────────
+  desc "Compila la app en modo Release"
+  lane :build do
+    build_number = Time.now.strftime("%Y%m%d%H%M")
+    increment_build_number(
+      build_number: build_number,
+      xcodeproj:    PROJECT
+    )
+
+    match(
+      type:     "appstore",
+      api_key:  api_key,
+      readonly: true
+    )
+
+    gym(
+      scheme:           SCHEME,
+      project:          PROJECT,
+      configuration:    "Release",
+      export_method:    "app-store",
+      output_directory: "./build",
+      output_name:      "RepoMind.ipa",
+      clean:            true,
+      export_options: {
+        provisioningProfiles: {
+          BUNDLE_ID => ENV["sigh_#{BUNDLE_ID.gsub('.','_')}_appstore_profile-name"]
+        }
+      }
+    )
+  end
+
+
+  # ── LANE: beta ──────────────────────────────────────────────────────────────
+  desc "Sube una build a TestFlight"
+  lane :beta do
+    build
+
+    upload_to_testflight(
+      api_key:                          api_key,
+      ipa:                              "./build/RepoMind.ipa",
+      skip_waiting_for_build_processing: true
+    )
+
+    UI.success "✅ Build subida a TestFlight correctamente"
+  end
+
+
+  # ── LANE: release ───────────────────────────────────────────────────────────
+  desc "Sube la app a App Store y la envía a revisión"
+  lane :release do
+    build
+
+    deliver(
+      api_key:                      api_key,
+      ipa:                          "./build/RepoMind.ipa",
+      submit_for_review:            true,
+      automatic_release:            false,
+      force:                        true,
+      skip_screenshots:             true,
+      skip_metadata:                true,
+      run_precheck_before_submit:   false,
+      submission_information: {
+        export_compliance_uses_encryption: false
+      }
+    )
+
+    UI.success "🚀 App enviada a revisión en App Store"
+  end
+
+
+  # ── LANE: bump_version ──────────────────────────────────────────────────────
+  desc "Sube la versión de marketing"
+  lane :bump_version do |options|
+    version = options[:version] || UI.input("Nueva versión (ej: 1.1.0):")
+    increment_version_number(
+      version_number: version,
+      xcodeproj:      PROJECT
+    )
+    UI.success "Versión actualizada a #{version}"
+  end
+
+
+  error do |lane, exception|
+    UI.error "❌ Error en lane '#{lane}': #{exception.message}"
+  end
+
+end

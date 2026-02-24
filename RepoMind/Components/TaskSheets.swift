@@ -1,5 +1,122 @@
+import PhotosUI
 import SwiftData
 import SwiftUI
+
+// MARK: - Transferable Image (for ShareLink + drag)
+
+struct TransferableImage: Transferable {
+    let image: UIImage
+
+    static var transferRepresentation: some TransferRepresentation {
+        DataRepresentation(exportedContentType: .jpeg) { item in
+            item.image.jpegData(compressionQuality: 0.9) ?? Data()
+        }
+    }
+}
+
+// MARK: - Shared Image Helper
+
+private func saveImageToDocuments(image: UIImage, taskId: UUID) -> String? {
+    guard let data = image.jpegData(compressionQuality: 0.8) else { return nil }
+    let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+    let imagePath = documentsPath.appendingPathComponent("task_\(taskId.uuidString).jpg")
+    do {
+        try data.write(to: imagePath)
+        return imagePath.path
+    } catch {
+        #if DEBUG
+        print("Error guardando imagen: \(error)")
+        #endif
+        return nil
+    }
+}
+
+// MARK: - Photo Section (shared subview)
+
+private struct TaskPhotoSection: View {
+    @Binding var taskImage: UIImage?
+    @Binding var selectedPhoto: PhotosPickerItem?
+    @Binding var showDeleteConfirmation: Bool
+
+    var body: some View {
+        Section {
+            if let image = taskImage {
+                VStack(spacing: 12) {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxHeight: 200)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .onDrag { NSItemProvider(object: image) }
+                        .contextMenu {
+                            ShareLink(
+                                item: TransferableImage(image: image),
+                                preview: SharePreview(
+                                    String(localized: "photo_section_header"),
+                                    image: Image(uiImage: image)
+                                )
+                            ) {
+                                Label("share_image", systemImage: "square.and.arrow.up")
+                            }
+                            Button {
+                                if let data = image.pngData() {
+                                    UIPasteboard.general.setData(data, forPasteboardType: "public.png")
+                                }
+                                ToastManager.shared.show(
+                                    String(localized: "image_copied_toast"), style: .success)
+                            } label: {
+                                Label("copy_image", systemImage: "doc.on.doc")
+                            }
+                        }
+
+                    HStack {
+                        PhotosPicker(selection: $selectedPhoto, matching: .images) {
+                            Label("photo_change", systemImage: "photo.badge.arrow.down")
+                        }
+                        Spacer()
+                        ShareLink(
+                            item: TransferableImage(image: image),
+                            preview: SharePreview(
+                                String(localized: "photo_section_header"),
+                                image: Image(uiImage: image)
+                            )
+                        ) {
+                            Image(systemName: "square.and.arrow.up")
+                        }
+                        Button {
+                            UIPasteboard.general.image = image
+                            ToastManager.shared.show(
+                                String(localized: "image_copied_toast"), style: .success)
+                        } label: {
+                            Image(systemName: "doc.on.doc")
+                        }
+                        Button(role: .destructive) {
+                            showDeleteConfirmation = true
+                        } label: {
+                            Label("photo_remove", systemImage: "trash")
+                                .foregroundStyle(.red)
+                        }
+                    }
+                    .font(.subheadline)
+                }
+            } else {
+                PhotosPicker(selection: $selectedPhoto, matching: .images) {
+                    HStack {
+                        Image(systemName: "photo.badge.plus")
+                            .font(.title2)
+                            .foregroundStyle(.blue)
+                        Text("photo_add")
+                            .foregroundStyle(.primary)
+                        Spacer()
+                    }
+                    .padding(.vertical, 8)
+                }
+            }
+        } header: {
+            Text("photo_section_header")
+        }
+    }
+}
 
 // MARK: - Task Edit Sheet
 
@@ -10,6 +127,9 @@ struct TaskEditSheet: View {
 
     @State private var editedContent: String = ""
     @State private var selectedColumn: KanbanColumn?
+    @State private var selectedPhoto: PhotosPickerItem?
+    @State private var taskImage: UIImage?
+    @State private var showDeleteConfirmation = false
 
     var body: some View {
         NavigationStack {
@@ -19,10 +139,34 @@ struct TaskEditSheet: View {
                         .lineLimit(3...6)
                 }
 
+                TaskPhotoSection(
+                    taskImage: $taskImage,
+                    selectedPhoto: $selectedPhoto,
+                    showDeleteConfirmation: $showDeleteConfirmation
+                )
+
                 Section("column") {
                     Picker("column", selection: $selectedColumn) {
                         ForEach(columns) { column in
-                            Text(column.name).tag(column as KanbanColumn?)
+                            HStack {
+                                Circle()
+                                    .fill(Color(hex: column.colorHex))
+                                    .frame(width: 12, height: 12)
+                                Text(column.name)
+                            }
+                            .tag(column as KanbanColumn?)
+                        }
+                    }
+                }
+
+                Section {
+                    Button(role: .destructive) {
+                        deleteTaskAndDismiss()
+                    } label: {
+                        HStack {
+                            Spacer()
+                            Label("delete_task_button", systemImage: "trash")
+                            Spacer()
                         }
                     }
                 }
@@ -34,19 +178,73 @@ struct TaskEditSheet: View {
                     Button("cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("save") {
-                        task.content = editedContent
-                        task.column = selectedColumn
-                        dismiss()
-                    }
-                    .disabled(editedContent.isEmpty)
+                    Button("save") { saveTask() }
+                        .disabled(editedContent.isEmpty)
                 }
             }
             .onAppear {
                 editedContent = task.content
                 selectedColumn = task.column
+                loadExistingImage()
+            }
+            .onChange(of: selectedPhoto) { _, newValue in
+                Task {
+                    if let data = try? await newValue?.loadTransferable(type: Data.self),
+                       let image = UIImage(data: data)
+                    {
+                        taskImage = image
+                    }
+                }
+            }
+            .alert("photo_delete_confirm_title", isPresented: $showDeleteConfirmation) {
+                Button("cancel", role: .cancel) {}
+                Button("photo_remove", role: .destructive) {
+                    taskImage = nil
+                    task.imagePath = nil
+                    task.imageData = nil
+                }
             }
         }
+        .presentationDetents([.medium, .large])
+    }
+
+    private func loadExistingImage() {
+        if let data = task.imageData, let image = UIImage(data: data) {
+            taskImage = image
+        } else if let imagePath = task.imagePath,
+                  let data = FileManager.default.contents(atPath: imagePath),
+                  let image = UIImage(data: data)
+        {
+            taskImage = image
+        }
+    }
+
+    private func saveTask() {
+        task.content = editedContent
+        task.column = selectedColumn
+
+        if let image = taskImage {
+            task.imageData = image.jpegData(compressionQuality: 0.7)
+            if let savedPath = saveImageToDocuments(image: image, taskId: task.id) {
+                task.imagePath = savedPath
+            }
+        } else {
+            if let oldPath = task.imagePath {
+                try? FileManager.default.removeItem(atPath: oldPath)
+            }
+            task.imagePath = nil
+            task.imageData = nil
+        }
+
+        dismiss()
+    }
+
+    private func deleteTaskAndDismiss() {
+        if let imagePath = task.imagePath {
+            try? FileManager.default.removeItem(atPath: imagePath)
+        }
+        task.column?.tasks?.removeAll { $0.id == task.id }
+        dismiss()
     }
 }
 
@@ -57,10 +255,13 @@ struct AddTaskSheet: View {
     var columns: [KanbanColumn]
     var preselectedColumn: KanbanColumn?
 
-    let onSave: (String, KanbanColumn) -> Void
+    let onSave: (String, KanbanColumn, Data?) -> Void
     @Environment(\.dismiss) private var dismiss
 
     @State private var selectedColumn: KanbanColumn?
+    @State private var selectedPhoto: PhotosPickerItem?
+    @State private var taskImage: UIImage?
+    @State private var showDeleteConfirmation = false
 
     var body: some View {
         NavigationStack {
@@ -69,6 +270,13 @@ struct AddTaskSheet: View {
                     TextField("task_placeholder", text: $content, axis: .vertical)
                         .lineLimit(2...5)
                 }
+
+                TaskPhotoSection(
+                    taskImage: $taskImage,
+                    selectedPhoto: $selectedPhoto,
+                    showDeleteConfirmation: $showDeleteConfirmation
+                )
+
                 Section("column") {
                     Picker("column", selection: $selectedColumn) {
                         ForEach(columns) { column in
@@ -86,7 +294,8 @@ struct AddTaskSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("create") {
                         if let col = selectedColumn {
-                            onSave(content, col)
+                            let imageData = taskImage?.jpegData(compressionQuality: 0.7)
+                            onSave(content, col, imageData)
                             dismiss()
                         }
                     }
@@ -94,12 +303,24 @@ struct AddTaskSheet: View {
                 }
             }
             .onAppear {
-                if let preselectedColumn {
-                    selectedColumn = preselectedColumn
-                } else {
-                    selectedColumn = columns.first
+                selectedColumn = preselectedColumn ?? columns.first
+            }
+            .onChange(of: selectedPhoto) { _, newValue in
+                Task {
+                    if let data = try? await newValue?.loadTransferable(type: Data.self),
+                       let image = UIImage(data: data)
+                    {
+                        taskImage = image
+                    }
+                }
+            }
+            .alert("photo_delete_confirm_title", isPresented: $showDeleteConfirmation) {
+                Button("cancel", role: .cancel) {}
+                Button("photo_remove", role: .destructive) {
+                    taskImage = nil
                 }
             }
         }
+        .presentationDetents([.medium, .large])
     }
 }

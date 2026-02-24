@@ -1,0 +1,4 @@
+git_url ENV["MATCH_GIT_URL"]
+type "appstore"
+app_identifier ["idanidev.RepoMind"]
+# Sin username — la autenticación la gestiona la API Key del Fastfile

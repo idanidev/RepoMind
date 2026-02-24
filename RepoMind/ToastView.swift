@@ -6,12 +6,14 @@ enum ToastStyle {
     case error
     case success
     case info
+    case warning
 
     var iconName: String {
         switch self {
         case .error: "xmark.circle.fill"
         case .success: "checkmark.circle.fill"
         case .info: "info.circle.fill"
+        case .warning: "exclamationmark.triangle.fill"
         }
     }
 
@@ -20,6 +22,7 @@ enum ToastStyle {
         case .error: .red
         case .success: .green
         case .info: .blue
+        case .warning: .orange
         }
     }
 
@@ -27,7 +30,15 @@ enum ToastStyle {
         switch self {
         case .error: .error
         case .success: .success
-        case .info: .warning
+        case .info, .warning: .warning
+        }
+    }
+
+    var localizedLabel: String {
+        switch self {
+        case .error: String(localized: "toast_error_label")
+        case .success: String(localized: "toast_success_label")
+        case .info, .warning: String(localized: "toast_info_label")
         }
     }
 }
@@ -147,9 +158,9 @@ private struct ToastPill: View {
         .padding(.top, 8)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
-            "\(toast.style == .error ? "Error" : toast.style == .success ? "Éxito" : "Info"): \(toast.message)"
+            Text(verbatim: "\(toast.style.localizedLabel): \(toast.message)")
         )
-        .accessibilityHint("Toca para cerrar")
+        .accessibilityHint("toast_dismiss_hint")
         .accessibilityAddTraits(.isButton)
     }
 }

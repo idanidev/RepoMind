@@ -5,11 +5,9 @@ import UIKit
 @MainActor
 @Observable
 final class KanbanViewModel {
-    // ✅ FIX: private(set) for properties that shouldn't be reassigned externally
     private(set) var project: ProjectRepo
     private let modelContext: ModelContext
 
-    // ✅ FIX: private(set) for voiceManager
     private(set) var voiceManager = VoiceManager()
 
     // Sheet States
@@ -25,11 +23,16 @@ final class KanbanViewModel {
     var renameColumnText = ""
     var columnToRename: KanbanColumn?
 
+    // Move Task State
+    var showMoveSheet = false
+    var taskToMove: TaskItem?
+
     // Drag State
     var draggingTask: TaskItem?
 
-    // ✅ FIX: Static feedback generator for performance
+    // Feedback generators
     private static let selectionFeedback = UISelectionFeedbackGenerator()
+    private static let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
 
     init(project: ProjectRepo, modelContext: ModelContext) {
         self.project = project
@@ -65,7 +68,6 @@ final class KanbanViewModel {
             createTask(content: text, column: targetColumn)
         }
 
-        // Reset voice state
         voiceManager.transcribedText = ""
     }
 
@@ -74,29 +76,37 @@ final class KanbanViewModel {
     func initializeDefaultColumnsIfNeeded() {
         guard project.columns?.isEmpty ?? true else { return }
 
-        let defaults = ["Brainstorming", "To-Do", "Done"]
+        let defaults = [
+            String(localized: "default_column_1"),
+            String(localized: "default_column_2"),
+            String(localized: "default_column_3"),
+        ]
         for (index, name) in defaults.enumerated() {
             let col = KanbanColumn(name: name, orderIndex: index, project: project)
             modelContext.insert(col)
         }
 
-        // Save immediately to ensure columns are available
         try? modelContext.save()
     }
 
-    func createColumn() {
-        // ✅ FIX: Trim whitespace in validation
+    @discardableResult
+    func createColumn() -> Bool {
         let name = newColumnName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty else { return }
+        guard !name.isEmpty else { return false }
 
-        let index = project.columns?.count ?? 0
-        let col = KanbanColumn(name: name, orderIndex: index, project: project)
+        let currentCount = project.columns?.count ?? 0
+        guard SubscriptionManager.shared.canAddKanbanColumn(currentCount: currentCount) else {
+            return false
+        }
+
+        let col = KanbanColumn(name: name, orderIndex: currentCount, project: project)
 
         withAnimation(.snappy) {
             modelContext.insert(col)
         }
 
         newColumnName = ""
+        return true
     }
 
     func deleteColumn(_ column: KanbanColumn) {
@@ -112,7 +122,6 @@ final class KanbanViewModel {
     }
 
     func renameColumn() {
-        // ✅ FIX: Trim whitespace in validation
         let name = renameColumnText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let col = columnToRename, !name.isEmpty else { return }
 
@@ -129,22 +138,29 @@ final class KanbanViewModel {
         showAddTaskSheet = true
     }
 
-    func createTask(content: String, column: KanbanColumn) {
-        // ✅ FIX: Trim and validate content
+    func createTask(content: String, column: KanbanColumn, imageData: Data? = nil) {
         let trimmedContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedContent.isEmpty else { return }
+
+        // Calcular el siguiente orderIndex
+        let maxOrder = (column.tasks ?? []).map(\.orderIndex).max() ?? -1
+        let newOrder = maxOrder + 1
 
         let status = column.name.lowercased().replacingOccurrences(of: " ", with: "_")
         let task = TaskItem(
             content: trimmedContent,
             status: status,
             column: column,
-            project: project
+            project: project,
+            orderIndex: newOrder
         )
+        task.imageData = imageData
 
         withAnimation(.snappy) {
             modelContext.insert(task)
         }
+
+        Self.impactFeedback.impactOccurred()
     }
 
     func deleteTask(_ task: TaskItem) {
@@ -153,15 +169,49 @@ final class KanbanViewModel {
         }
     }
 
-    func moveTask(_ task: TaskItem, to column: KanbanColumn) {
-        guard task.column != column else { return }
+    func showMoveTaskSheet(_ task: TaskItem) {
+        taskToMove = task
+        showMoveSheet = true
+    }
+
+    func moveTask(_ task: TaskItem, to column: KanbanColumn, atIndex index: Int?) {
+        let isSameColumn = task.column?.id == column.id
 
         withAnimation(.snappy) {
-            task.column = column
-            task.status = column.name.lowercased().replacingOccurrences(of: " ", with: "_")
+            // Si se mueve a otra columna
+            if !isSameColumn {
+                task.column = column
+                task.status = column.name.lowercased().replacingOccurrences(of: " ", with: "_")
+            }
+
+            // Reordenar dentro de la columna
+            if let targetIndex = index {
+                reorderTask(task, inColumn: column, toIndex: targetIndex)
+            } else if !isSameColumn {
+                // Si es nueva columna sin índice específico, poner al final
+                let maxOrder = (column.tasks ?? []).filter { $0.id != task.id }.map(\.orderIndex).max() ?? -1
+                task.orderIndex = maxOrder + 1
+            }
         }
 
-        // ✅ FIX: Use static generator
         Self.selectionFeedback.selectionChanged()
+    }
+
+    private func reorderTask(_ task: TaskItem, inColumn column: KanbanColumn, toIndex targetIndex: Int) {
+        var tasks = (column.tasks ?? []).sorted { $0.orderIndex < $1.orderIndex }
+
+        // Remover la tarea de su posición actual si está en la misma columna
+        if let currentIndex = tasks.firstIndex(where: { $0.id == task.id }) {
+            tasks.remove(at: currentIndex)
+        }
+
+        // Insertar en la nueva posición
+        let insertIndex = min(targetIndex, tasks.count)
+        tasks.insert(task, at: insertIndex)
+
+        // Actualizar todos los orderIndex
+        for (index, t) in tasks.enumerated() {
+            t.orderIndex = index
+        }
     }
 }

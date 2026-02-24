@@ -16,8 +16,8 @@ enum KanbanViewMode: String, CaseIterable {
 
     var accessibilityLabel: LocalizedStringKey {
         switch self {
-        case .board: "Vista de tablero"
-        case .list: "Vista de lista"
+        case .board: "board_view_label"
+        case .list: "list_view_label"
         }
     }
 }
@@ -28,10 +28,19 @@ struct KanbanView: View {
     @Bindable var project: ProjectRepo
     @Environment(\.modelContext) private var context
 
+    @Query private var columns: [KanbanColumn]
+
     // ✅ FIX: Non-optional ViewModel initialized in .task
     @State private var viewModel: KanbanViewModel?
     @State private var viewMode: KanbanViewMode = .board
-    @State private var sortedColumns: [KanbanColumn] = []
+    @State private var showPaywall = false
+
+    init(project: ProjectRepo) {
+        self.project = project
+        let projectID = project.persistentModelID
+        let filter = #Predicate<KanbanColumn> { $0.project?.persistentModelID == projectID }
+        _columns = Query(filter: filter, sort: \KanbanColumn.orderIndex)
+    }
 
     var body: some View {
         Group {
@@ -39,37 +48,26 @@ struct KanbanView: View {
                 kanbanContent(viewModel: viewModel)
             } else {
                 ProgressView()
-                    .accessibilityLabel("Cargando tablero")
+                    .accessibilityLabel("loading_board")
             }
         }
         .navigationTitle(project.name)
         .toolbar { toolbarContent }
-        .task {
-            initializeViewModel()
-        }
-        // ✅ FIX: Use count as proxy for relationship changes
-        .onChange(of: project.columns?.count) { _, _ in
-            updateSortedColumns()
+        .task(id: project.repoID) {
+            await initializeViewModel()
         }
     }
 
     // MARK: - Initialization
 
-    private func initializeViewModel() {
-        guard viewModel == nil else { return }
-
+    private func initializeViewModel() async {
+        // Always create a fresh VM — .task(id:) ensures this only runs when the project changes
+        // Making this async lets checkVoicePermissions participate in structured concurrency:
+        // if the user switches projects quickly, the task is cancelled automatically.
         let vm = KanbanViewModel(project: project, modelContext: context)
         vm.initializeDefaultColumnsIfNeeded()
         viewModel = vm
-        updateSortedColumns()
-
-        Task {
-            await vm.checkVoicePermissions()
-        }
-    }
-
-    private func updateSortedColumns() {
-        sortedColumns = (project.columns ?? []).sorted { $0.orderIndex < $1.orderIndex }
+        await vm.checkVoicePermissions()
     }
 
     // MARK: - Toolbar
@@ -92,23 +90,28 @@ struct KanbanView: View {
             }
         } label: {
             Label(
-                viewMode == .board ? "Cambiar a lista" : "Cambiar a tablero",
+                viewMode == .board ? "switch_to_list" : "switch_to_board",
                 systemImage: viewMode == .board ? "list.bullet" : "rectangle.grid.1x2"
             )
             .labelStyle(.iconOnly)
         }
         .accessibilityLabel(
-            viewMode == .board ? "Cambiar a vista de lista" : "Cambiar a vista de tablero")
+            viewMode == .board ? "switch_to_list_hint" : "switch_to_board_hint")
     }
 
     private var addColumnButton: some View {
         Button {
-            viewModel?.showAddColumnSheet = true
+            let currentCount = project.columns?.count ?? 0
+            if SubscriptionManager.shared.canAddKanbanColumn(currentCount: currentCount) {
+                viewModel?.showAddColumnSheet = true
+            } else {
+                showPaywall = true
+            }
         } label: {
-            Label("Añadir Columna", systemImage: "rectangle.stack.badge.plus")
+            Label("add_column", systemImage: "rectangle.stack.badge.plus")
                 .labelStyle(.iconOnly)
         }
-        .accessibilityLabel("Añadir nueva columna")
+        .accessibilityLabel("add_new_column_button")
     }
 
     // MARK: - Content
@@ -120,21 +123,21 @@ struct KanbanView: View {
         Group {
             switch viewMode {
             case .board:
-                KanbanBoardView(viewModel: viewModel, sortedColumns: sortedColumns)
+                KanbanBoardView(viewModel: viewModel, sortedColumns: columns)
             case .list:
-                KanbanListView(viewModel: viewModel, sortedColumns: sortedColumns)
+                KanbanListView(viewModel: viewModel, sortedColumns: columns)
             }
         }
         .sheet(item: $viewModel.editingTask) { task in
-            TaskEditSheet(task: task, columns: sortedColumns)
+            TaskEditSheet(task: task, columns: columns)
         }
         .sheet(isPresented: $viewModel.showAddTaskSheet) {
             AddTaskSheet(
                 content: $viewModel.newTaskContent,
-                columns: sortedColumns,
+                columns: columns,
                 preselectedColumn: viewModel.targetColumnForNewTask
-            ) { content, column in
-                viewModel.createTask(content: content, column: column)
+            ) { content, column, imageData in
+                viewModel.createTask(content: content, column: column, imageData: imageData)
             }
         }
         .alert("new_column_title", isPresented: $viewModel.showAddColumnSheet) {
@@ -143,9 +146,13 @@ struct KanbanView: View {
                 viewModel.newColumnName = ""
             }
             Button("create_button") {
-                viewModel.createColumn()
-                updateSortedColumns()
+                if !viewModel.createColumn() {
+                    showPaywall = true
+                }
             }
+        }
+        .sheet(isPresented: $showPaywall) {
+            PaywallView()
         }
         .alert("rename_column_title", isPresented: $viewModel.showRenameColumnAlert) {
             TextField("column_name_placeholder", text: $viewModel.renameColumnText)
@@ -161,7 +168,7 @@ struct KanbanView: View {
 }
 
 #Preview {
-    let config = ModelConfiguration(isStoredInMemoryOnly: true)
+    let config = ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none)
     let container = try! ModelContainer(
         for: ProjectRepo.self, TaskItem.self, KanbanColumn.self, configurations: config)
 

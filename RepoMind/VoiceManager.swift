@@ -18,35 +18,131 @@ final class VoiceManager {
 
     // MARK: - Configuration
 
-    // ✅ FIX: Configurable locale (defaults to device locale)
-    var speechLocale: Locale {
-        didSet {
-            speechRecognizer = SFSpeechRecognizer(locale: speechLocale)
-        }
+    /// Primary speech locale (first preferred language)
+    private(set) var speechLocale: Locale
+
+    /// Secondary speech locale (second preferred language, if different)
+    private(set) var secondaryLocale: Locale?
+
+    /// Whether we're using two languages based on user's system settings
+    var useDualLanguage: Bool {
+        secondaryLocale != nil
     }
 
     // MARK: - Private State
 
     private var audioEngine: AVAudioEngine?
+
+    // Single Mode
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
     private var speechRecognizer: SFSpeechRecognizer?
+
+    // Dual Mode (primary + secondary language)
+    private var recognitionRequestPrimary: SFSpeechAudioBufferRecognitionRequest?
+    private var recognitionRequestSecondary: SFSpeechAudioBufferRecognitionRequest?
+    private var recognitionTaskPrimary: SFSpeechRecognitionTask?
+    private var recognitionTaskSecondary: SFSpeechRecognitionTask?
+    private var speechRecognizerPrimary: SFSpeechRecognizer?
+    private var speechRecognizerSecondary: SFSpeechRecognizer?
+
     private var isStopping = false
 
     // Silence Detection
-    private var silenceTimer: Timer?
+    nonisolated(unsafe) private var silenceTimer: Timer?
     private let silenceThreshold: Float = 0.02
     private let silenceDuration: TimeInterval = 2.0
     private var lastAudioDetectedTime: Date = .now
 
     // ✅ FIX: Track smart routing task for cancellation
-    private var smartRoutingTask: Task<Void, Never>?
+    nonisolated(unsafe) private var smartRoutingTask: Task<Void, Never>?
 
     // MARK: - Initialization
 
     init(locale: Locale = .current) {
-        self.speechLocale = locale
-        self.speechRecognizer = SFSpeechRecognizer(locale: locale)
+        // Automatically detect languages from user's system preferences
+        let (primary, secondary) = Self.resolveSystemLanguages()
+        self.speechLocale = primary
+        self.secondaryLocale = secondary
+        self.speechRecognizer = SFSpeechRecognizer(locale: primary)
+        configureRecognizers()
+
+        #if DEBUG
+            print(
+                "🎙️ [VoiceManager] Primary: \(primary.identifier), Secondary: \(secondary?.identifier ?? "none")"
+            )
+        #endif
+    }
+
+    /// Resolves the user's preferred languages from system settings.
+    /// Returns primary locale and optional secondary locale if user has multiple languages configured.
+    private static func resolveSystemLanguages() -> (primary: Locale, secondary: Locale?) {
+        let preferredLanguages = Locale.preferredLanguages
+
+        // Get primary language
+        let primaryLang = preferredLanguages.first ?? "es"
+        let primary = mapToSpeechLocale(languageCode: primaryLang)
+
+        // Check if user has a second language configured that's different
+        var secondary: Locale? = nil
+        if preferredLanguages.count > 1 {
+            let secondaryLang = preferredLanguages[1]
+            let secondaryLocale = mapToSpeechLocale(languageCode: secondaryLang)
+
+            // Only use secondary if it's a different language family
+            let primaryFamily = primary.language.languageCode?.identifier
+            let secondaryFamily = secondaryLocale.language.languageCode?.identifier
+
+            if primaryFamily != secondaryFamily {
+                secondary = secondaryLocale
+            }
+        }
+
+        return (primary, secondary)
+    }
+
+    /// Maps a language identifier to a speech-compatible locale
+    private static func mapToSpeechLocale(languageCode: String) -> Locale {
+        let lang =
+            Locale(identifier: languageCode).language.languageCode?.identifier
+            ?? languageCode.prefix(2).lowercased()
+
+        switch lang {
+        case "es": return Locale(identifier: "es-ES")
+        case "en": return Locale(identifier: "en-US")
+        case "ca": return Locale(identifier: "ca-ES")
+        case "gl": return Locale(identifier: "gl-ES")
+        case "eu": return Locale(identifier: "eu-ES")
+        case "pt": return Locale(identifier: "pt-BR")
+        case "fr": return Locale(identifier: "fr-FR")
+        case "de": return Locale(identifier: "de-DE")
+        case "it": return Locale(identifier: "it-IT")
+        case "ja": return Locale(identifier: "ja-JP")
+        case "zh": return Locale(identifier: "zh-CN")
+        case "ko": return Locale(identifier: "ko-KR")
+        case "nl": return Locale(identifier: "nl-NL")
+        case "ru": return Locale(identifier: "ru-RU")
+        case "ar": return Locale(identifier: "ar-SA")
+        default: return Locale(identifier: "\(lang)-\(lang.uppercased())")
+        }
+    }
+
+    // ✅ FIX: Explicit cleanup before deallocation to prevent
+    // TaskLocal/malloc crash when smartRoutingTask outlives the object.
+    deinit {
+        silenceTimer?.invalidate()
+        smartRoutingTask?.cancel()
+    }
+
+    private func configureRecognizers() {
+        if let secondary = secondaryLocale {
+            // Dual mode: use both primary and secondary languages
+            speechRecognizerPrimary = SFSpeechRecognizer(locale: speechLocale)
+            speechRecognizerSecondary = SFSpeechRecognizer(locale: secondary)
+        } else {
+            // Single mode: just the primary language
+            speechRecognizer = SFSpeechRecognizer(locale: speechLocale)
+        }
     }
 
     // MARK: - Permissions
@@ -56,7 +152,10 @@ final class VoiceManager {
 
         switch currentSpeechStatus {
         case .authorized:
-            break
+            // Already granted speech — we will check mic in startRecording when actually needed
+            // to avoid showing the mic dialog on app startup/repo switch.
+            permissionGranted = true
+            return
         case .notDetermined:
             let granted = await withCheckedContinuation { continuation in
                 SFSpeechRecognizer.requestAuthorization { status in
@@ -64,12 +163,12 @@ final class VoiceManager {
                 }
             }
             guard granted else {
-                errorMessage = String(localized: "Permiso denegado. Actívalo en Ajustes.")
+                errorMessage = String(localized: "permission_denied_settings")
                 permissionGranted = false
                 return
             }
         case .denied, .restricted:
-            errorMessage = String(localized: "Permiso denegado. Actívalo en Ajustes.")
+            errorMessage = String(localized: "permission_denied_settings")
             permissionGranted = false
             return
         @unknown default:
@@ -77,19 +176,15 @@ final class VoiceManager {
             return
         }
 
-        let micGranted = await checkAndRequestMicPermission()
-        guard micGranted else {
-            errorMessage = String(localized: "Permiso de micrófono denegado.")
-            permissionGranted = false
-            return
-        }
+        // Do not request mic here, doing it on load triggers unwanted dialogs.
+        // It will be requested in `startRecording()` when the user actually clicks the mic.
 
         permissionGranted = true
         errorMessage = nil
     }
 
     private func checkAndRequestMicPermission() async -> Bool {
-        if #available(iOS 17, *) {
+        if #available(iOS 17, macOS 14.0, *) {
             switch AVAudioApplication.shared.recordPermission {
             case .granted: return true
             case .undetermined: return await AVAudioApplication.requestRecordPermission()
@@ -97,17 +192,21 @@ final class VoiceManager {
             @unknown default: return false
             }
         } else {
-            switch AVAudioSession.sharedInstance().recordPermission {
-            case .granted: return true
-            case .undetermined:
-                return await withCheckedContinuation { continuation in
-                    AVAudioSession.sharedInstance().requestRecordPermission { granted in
-                        continuation.resume(returning: granted)
+            #if !os(macOS)
+                switch AVAudioSession.sharedInstance().recordPermission {
+                case .granted: return true
+                case .undetermined:
+                    return await withCheckedContinuation { continuation in
+                        AVAudioSession.sharedInstance().requestRecordPermission { granted in
+                            continuation.resume(returning: granted)
+                        }
                     }
+                case .denied: return false
+                @unknown default: return false
                 }
-            case .denied: return false
-            @unknown default: return false
-            }
+            #else
+                return false  // On older macOS, mic permission is handled differently, 14.0+ handled above
+            #endif
         }
     }
 
@@ -122,17 +221,29 @@ final class VoiceManager {
     }
 
     private func startRecording() async {
-        guard let speechRecognizer, speechRecognizer.isAvailable else {
-            errorMessage = String(localized: "Reconocimiento no disponible.")
-            return
-        }
-
         if !permissionGranted {
             await checkAndRequestPermissions()
             guard permissionGranted else { return }
         }
 
+        // Only request mic permission right before recording, to avoid showing dialog at startup
+        let micGranted = await checkAndRequestMicPermission()
+        guard micGranted else {
+            errorMessage = String(localized: "mic_permission_denied")
+            permissionGranted = false
+            return
+        }
+
         cleanupAudioResources()
+
+        #if DEBUG
+            print(
+                "🎙️ [VoiceManager] speechLocale: \(speechLocale.identifier), dualMode: \(useDualLanguage)"
+            )
+            print(
+                "🎙️ [VoiceManager] Locale.current: \(Locale.current.identifier), preferred: \(Locale.preferredLanguages.first ?? "nil")"
+            )
+        #endif
 
         transcribedText = ""
         errorMessage = nil
@@ -140,60 +251,100 @@ final class VoiceManager {
         detectedColumnName = nil
         lastAudioDetectedTime = .now
 
-        let audioSession = AVAudioSession.sharedInstance()
-        do {
-            try audioSession.setCategory(.record, mode: .measurement, options: .duckOthers)
-            try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
-        } catch {
-            errorMessage = "Error audio: \(error.localizedDescription)"
-            return
-        }
+        #if !os(macOS)
+            let audioSession = AVAudioSession.sharedInstance()
+            do {
+                try audioSession.setCategory(.record, mode: .measurement, options: .duckOthers)
+                try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
+            } catch {
+                errorMessage = String(format: String(localized: "audio_error"), error.localizedDescription)
+                return
+            }
+        #endif
 
         let engine = AVAudioEngine()
         self.audioEngine = engine
 
-        let request = SFSpeechAudioBufferRecognitionRequest()
-        request.shouldReportPartialResults = true
-        request.addsPunctuation = true
+        if useDualLanguage {
+            // DUAL MODE: Use primary + secondary languages from system settings
+            guard let recPrimary = speechRecognizerPrimary,
+                let recSecondary = speechRecognizerSecondary,
+                recPrimary.isAvailable, recSecondary.isAvailable
+            else {
+                errorMessage = String(localized: "dual_recognition_unavailable")
+                return
+            }
 
-        // ✅ FIX: Use on-device recognition when available (iOS 17+)
-        if #available(iOS 17, *), speechRecognizer.supportsOnDeviceRecognition {
-            request.requiresOnDeviceRecognition = true
-        }
+            // Create SEPARATE requests for each language
+            let requestPrimary = SFSpeechAudioBufferRecognitionRequest()
+            requestPrimary.shouldReportPartialResults = true
 
-        self.recognitionRequest = request
+            let requestSecondary = SFSpeechAudioBufferRecognitionRequest()
+            requestSecondary.shouldReportPartialResults = true
 
-        recognitionTask = speechRecognizer.recognitionTask(with: request) {
-            [weak self] result, error in
-            Task { @MainActor in
-                guard let self, !self.isStopping else { return }
-
-                if let result {
-                    let text = result.bestTranscription.formattedString
-                    self.transcribedText = text
-                    self.processSmartRouting(text: text)
+            if #available(iOS 17, *) {
+                if recPrimary.supportsOnDeviceRecognition {
+                    requestPrimary.requiresOnDeviceRecognition = true
                 }
-
-                if let error {
-                    let nsError = error as NSError
-                    if nsError.domain == "kAFAssistantErrorDomain"
-                        && [216, 1110].contains(nsError.code)
-                    {
-                        return
-                    }
-                    self.errorMessage = error.localizedDescription
-                    self.stopRecording()
+                if recSecondary.supportsOnDeviceRecognition {
+                    requestSecondary.requiresOnDeviceRecognition = true
                 }
+            }
+
+            self.recognitionRequestPrimary = requestPrimary
+            self.recognitionRequestSecondary = requestSecondary
+
+            // Task Primary
+            recognitionTaskPrimary = recPrimary.recognitionTask(with: requestPrimary) {
+                [weak self] result, error in
+                self?.handleRecognitionResult(result, error: error)
+            }
+
+            // Task Secondary
+            recognitionTaskSecondary = recSecondary.recognitionTask(with: requestSecondary) {
+                [weak self] result, error in
+                self?.handleRecognitionResult(result, error: error)
+            }
+
+        } else {
+            // SINGLE MODE logic
+            guard let speechRecognizer, speechRecognizer.isAvailable else {
+                errorMessage = String(localized: "recognition_unavailable")
+                return
+            }
+
+            let request = SFSpeechAudioBufferRecognitionRequest()
+            request.shouldReportPartialResults = true
+            request.addsPunctuation = true
+
+            if #available(iOS 17, *), speechRecognizer.supportsOnDeviceRecognition {
+                request.requiresOnDeviceRecognition = true
+            }
+
+            self.recognitionRequest = request
+
+            recognitionTask = speechRecognizer.recognitionTask(with: request) {
+                [weak self] result, error in
+                self?.handleRecognitionResult(result, error: error)
             }
         }
 
         let inputNode = engine.inputNode
         let recordingFormat = inputNode.outputFormat(forBus: 0)
+        let isDual = useDualLanguage
 
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) {
             [weak self] buffer, _ in
-            self?.recognitionRequest?.append(buffer)
-            self?.measureAudioLevel(buffer: buffer)
+            guard let self else { return }
+
+            if isDual {
+                self.recognitionRequestPrimary?.append(buffer)
+                self.recognitionRequestSecondary?.append(buffer)
+            } else {
+                self.recognitionRequest?.append(buffer)
+            }
+
+            self.measureAudioLevel(buffer: buffer)
         }
 
         do {
@@ -202,8 +353,36 @@ final class VoiceManager {
             isRecording = true
             startSilenceTimer()
         } catch {
-            errorMessage = "Error inicio motor: \(error.localizedDescription)"
+            errorMessage = String(format: String(localized: "audio_engine_error"), error.localizedDescription)
             cleanupAudioResources()
+        }
+    }
+
+    private func handleRecognitionResult(_ result: SFSpeechRecognitionResult?, error: Error?) {
+        Task { @MainActor in
+            guard !self.isStopping else { return }
+
+            if let result {
+                let text = result.bestTranscription.formattedString
+                // Update text from whichever recognizer triggers first/most recently
+                self.transcribedText = text
+                self.processSmartRouting(text: text)
+            }
+
+            if let error {
+                // Ignore cancellation errors
+                let nsError = error as NSError
+                if nsError.domain == "kAFAssistantErrorDomain"
+                    && [216, 1110].contains(nsError.code)
+                {
+                    return
+                }
+
+                // In dual mode, one might fail while other works.
+                // However, for simplicity, we report and stop on error.
+                self.errorMessage = error.localizedDescription
+                self.stopRecording()
+            }
         }
     }
 
@@ -221,19 +400,35 @@ final class VoiceManager {
         isRecording = false
         audioLevel = 0
 
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        #if !os(macOS)
+            try? AVAudioSession.sharedInstance().setActive(
+                false, options: .notifyOthersOnDeactivation)
+        #endif
     }
 
     // MARK: - Smart Routing
 
+    func switchLocale() {
+        // Only active in Single Mode
+        guard !useDualLanguage else { return }
+
+        let currentId = speechLocale.identifier
+        if currentId.starts(with: "es") {
+            speechLocale = Locale(identifier: "en-US")
+        } else {
+            speechLocale = Locale(identifier: "es-ES")
+        }
+    }
+
     private func processSmartRouting(text: String) {
-        // ✅ FIX: Cancel previous task before starting new one
+        // Cancel previous task before starting new one
         smartRoutingTask?.cancel()
 
         smartRoutingTask = Task.detached(priority: .userInitiated) { [weak self] in
             guard !Task.isCancelled else { return }
 
-            let pattern = "(?i)\\s+(añadir a|mover a)\\s+(.+)$"
+            // Support both Spanish and English commands in regex
+            let pattern = "(?i)\\s+(añadir a|mover a|add to|move to)\\s+(.+)$"
 
             guard let regex = try? NSRegularExpression(pattern: pattern) else { return }
 
@@ -254,6 +449,8 @@ final class VoiceManager {
                 self?.transcribedText = cleanText.trimmingCharacters(in: .whitespacesAndNewlines)
                 self?.detectedColumnName = columnName.trimmingCharacters(
                     in: .whitespacesAndNewlines)
+                // If we detected a valid command, stop recording immediately (success!)
+                self?.stopRecording()
             }
         }
     }
@@ -304,9 +501,21 @@ final class VoiceManager {
             engine.inputNode.removeTap(onBus: 0)
         }
         audioEngine = nil
+
         recognitionRequest?.endAudio()
         recognitionRequest = nil
+
+        recognitionRequestPrimary?.endAudio()
+        recognitionRequestPrimary = nil
+        recognitionRequestSecondary?.endAudio()
+        recognitionRequestSecondary = nil
+
         recognitionTask?.cancel()
         recognitionTask = nil
+
+        recognitionTaskPrimary?.cancel()
+        recognitionTaskPrimary = nil
+        recognitionTaskSecondary?.cancel()
+        recognitionTaskSecondary = nil
     }
 }

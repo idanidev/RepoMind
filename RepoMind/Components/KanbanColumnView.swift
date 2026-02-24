@@ -1,55 +1,85 @@
 import SwiftData
 import SwiftUI
+import UIKit
 
 struct KanbanColumnView: View {
     @Bindable var column: KanbanColumn
     @Binding var draggedTask: TaskItem?
 
-    let onDropTask: (TaskItem) -> Void
+    let onDropTask: (TaskItem, Int?) -> Void  // Ahora incluye índice destino
     let onAdd: () -> Void
     let onEditTask: (TaskItem) -> Void
     let onDeleteTask: (TaskItem) -> Void
     let onDeleteColumn: () -> Void
     let onRenameColumn: () -> Void
+    let onMoveTask: (TaskItem) -> Void  // Nuevo: para mover con botón
 
     @State private var isTargeted = false
-    // ✅ FIX: Cached sorted tasks
-    @State private var sortedTasks: [TaskItem] = []
+    @State private var dropTargetIndex: Int? = nil
+
+    @Query private var tasks: [TaskItem]
+
+    init(
+        column: KanbanColumn,
+        draggedTask: Binding<TaskItem?>,
+        onDropTask: @escaping (TaskItem, Int?) -> Void,
+        onAdd: @escaping () -> Void,
+        onEditTask: @escaping (TaskItem) -> Void,
+        onDeleteTask: @escaping (TaskItem) -> Void,
+        onDeleteColumn: @escaping () -> Void,
+        onRenameColumn: @escaping () -> Void,
+        onMoveTask: @escaping (TaskItem) -> Void
+    ) {
+        self.column = column
+        self._draggedTask = draggedTask
+        self.onDropTask = onDropTask
+        self.onAdd = onAdd
+        self.onEditTask = onEditTask
+        self.onDeleteTask = onDeleteTask
+        self.onDeleteColumn = onDeleteColumn
+        self.onRenameColumn = onRenameColumn
+        self.onMoveTask = onMoveTask
+
+        let columnID = column.persistentModelID
+        let filter = #Predicate<TaskItem> { $0.column?.persistentModelID == columnID }
+        _tasks = Query(filter: filter, sort: \TaskItem.orderIndex)
+    }
+
+    private var columnColor: Color {
+        Color(hex: column.colorHex)
+    }
 
     var body: some View {
-        GlassEffectContainer(cornerRadius: 12) {
-            VStack(spacing: 0) {
-                columnHeader
+        VStack(spacing: 0) {
+            columnHeader
 
-                if !column.isCollapsed {
-                    columnContent
-                    addTaskButton
-                }
+            if !column.isCollapsed {
+                columnContent
+                addTaskButton
             }
         }
-        .shadow(color: .black.opacity(isTargeted ? 0.15 : 0.05), radius: 8, y: 4)
-        .task {
-            updateSortedTasks()
-        }
-        // ✅ FIX: Use tasks count as proxy (relationships don't trigger onChange reliably)
-        .onChange(of: column.tasks?.count) { _, _ in
-            updateSortedTasks()
-        }
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color(.systemBackground))
+                .shadow(
+                    color: .black.opacity(isTargeted ? 0.2 : 0.08), radius: isTargeted ? 12 : 8,
+                    y: 4)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(isTargeted ? columnColor.opacity(0.5) : .clear, lineWidth: 2)
+        )
     }
 
-    // ✅ FIX: Cache sorted tasks
-    private func updateSortedTasks() {
-        sortedTasks = (column.tasks ?? []).sorted { $0.createdAt > $1.createdAt }
-    }
-
-    // MARK: - Header
+    // MARK: - Header con color estilo Trello
 
     private var columnHeader: some View {
-        HStack {
+        HStack(spacing: 12) {
             collapseButton
 
             Text(column.name)
-                .font(.headline)
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(.white)
 
             Spacer()
 
@@ -59,10 +89,19 @@ struct KanbanColumnView: View {
 
             columnMenu
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .background(columnColor)
+        .clipShape(
+            .rect(
+                topLeadingRadius: 16,
+                bottomLeadingRadius: column.isCollapsed ? 16 : 0,
+                bottomTrailingRadius: column.isCollapsed ? 16 : 0,
+                topTrailingRadius: 16
+            )
+        )
         .dropDestination(for: String.self) { items, _ in
-            handleDrop(items: items)
+            handleDrop(items: items, atIndex: 0)
         } isTargeted: { targeted in
             withAnimation(.easeInOut(duration: 0.2)) {
                 isTargeted = targeted
@@ -76,26 +115,22 @@ struct KanbanColumnView: View {
                 column.isCollapsed.toggle()
             }
         } label: {
-            Label(
-                column.isCollapsed ? "Expandir columna" : "Colapsar columna",
-                systemImage: column.isCollapsed ? "chevron.right" : "chevron.down"
-            )
-            .labelStyle(.iconOnly)
-            .foregroundStyle(.secondary)
-            .frame(width: 24, height: 24)
+            Image(systemName: column.isCollapsed ? "chevron.right" : "chevron.down")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(.white.opacity(0.8))
+                .frame(width: 20, height: 20)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(column.isCollapsed ? "Expandir columna" : "Colapsar columna")
+        .accessibilityLabel(column.isCollapsed ? "expand_column" : "collapse_column")
     }
 
     private var taskCountBadge: some View {
-        Text("\(column.tasks?.count ?? 0)")
+        Text("\(tasks.count)")
             .font(.caption.weight(.bold))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(columnColor)
             .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(.quaternary, in: Capsule())
-            .accessibilityLabel("\(column.tasks?.count ?? 0) tareas")
+            .padding(.vertical, 4)
+            .background(.white.opacity(0.9), in: Capsule())
     }
 
     private var columnMenu: some View {
@@ -108,75 +143,83 @@ struct KanbanColumnView: View {
                 Label("delete_column", systemImage: "trash")
             }
         } label: {
-            Label("Opciones de columna", systemImage: "ellipsis")
-                .labelStyle(.iconOnly)
+            Image(systemName: "ellipsis")
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(.white.opacity(0.8))
                 .padding(8)
         }
-        .accessibilityLabel("Opciones de columna")
+        .accessibilityLabel("column_options_label")
     }
 
     // MARK: - Content
 
     private var columnContent: some View {
         ScrollView {
-            LazyVStack(spacing: 12) {
-                if sortedTasks.isEmpty {
+            LazyVStack(spacing: 10) {
+                if tasks.isEmpty {
                     emptyColumnState
                 } else {
                     tasksContent
                 }
             }
-            .padding()
+            .padding(12)
         }
         .frame(maxHeight: .infinity)
+        .background(Color(.secondarySystemBackground).opacity(0.5))
         .contentShape(Rectangle())
         .dropDestination(for: String.self) { items, _ in
-            handleDrop(items: items)
+            handleDrop(items: items, atIndex: nil)
         } isTargeted: { targeted in
             withAnimation(.easeInOut(duration: 0.2)) {
                 isTargeted = targeted
             }
         }
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(isTargeted ? Color.accentColor.opacity(0.05) : .clear)
-        )
     }
 
-    // ✅ FIX: Separate empty state view
     private var emptyColumnState: some View {
-        ContentUnavailableView {
-            Label("column_empty", systemImage: "tray")
-        } description: {
+        VStack(spacing: 8) {
+            Image(systemName: "tray")
+                .font(.title2)
+                .foregroundStyle(.tertiary)
             Text("drag_tasks_here")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
         }
-        .frame(height: 150)
-        .opacity(0.5)
+        .frame(height: 120)
+        .frame(maxWidth: .infinity)
     }
 
-    // ✅ FIX: Separate tasks content view
     private var tasksContent: some View {
-        ForEach(sortedTasks) { task in
-            TaskCard(task: task)
-                .contentShape(.dragPreview, RoundedRectangle(cornerRadius: 14))
-                .draggable(task.id.uuidString) {
-                    TaskCard(task: task)
-                        .frame(width: 280)
-                        .onAppear { draggedTask = task }
+        ForEach(Array(tasks.enumerated()), id: \.element.id) { index, task in
+            TaskCardEnhanced(
+                task: task,
+                columnColor: columnColor,
+                onTap: { onEditTask(task) },
+                onMove: { onMoveTask(task) },
+                onDelete: { onDeleteTask(task) }
+            )
+            .draggable(task.id.uuidString) {
+                TaskCardDragPreview(task: task, color: columnColor)
+                    .onAppear { draggedTask = task }
+            }
+            .dropDestination(for: String.self) { items, _ in
+                handleDrop(items: items, atIndex: index)
+            } isTargeted: { targeted in
+                if targeted {
+                    dropTargetIndex = index
+                } else if dropTargetIndex == index {
+                    dropTargetIndex = nil
                 }
-                .contextMenu {
-                    Button {
-                        onEditTask(task)
-                    } label: {
-                        Label("edit_task", systemImage: "pencil")
-                    }
-
-                    Button(role: .destructive) {
-                        onDeleteTask(task)
-                    } label: {
-                        Label("delete_task", systemImage: "trash")
-                    }
+            }
+            .overlay(alignment: .top) {
+                if dropTargetIndex == index {
+                    Capsule()
+                        .fill(columnColor)
+                        .frame(height: 3)
+                        .offset(y: -6)
+                        .transition(.opacity)
                 }
+            }
         }
     }
 
@@ -184,17 +227,25 @@ struct KanbanColumnView: View {
 
     private var addTaskButton: some View {
         Button(action: onAdd) {
-            Label("add_task", systemImage: "plus")
-                .frame(maxWidth: .infinity)
-                .padding()
-                .background(Color(.secondarySystemBackground))
+            HStack {
+                Image(systemName: "plus")
+                    .font(.subheadline.weight(.medium))
+                Text("add_task")
+                    .font(.subheadline.weight(.medium))
+            }
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .background(Color(.secondarySystemBackground).opacity(0.5))
         }
-        .accessibilityLabel("Añadir tarea a \(column.name)")
+        .buttonStyle(.plain)
+        .clipShape(.rect(bottomLeadingRadius: 16, bottomTrailingRadius: 16))
+        .accessibilityLabel("Add task to \(column.name)")
     }
 
     // MARK: - Drop Handling
 
-    private func handleDrop(items: [String]) -> Bool {
+    private func handleDrop(items: [String], atIndex index: Int?) -> Bool {
         guard let idString = items.first,
             let task = draggedTask,
             task.id.uuidString == idString
@@ -203,8 +254,228 @@ struct KanbanColumnView: View {
         }
 
         withAnimation(.snappy) {
-            onDropTask(task)
+            onDropTask(task, index)
         }
+        dropTargetIndex = nil
         return true
+    }
+}
+
+// MARK: - Enhanced Task Card con tap para editar
+
+struct TaskCardEnhanced: View {
+    let task: TaskItem
+    let columnColor: Color
+    let onTap: () -> Void
+    let onMove: () -> Void
+    let onDelete: () -> Void
+
+    @State private var thumbnailImage: UIImage?
+
+    var body: some View {
+        // Tap para editar directamente (sin context menu)
+        Button(action: onTap) {
+            VStack(alignment: .leading, spacing: 8) {
+                // Miniatura de imagen si existe
+                if let image = thumbnailImage {
+                    Image(uiImage: image)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(height: 80)
+                        .frame(maxWidth: .infinity)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .onDrag { NSItemProvider(object: fullTaskImage ?? image) }
+                        .contextMenu {
+                            if let img = fullTaskImage {
+                                ShareLink(
+                                    item: TransferableImage(image: img),
+                                    preview: SharePreview(task.content, image: Image(uiImage: img))
+                                ) {
+                                    Label("share_image", systemImage: "square.and.arrow.up")
+                                }
+                                Button {
+                                    if let data = img.pngData() {
+                                        UIPasteboard.general.setData(data, forPasteboardType: "public.png")
+                                    }
+                                    ToastManager.shared.show(
+                                        String(localized: "image_copied_toast"), style: .success)
+                                } label: {
+                                    Label("copy_image", systemImage: "doc.on.doc")
+                                }
+                            }
+                        }
+                }
+
+                HStack(spacing: 10) {
+                    // Indicador de color
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(columnColor)
+                        .frame(width: 4)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(task.content)
+                            .font(.subheadline)
+                            .foregroundStyle(.primary)
+                            .lineLimit(4)
+                            .multilineTextAlignment(.leading)
+
+                        // Indicadores de adjuntos
+                        HStack(spacing: 8) {
+                            if (task.imagePath != nil || task.imageData != nil)
+                                && thumbnailImage == nil
+                            {
+                                // Solo mostrar badge si no hay miniatura cargada
+                                HStack(spacing: 4) {
+                                    Image(systemName: "photo.fill")
+                                        .font(.caption)
+                                    Text("photo_badge")
+                                        .font(.caption2)
+                                }
+                                .foregroundStyle(.blue)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(.blue.opacity(0.1), in: Capsule())
+                            }
+
+                            if task.audioPath != nil {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "waveform")
+                                        .font(.caption)
+                                    Text("audio_badge")
+                                        .font(.caption2)
+                                }
+                                .foregroundStyle(.purple)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(.purple.opacity(0.1), in: Capsule())
+                            }
+                        }
+                    }
+
+                    Spacer(minLength: 0)
+
+                    // Botón para mover rápidamente a otra columna
+                    Button(action: onMove) {
+                        Image(systemName: "arrow.right.circle.fill")
+                            .font(.title3)
+                            .foregroundStyle(.secondary)
+                            .symbolRenderingMode(.hierarchical)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(12)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color(.systemBackground))
+                    .shadow(color: .black.opacity(0.06), radius: 4, y: 2)
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(task.content)
+        .accessibilityHint("task_edit_hint")
+        .task {
+            await loadThumbnail()
+        }
+        .onChange(of: task.imageData) { _, _ in
+            thumbnailImage = nil
+            Task { await loadThumbnail() }
+        }
+    }
+
+    private var fullTaskImage: UIImage? {
+        if let data = task.imageData, let img = UIImage(data: data) { return img }
+        if let path = task.imagePath,
+            let data = FileManager.default.contents(atPath: path),
+            let img = UIImage(data: data) { return img }
+        return nil
+    }
+
+    private func loadThumbnail() async {
+        let data = task.imageData
+        let path = task.imagePath
+
+        let result = await Task.detached(priority: .utility) { () -> UIImage? in
+            if let d = data, let img = UIImage(data: d) {
+                return Self.makeThumbnail(img)
+            } else if let p = path,
+                let d = FileManager.default.contents(atPath: p),
+                let img = UIImage(data: d)
+            {
+                return Self.makeThumbnail(img)
+            }
+            return nil
+        }.value
+
+        thumbnailImage = result
+    }
+
+    private static func makeThumbnail(_ image: UIImage) -> UIImage {
+        let size = CGSize(width: 400, height: 200)
+        return UIGraphicsImageRenderer(size: size).image { _ in
+            image.draw(in: CGRect(origin: .zero, size: size))
+        }
+    }
+}
+
+// MARK: - Drag Preview (mejorado visualmente)
+
+struct TaskCardDragPreview: View {
+    let task: TaskItem
+    let color: Color
+
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    private var previewWidth: CGFloat {
+        horizontalSizeClass == .regular ? 280 : 300
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            RoundedRectangle(cornerRadius: 3)
+                .fill(color)
+                .frame(width: 6)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(task.content)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+
+                HStack(spacing: 8) {
+                    if task.imagePath != nil {
+                        Image(systemName: "photo.fill")
+                            .font(.caption2)
+                            .foregroundStyle(.blue)
+                    }
+                    if task.audioPath != nil {
+                        Image(systemName: "waveform")
+                            .font(.caption2)
+                            .foregroundStyle(.purple)
+                    }
+                }
+            }
+
+            Spacer(minLength: 0)
+
+            Image(systemName: "line.3.horizontal")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(14)
+        .frame(maxWidth: previewWidth)
+        .background(
+            RoundedRectangle(cornerRadius: 14)
+                .fill(Color(.systemBackground))
+                .shadow(color: color.opacity(0.3), radius: 16, y: 8)
+                .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(color, lineWidth: 2)
+        )
+        .rotationEffect(.degrees(-2))
+        .scaleEffect(1.02)
     }
 }

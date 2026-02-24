@@ -3,7 +3,7 @@ import SwiftData
 
 // MARK: - GitHub API DTOs
 
-struct GitHubUser: Decodable, Sendable {
+nonisolated struct GitHubUser: Decodable, Sendable {
     let login: String
     let avatarUrl: String
     let name: String?
@@ -17,7 +17,7 @@ struct GitHubUser: Decodable, Sendable {
     }
 }
 
-struct GitHubRepo: Decodable, Sendable, Identifiable {
+nonisolated struct GitHubRepo: Decodable, Sendable, Identifiable {
     let id: Int
     let name: String
     let description: String?
@@ -51,15 +51,15 @@ enum GitHubError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidToken:
-            String(localized: "El token de GitHub es inválido o ha expirado.")
+            String(localized: "github_token_invalid")
         case .networkError(let error):
-            String(localized: "Error de red: \(error.localizedDescription)")
+            String(format: String(localized: "github_network_error"), error.localizedDescription)
         case .invalidResponse(let code):
-            String(localized: "El servidor respondió con código \(code).")
+            String(format: String(localized: "github_invalid_response"), code)
         case .decodingError(let error):
-            String(localized: "Error al procesar la respuesta: \(error.localizedDescription)")
+            String(format: String(localized: "github_decoding_error"), error.localizedDescription)
         case .noToken:
-            String(localized: "No se encontró token de GitHub. Inicia sesión.")
+            String(localized: "github_no_token")
         }
     }
 }
@@ -91,14 +91,15 @@ actor GitHubService {
     // MARK: - Validate Token
 
     func validateToken(_ token: String) async throws -> GitHubUser {
+        #if DEBUG
         if token == "mock-pro" {
             return GitHubUser(
-                login: "ProDev", avatarUrl: "person.fill.checkmark", name: "Pro Developer",
+                login: "ProDev", avatarUrl: "", name: "Pro Developer",
                 bio: "Mock Pro Account")
         }
         if token == "mock-free" {
             return GitHubUser(
-                login: "FreeDev", avatarUrl: "person.fill", name: "Free Developer",
+                login: "FreeDev", avatarUrl: "", name: "Free Developer",
                 bio: "Mock Free Account")
         }
         if token == "mock-pro-personal" {
@@ -106,6 +107,7 @@ actor GitHubService {
                 login: "ProPersonal", avatarUrl: "figure.gaming", name: "Pro Personal",
                 bio: "Mock Side Projects")
         }
+        #endif
 
         let request = try buildRequest(path: "/user", token: token)
         let (data, response) = try await performRequestWithRetry(request)
@@ -127,11 +129,13 @@ actor GitHubService {
     // MARK: - Fetch Repos
 
     func fetchRepos(token: String, page: Int = 1, perPage: Int = 50) async throws -> [GitHubRepo] {
+        #if DEBUG
         if token == "mock-pro" { return generateMockRepos(count: 10) }
         if token == "mock-free" { return generateMockRepos(count: 4) }
         if token == "mock-pro-personal" {
             return generateMockRepos(count: 5, prefix: "Side Project")
         }
+        #endif
 
         let request = try buildRequest(
             path: "/user/repos?sort=updated&per_page=\(perPage)&page=\(page)&type=all",
@@ -166,7 +170,9 @@ actor GitHubService {
     // MARK: - Fetch Starred
 
     func fetchStarredRepoIDs(token: String) async throws -> Set<Int> {
+        #if DEBUG
         if token == "mock-pro" || token == "mock-free" { return [101, 103] }
+        #endif
 
         var starredIDs: Set<Int> = []
         var page = 1
@@ -192,6 +198,9 @@ actor GitHubService {
 
     // MARK: - Sync Repos
 
+    /// Syncs ALL remote repos into the local database (no limit at data layer).
+    /// Free-tier visibility limits are enforced at the UI layer to guarantee
+    /// consistent data regardless of API ordering or re-syncs.
     @MainActor
     func syncRepos(account: GitHubAccount, token: String, into context: ModelContext) async throws {
         async let remoteReposTask = fetchAllRepos(token: token)
@@ -208,15 +217,21 @@ actor GitHubService {
 
         for remote in remoteRepos {
             let remoteID = remote.id
-            var fetchDescriptor = FetchDescriptor<ProjectRepo>(
+            let fetchDescriptor = FetchDescriptor<ProjectRepo>(
                 predicate: #Predicate { $0.repoID == remoteID })
-            fetchDescriptor.fetchLimit = 1
 
             let existing = try context.fetch(fetchDescriptor)
             let parsedDate =
                 formatter.date(from: remote.updatedAt) ?? fallbackFormatter.date(
                     from: remote.updatedAt) ?? .now
             let isStarred = starredIDs.contains(remote.id)
+
+            // Deduplicación: CloudKit puede crear duplicados temporales al mergear
+            if existing.count > 1 {
+                for duplicate in existing.dropFirst() {
+                    context.delete(duplicate)
+                }
+            }
 
             if let repo = existing.first {
                 repo.name = remote.name
@@ -227,7 +242,9 @@ actor GitHubService {
                 repo.stargazersCount = remote.stargazersCount
                 repo.account = account
                 if isStarred { repo.isFavorite = true }
+                // No buscamos logo aquí para repos existentes (ya lo tienen o el usuario lo configuró)
             } else {
+                // Crear repo nuevo
                 let repo = ProjectRepo(
                     repoID: remote.id,
                     name: remote.name,
@@ -237,13 +254,220 @@ actor GitHubService {
                     isFavorite: isStarred,
                     language: remote.language,
                     stargazersCount: remote.stargazersCount,
+                    logoURL: nil,
                     account: account
                 )
                 context.insert(repo)
+
+                // Buscar logo en background para repos nuevos (solo iOS apps)
+                if remote.language == "Swift" || remote.language == "Objective-C" {
+                    // Extraer owner del htmlUrl
+                    let ownerName: String
+                    if let url = URL(string: remote.htmlUrl), url.pathComponents.count >= 2 {
+                        ownerName = url.pathComponents[1]
+                    } else {
+                        ownerName = account.username
+                    }
+
+                    Task.detached {
+                        if let logoURL = await self.fetchRepoLogoURL(
+                            owner: ownerName, repo: remote.name, token: token)
+                        {
+                            await MainActor.run {
+                                repo.logoURL = logoURL
+                                #if DEBUG
+                                print("🖼️ Logo encontrado para \(remote.name): \(logoURL)")
+                                #endif
+                            }
+                        }
+                    }
+                }
             }
         }
 
         try context.save()
+    }
+
+    // MARK: - Fetch Repo Logo
+
+    /// Intenta encontrar un logo/icono del repositorio usando la API de GitHub
+    func fetchRepoLogoURL(owner: String, repo: String, token: String) async -> String? {
+        // Primero buscar AppIcon.appiconset en rutas comunes
+        let assetsPaths = [
+            // Rutas típicas de proyectos iOS
+            "\(repo)/Assets.xcassets/AppIcon.appiconset",
+            "Assets.xcassets/AppIcon.appiconset",
+            "App/Assets.xcassets/AppIcon.appiconset",
+            "Sources/Assets.xcassets/AppIcon.appiconset",
+            "iOS/Assets.xcassets/AppIcon.appiconset",
+            // Con nombre del repo como carpeta
+            "\(repo)/\(repo)/Assets.xcassets/AppIcon.appiconset",
+        ]
+
+        for assetsPath in assetsPaths {
+            if let logoURL = await findPNGInPath(
+                owner: owner, repo: repo, path: assetsPath, token: token)
+            {
+                return logoURL
+            }
+        }
+
+        // Buscar recursivamente en el repositorio para encontrar Assets.xcassets
+        if let logoURL = await searchForAppIconRecursively(
+            owner: owner, repo: repo, token: token, path: "", depth: 0)
+        {
+            return logoURL
+        }
+
+        // Fallback: buscar archivos comunes de logo
+        let fallbackPaths = [
+            "logo.png", "icon.png", "Logo.png", "Icon.png",
+            "assets/logo.png", "assets/icon.png",
+            "docs/logo.png", ".github/logo.png",
+        ]
+
+        for branch in ["main", "master"] {
+            for path in fallbackPaths {
+                let rawURL = "https://raw.githubusercontent.com/\(owner)/\(repo)/\(branch)/\(path)"
+                if await checkURLExists(rawURL, token: token) {
+                    return rawURL
+                }
+            }
+        }
+
+        return nil
+    }
+
+    /// Busca recursivamente en el repositorio hasta encontrar Assets.xcassets/AppIcon.appiconset
+    private func searchForAppIconRecursively(
+        owner: String, repo: String, token: String, path: String, depth: Int
+    ) async -> String? {
+        // Limitar profundidad para no hacer demasiadas llamadas
+        guard depth < 3 else { return nil }
+
+        let apiURL =
+            path.isEmpty
+            ? "https://api.github.com/repos/\(owner)/\(repo)/contents"
+            : "https://api.github.com/repos/\(owner)/\(repo)/contents/\(path)"
+
+        guard let url = URL(string: apiURL) else { return nil }
+
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+
+        do {
+            let (data, response) = try await session.data(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                return nil
+            }
+
+            struct GitHubItem: Decodable {
+                let name: String
+                let type: String
+                let path: String
+            }
+
+            let items = try decoder.decode([GitHubItem].self, from: data)
+
+            // Buscar Assets.xcassets
+            for item in items where item.type == "dir" {
+                if item.name == "Assets.xcassets" {
+                    // Encontramos Assets.xcassets, buscar AppIcon.appiconset dentro
+                    let appIconPath = "\(item.path)/AppIcon.appiconset"
+                    if let logoURL = await findPNGInPath(
+                        owner: owner, repo: repo, path: appIconPath, token: token)
+                    {
+                        return logoURL
+                    }
+                }
+
+                // Carpetas donde podría estar Assets.xcassets (limitar búsqueda)
+                let searchableFolders = ["Sources", "App", "iOS", repo, "src", "Source"]
+                if searchableFolders.contains(item.name) {
+                    if let logoURL = await searchForAppIconRecursively(
+                        owner: owner, repo: repo, token: token, path: item.path, depth: depth + 1
+                    ) {
+                        return logoURL
+                    }
+                }
+            }
+        } catch {
+            return nil
+        }
+
+        return nil
+    }
+
+    /// Busca el primer archivo .png en un directorio del repo
+    private func findPNGInPath(owner: String, repo: String, path: String, token: String) async
+        -> String?
+    {
+        let apiURL = "https://api.github.com/repos/\(owner)/\(repo)/contents/\(path)"
+
+        guard let url = URL(string: apiURL) else { return nil }
+
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+
+        do {
+            let (data, response) = try await session.data(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                return nil
+            }
+
+            // Decodificar la lista de archivos
+            struct GitHubFile: Decodable {
+                let name: String
+                let download_url: String?
+            }
+
+            let files = try decoder.decode([GitHubFile].self, from: data)
+
+            // Buscar el primer PNG que sea un icono grande (preferir @3x o @2x)
+            let pngFiles = files.filter { $0.name.hasSuffix(".png") }
+
+            // Priorizar iconos grandes
+            if let icon3x = pngFiles.first(where: {
+                $0.name.contains("@3x") || $0.name.contains("180") || $0.name.contains("1024")
+            }) {
+                return icon3x.download_url
+            }
+            if let icon2x = pngFiles.first(where: {
+                $0.name.contains("@2x") || $0.name.contains("120") || $0.name.contains("60")
+            }) {
+                return icon2x.download_url
+            }
+            // Cualquier PNG
+            if let anyPng = pngFiles.first {
+                return anyPng.download_url
+            }
+        } catch {
+            return nil
+        }
+
+        return nil
+    }
+
+    /// Verifica si una URL existe
+    private func checkURLExists(_ urlString: String, token: String) async -> Bool {
+        guard let url = URL(string: urlString) else { return false }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "HEAD"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        do {
+            let (_, response) = try await session.data(for: request)
+            if let http = response as? HTTPURLResponse {
+                return http.statusCode == 200
+            }
+        } catch {
+            return false
+        }
+
+        return false
     }
 
     // MARK: - Helpers
@@ -282,6 +506,7 @@ actor GitHubService {
         throw GitHubError.networkError(lastError ?? URLError(.unknown))
     }
 
+    #if DEBUG
     private func generateMockRepos(count: Int, prefix: String = "Project Alpha") -> [GitHubRepo] {
         let languages = ["Swift", "Python", "JavaScript", "Go", "Rust"]
         let baseID = prefix == "Project Alpha" ? 100 : (prefix == "Side Project" ? 300 : 200)
@@ -298,6 +523,66 @@ actor GitHubService {
                 language: languages[i % languages.count],
                 stargazersCount: i * 42
             )
+        }
+    }
+    #endif
+
+    // MARK: - Star/Unstar Repos (Sync with GitHub)
+
+    /// Star a repository on GitHub
+    func starRepo(owner: String, repo: String, token: String) async throws {
+        #if DEBUG
+        guard !token.hasPrefix("mock-") else { return }
+        #endif
+
+        let urlString = "\(baseURL)/user/starred/\(owner)/\(repo)"
+        guard let url = URL(string: urlString) else {
+            throw GitHubError.networkError(URLError(.badURL))
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "PUT"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        request.setValue("0", forHTTPHeaderField: "Content-Length")
+
+        let (_, response) = try await session.data(for: request)
+
+        guard let http = response as? HTTPURLResponse else {
+            throw GitHubError.invalidResponse(0)
+        }
+
+        // 204 = starred successfully, 304 = already starred
+        guard http.statusCode == 204 || http.statusCode == 304 else {
+            throw GitHubError.invalidResponse(http.statusCode)
+        }
+    }
+
+    /// Unstar a repository on GitHub
+    func unstarRepo(owner: String, repo: String, token: String) async throws {
+        #if DEBUG
+        guard !token.hasPrefix("mock-") else { return }
+        #endif
+
+        let urlString = "\(baseURL)/user/starred/\(owner)/\(repo)"
+        guard let url = URL(string: urlString) else {
+            throw GitHubError.networkError(URLError(.badURL))
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+
+        let (_, response) = try await session.data(for: request)
+
+        guard let http = response as? HTTPURLResponse else {
+            throw GitHubError.invalidResponse(0)
+        }
+
+        // 204 = unstarred successfully, 304 = already not starred
+        guard http.statusCode == 204 || http.statusCode == 304 || http.statusCode == 404 else {
+            throw GitHubError.invalidResponse(http.statusCode)
         }
     }
 }

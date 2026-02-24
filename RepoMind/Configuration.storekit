@@ -1,0 +1,64 @@
+{
+  "appPolicies" : {
+    "eula" : "",
+    "policies" : [
+      {
+        "locale" : "en_US",
+        "policyText" : "",
+        "policyURL" : "https://idanidev.github.io/repomind/terms"
+      },
+      {
+        "locale" : "es_ES",
+        "policyText" : "",
+        "policyURL" : "https://idanidev.github.io/repomind/terms"
+      }
+    ]
+  },
+  "identifier" : "9D56D7EA",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+    {
+      "displayPrice" : "9.99",
+      "familyShareable" : false,
+      "internalID" : "A1B2C3D4",
+      "localizations" : [
+        {
+          "description" : "Cuentas GitHub, repositorios y columnas Kanban ilimitadas. Pago único.",
+          "displayName" : "RepoMind Pro",
+          "locale" : "es_ES"
+        },
+        {
+          "description" : "Unlimited GitHub accounts, repositories, and Kanban columns. One time payment.",
+          "displayName" : "RepoMind Pro",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.idanidev.repomind.pro",
+      "referenceName" : "Pro Lifetime",
+      "type" : "NonConsumable"
+    }
+  ],
+  "settings" : {
+    "_askToBuyEnabled" : false,
+    "_billingGracePeriodEnabled" : false,
+    "_billingIssuesEnabled" : false,
+    "_disableDialogs" : false,
+    "_failTransactionsEnabled" : false,
+    "_locale" : "en_US",
+    "_renewalBillingIssuesEnabled" : false,
+    "_storefront" : "USA",
+    "_storeKitErrors" : [
+
+    ],
+    "_timeRate" : 0
+  },
+  "subscriptionGroups" : [
+
+  ],
+  "version" : {
+    "major" : 4,
+    "minor" : 0
+  }
+}

@@ -5,33 +5,42 @@ struct VoiceFAB: View {
     @Bindable var voiceManager: VoiceManager
     let onComplete: () -> Void
 
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
     @State private var pulseScale: CGFloat = 1.0
     @State private var buttonScale: CGFloat = 1.0
 
     private static let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
 
+    private var fabSize: CGFloat {
+        #if targetEnvironment(macCatalyst)
+            return 48
+        #else
+            return horizontalSizeClass == .regular ? 64 : 56
+        #endif
+    }
+
+    private var pulseSize: CGFloat { fabSize + 8 }
+
     private var fabLabel: some View {
         ZStack {
-            // Pulse ring
             if voiceManager.isRecording {
                 Circle()
                     .fill(Color.red.opacity(0.2))
                     .scaleEffect(pulseScale)
-                    .frame(width: 64, height: 64)
+                    .frame(width: pulseSize, height: pulseSize)
             }
 
-            // Audio level ring
             if voiceManager.isRecording {
                 Circle()
                     .stroke(Color.red.opacity(0.5), lineWidth: 3)
                     .scaleEffect(1.0 + CGFloat(voiceManager.audioLevel) * 0.4)
-                    .frame(width: 56, height: 56)
+                    .frame(width: fabSize, height: fabSize)
             }
 
-            // Main button
             Circle()
                 .fill(voiceManager.isRecording ? Color.red : Color.accentColor)
-                .frame(width: 56, height: 56)
+                .frame(width: fabSize, height: fabSize)
                 .shadow(
                     color: (voiceManager.isRecording ? Color.red : Color.accentColor)
                         .opacity(0.35), radius: 10, y: 4)
@@ -45,11 +54,11 @@ struct VoiceFAB: View {
     }
 
     private func openSettings() {
-        #if os(iOS)
-            if let url = URL(string: UIApplication.openSettingsURLString) {
-                UIApplication.shared.open(url)
-            }
-        #endif
+        // UIApplication.openSettingsURLString works on both iOS and Mac Catalyst
+        // (Mac Catalyst runs on UIKit, so #if os(iOS) incorrectly excluded it)
+        if let url = URL(string: UIApplication.openSettingsURLString) {
+            UIApplication.shared.open(url)
+        }
     }
 
     private var isAlertPresented: Binding<Bool> {
@@ -70,7 +79,7 @@ struct VoiceFAB: View {
                     .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10))
                     .frame(maxWidth: 200)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
-                    .accessibilityLabel("Transcripción en vivo: \(voiceManager.transcribedText)")
+                    .accessibilityLabel("Live transcript: \(voiceManager.transcribedText)")
             }
 
             // FAB button
@@ -89,7 +98,6 @@ struct VoiceFAB: View {
                 Task {
                     if voiceManager.isRecording {
                         voiceManager.stopRecording()
-                        onComplete()
                     } else {
                         await voiceManager.toggleRecording()
                     }
@@ -100,34 +108,54 @@ struct VoiceFAB: View {
             .buttonStyle(.plain)
             .accessibilityLabel(
                 voiceManager.isRecording
-                    ? "Detener grabación"
-                    : "Iniciar grabación de voz"
+                    ? "voice_stop_recording"
+                    : "voice_start_recording"
             )
             .accessibilityHint(
-                "Doble toque para \(voiceManager.isRecording ? "detener" : "iniciar") la grabación"
+                voiceManager.isRecording ? "voice_stop_hint" : "voice_start_hint"
             )
-            .accessibilityValue(voiceManager.isRecording ? "Grabando" : "Detenido")
+            .accessibilityValue(
+                voiceManager.isRecording ? "voice_recording_value" : "voice_stopped_value"
+            )
             .accessibilityAddTraits(.startsMediaSession)
+            // Only show language toggle if Dual Mode is OFF
+            .contextMenu {
+                if !voiceManager.useDualLanguage {
+                    Button {
+                        voiceManager.switchLocale()
+                    } label: {
+                        Label(
+                            voiceManager.speechLocale.identifier.starts(with: "es")
+                                ? "voice_switch_to_english" : "voice_switch_to_spanish",
+                            systemImage: "globe"
+                        )
+                    }
+                }
+            }
         }
         .animation(.spring(duration: 0.4), value: voiceManager.isRecording)
         .animation(.spring(duration: 0.3), value: voiceManager.transcribedText)
-        .onChange(of: voiceManager.isRecording) { _, recording in
+        .onChange(of: voiceManager.isRecording) { oldValue, recording in
             if recording {
                 withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
                     pulseScale = 1.4
                 }
             } else {
                 pulseScale = 1.0
+                // Call onComplete when recording stops (manual, silence, or smart routing)
+                if oldValue && !voiceManager.transcribedText.isEmpty {
+                    onComplete()
+                }
             }
         }
         .alert(
-            "Permiso Requerido",
+            "permission_required_title",
             isPresented: isAlertPresented
         ) {
-            Button("Abrir Ajustes") {
+            Button("open_settings_button") {
                 openSettings()
             }
-            Button("Cancelar", role: .cancel) {}
+            Button("cancel", role: .cancel) {}
         } message: {
             Text(voiceManager.errorMessage ?? "")
         }

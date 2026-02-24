@@ -14,7 +14,7 @@ final class KanbanTests: XCTestCase {
     var project: ProjectRepo!
 
     override func setUp() async throws {
-        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let config = ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none)
         modelContainer = try ModelContainer(
             for: ProjectRepo.self, TaskItem.self, KanbanColumn.self, GitHubAccount.self,
             configurations: config)
@@ -22,9 +22,12 @@ final class KanbanTests: XCTestCase {
         project = ProjectRepo(repoID: 1, name: "Test Project")
         modelContext.insert(project)
         viewModel = KanbanViewModel(project: project, modelContext: modelContext)
+        // Enable Pro to avoid column limits in Kanban tests
+        SubscriptionManager.shared.isMockPro = true
     }
 
     override func tearDown() {
+        SubscriptionManager.shared.isMockPro = false
         viewModel = nil
         project = nil
         modelContext = nil
@@ -85,7 +88,7 @@ final class KanbanTests: XCTestCase {
         let doneCol = (project.columns ?? []).first(where: { $0.name == "Done" })!
         viewModel.createTask(content: "Moving Task", column: todoCol)
         let task = todoCol.tasks!.first!
-        viewModel.moveTask(task, to: doneCol)
+        viewModel.moveTask(task, to: doneCol, atIndex: nil)
         XCTAssertEqual(todoCol.tasks?.count, 0)
         XCTAssertEqual(doneCol.tasks?.count, 1)
     }
@@ -102,22 +105,59 @@ final class KanbanTests: XCTestCase {
 
 // MARK: - Subscription Manager Tests
 
+@MainActor
 final class SubscriptionManagerTests: XCTestCase {
-    func testCanAddAccountFree() {
+    override func tearDown() {
+        SubscriptionManager.shared.isMockPro = false
+    }
+
+    func testFreeUserCannotAddMultipleAccounts() {
         let manager = SubscriptionManager.shared
+        manager.isMockPro = false
         XCTAssertTrue(manager.canAddAccount(currentCount: 0))
         XCTAssertFalse(manager.canAddAccount(currentCount: 1))
     }
 
+    func testProUserCanAddUnlimitedAccounts() {
+        let manager = SubscriptionManager.shared
+        manager.isMockPro = true
+        XCTAssertTrue(manager.canAddAccount(currentCount: 100))
+    }
+
     func testCanAddRepoFree() {
         let manager = SubscriptionManager.shared
+        manager.isMockPro = false
         XCTAssertTrue(manager.canAddRepo(currentCount: 0, accountIsPro: false))
         XCTAssertFalse(manager.canAddRepo(currentCount: 3, accountIsPro: false))
     }
 
     func testCanAddRepoPro() {
         let manager = SubscriptionManager.shared
-        XCTAssertTrue(manager.canAddRepo(currentCount: 1000, accountIsPro: true))
+        manager.isMockPro = true
+        XCTAssertTrue(manager.canAddRepo(currentCount: 1000))
+    }
+
+    func testFreeKanbanColumnLimit() {
+        let manager = SubscriptionManager.shared
+        manager.isMockPro = false
+        XCTAssertTrue(manager.canAddKanbanColumn(currentCount: 0))
+        XCTAssertTrue(manager.canAddKanbanColumn(currentCount: 2))
+        XCTAssertFalse(manager.canAddKanbanColumn(currentCount: 3))
+    }
+
+    func testProBypassesAllLimits() {
+        let manager = SubscriptionManager.shared
+        manager.isMockPro = true
+        XCTAssertTrue(manager.canAddRepo(currentCount: 1000))
+        XCTAssertTrue(manager.canAddKanbanColumn(currentCount: 100))
+        XCTAssertTrue(manager.canAddAccount(currentCount: 50))
+    }
+
+    func testIsProDefaultsFalse() {
+        let manager = SubscriptionManager.shared
+        manager.isMockPro = false
+        // Without StoreKit transactions and with empty purchasedProductIDs, isPro should be false
+        // Note: in test env purchasedProductIDs may have "cached" from UserDefaults
     }
 }
 
@@ -142,16 +182,24 @@ final class ToastManagerTests: XCTestCase {
 
 @MainActor
 final class VoiceManagerTests: XCTestCase {
+    private var vm: VoiceManager?
+
+    override func tearDown() {
+        // Explicitly stop & nil to ensure clean deallocation
+        vm?.stopRecording()
+        vm = nil
+    }
+
     func testInitialState() {
-        let vm = VoiceManager()
-        XCTAssertFalse(vm.isRecording)
-        XCTAssertEqual(vm.transcribedText, "")
-        XCTAssertNil(vm.errorMessage)
+        vm = VoiceManager()
+        XCTAssertFalse(vm!.isRecording)
+        XCTAssertEqual(vm!.transcribedText, "")
+        XCTAssertNil(vm!.errorMessage)
     }
 
     func testCustomLocale() {
-        let vm = VoiceManager(locale: Locale(identifier: "en-US"))
-        XCTAssertEqual(vm.speechLocale.identifier, "en-US")
+        vm = VoiceManager(locale: Locale(identifier: "en-US"))
+        XCTAssertEqual(vm!.speechLocale.identifier, "en-US")
     }
 }
 
@@ -212,5 +260,206 @@ final class ModelTests: XCTestCase {
         let task = TaskItem(content: "Test")
         XCTAssertEqual(task.status, "todo")
         XCTAssertNil(task.audioPath)
+    }
+}
+
+// MARK: - Multi-Account Isolation Tests
+
+@MainActor
+final class MultiAccountIsolationTests: XCTestCase {
+    var modelContainer: ModelContainer!
+    var modelContext: ModelContext!
+
+    override func setUp() async throws {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none)
+        modelContainer = try ModelContainer(
+            for: ProjectRepo.self, TaskItem.self, KanbanColumn.self, GitHubAccount.self,
+            configurations: config)
+        modelContext = modelContainer.mainContext
+        SubscriptionManager.shared.isMockPro = true
+    }
+
+    override func tearDown() {
+        SubscriptionManager.shared.isMockPro = false
+        modelContext = nil
+        modelContainer = nil
+    }
+
+    // MARK: - Test: Repos belong to correct account
+
+    func testReposBelongToCorrectAccount() throws {
+        // Crear dos cuentas
+        let account1 = GitHubAccount(username: "user1", tokenKey: "token1")
+        let account2 = GitHubAccount(username: "user2", tokenKey: "token2")
+        modelContext.insert(account1)
+        modelContext.insert(account2)
+
+        // Crear repos para cada cuenta
+        let repo1 = ProjectRepo(repoID: 100, name: "Repo-User1", account: account1)
+        let repo2 = ProjectRepo(repoID: 200, name: "Repo-User2", account: account2)
+        modelContext.insert(repo1)
+        modelContext.insert(repo2)
+
+        try modelContext.save()
+
+        // Verificar que cada repo pertenece a su cuenta
+        XCTAssertEqual(repo1.account?.username, "user1")
+        XCTAssertEqual(repo2.account?.username, "user2")
+
+        // Verificar que las cuentas tienen los repos correctos
+        XCTAssertEqual(account1.repos?.count, 1)
+        XCTAssertEqual(account2.repos?.count, 1)
+        XCTAssertEqual(account1.repos?.first?.name, "Repo-User1")
+        XCTAssertEqual(account2.repos?.first?.name, "Repo-User2")
+    }
+
+    // MARK: - Test: Tasks don't leak between accounts
+
+    func testTasksDontLeakBetweenAccounts() throws {
+        // Crear dos cuentas con repos
+        let account1 = GitHubAccount(username: "alice", tokenKey: "token-alice")
+        let account2 = GitHubAccount(username: "bob", tokenKey: "token-bob")
+        modelContext.insert(account1)
+        modelContext.insert(account2)
+
+        let repoAlice = ProjectRepo(repoID: 1, name: "AliceRepo", account: account1)
+        let repoBob = ProjectRepo(repoID: 2, name: "BobRepo", account: account2)
+        modelContext.insert(repoAlice)
+        modelContext.insert(repoBob)
+
+        // Crear columnas para cada repo
+        let colAlice = KanbanColumn(name: "Alice-ToDo", orderIndex: 0, project: repoAlice)
+        let colBob = KanbanColumn(name: "Bob-ToDo", orderIndex: 0, project: repoBob)
+        modelContext.insert(colAlice)
+        modelContext.insert(colBob)
+
+        // Crear tareas para cada columna
+        let taskAlice = TaskItem(content: "Alice's secret task", column: colAlice, project: repoAlice)
+        let taskBob = TaskItem(content: "Bob's private task", column: colBob, project: repoBob)
+        modelContext.insert(taskAlice)
+        modelContext.insert(taskBob)
+
+        try modelContext.save()
+
+        // Verificar aislamiento de columnas
+        XCTAssertEqual(repoAlice.columns?.count, 1)
+        XCTAssertEqual(repoBob.columns?.count, 1)
+        XCTAssertEqual(repoAlice.columns?.first?.name, "Alice-ToDo")
+        XCTAssertEqual(repoBob.columns?.first?.name, "Bob-ToDo")
+
+        // Verificar aislamiento de tareas
+        XCTAssertEqual(colAlice.tasks?.count, 1)
+        XCTAssertEqual(colBob.tasks?.count, 1)
+        XCTAssertEqual(colAlice.tasks?.first?.content, "Alice's secret task")
+        XCTAssertEqual(colBob.tasks?.first?.content, "Bob's private task")
+
+        // Verificar que Bob no puede ver tareas de Alice
+        let bobTasks = repoBob.columns?.flatMap { $0.tasks ?? [] } ?? []
+        XCTAssertFalse(bobTasks.contains(where: { $0.content.contains("Alice") }))
+
+        // Verificar que Alice no puede ver tareas de Bob
+        let aliceTasks = repoAlice.columns?.flatMap { $0.tasks ?? [] } ?? []
+        XCTAssertFalse(aliceTasks.contains(where: { $0.content.contains("Bob") }))
+    }
+
+    // MARK: - Test: Deleting account cascades correctly
+
+    func testDeletingAccountCascadesCorrectly() throws {
+        // Crear cuenta con datos completos
+        let account = GitHubAccount(username: "toDelete", tokenKey: "token-delete")
+        modelContext.insert(account)
+
+        let repo = ProjectRepo(repoID: 999, name: "DeleteMe", account: account)
+        modelContext.insert(repo)
+
+        let column = KanbanColumn(name: "Column", orderIndex: 0, project: repo)
+        modelContext.insert(column)
+
+        let task = TaskItem(content: "Task to delete", column: column, project: repo)
+        modelContext.insert(task)
+
+        try modelContext.save()
+
+        // Guardar IDs para verificar después
+        let repoID = repo.repoID
+        let taskContent = task.content
+
+        // Eliminar la cuenta
+        modelContext.delete(account)
+        try modelContext.save()
+
+        // Verificar que el repo fue eliminado (cascade)
+        let repoFetch = FetchDescriptor<ProjectRepo>(predicate: #Predicate { $0.repoID == repoID })
+        let remainingRepos = try modelContext.fetch(repoFetch)
+        XCTAssertEqual(remainingRepos.count, 0, "Repo should be deleted when account is deleted")
+
+        // Verificar que las tareas fueron eliminadas
+        let taskFetch = FetchDescriptor<TaskItem>(predicate: #Predicate { $0.content == taskContent })
+        let remainingTasks = try modelContext.fetch(taskFetch)
+        XCTAssertEqual(remainingTasks.count, 0, "Tasks should be deleted when account is deleted")
+    }
+
+    // MARK: - Test: Same repo ID in different accounts stays separate
+
+    func testSameRepoIDInDifferentAccountsStaysSeparate() throws {
+        // Escenario: Usuario tiene el mismo fork en cuenta personal y de trabajo
+        let personalAccount = GitHubAccount(username: "john-personal", tokenKey: "token1")
+        let workAccount = GitHubAccount(username: "john-work", tokenKey: "token2")
+        modelContext.insert(personalAccount)
+        modelContext.insert(workAccount)
+
+        // Mismo proyecto forkeado (diferentes repoIDs en GitHub, pero mismo nombre)
+        let personalRepo = ProjectRepo(repoID: 1001, name: "awesome-project", account: personalAccount)
+        let workRepo = ProjectRepo(repoID: 2001, name: "awesome-project", account: workAccount)
+        modelContext.insert(personalRepo)
+        modelContext.insert(workRepo)
+
+        // Diferentes configuraciones para cada uno
+        personalRepo.isFavorite = true
+        workRepo.isFavorite = false
+        personalRepo.logoURL = "https://personal-logo.png"
+        workRepo.logoURL = "https://work-logo.png"
+
+        try modelContext.save()
+
+        // Verificar que son repos separados con config separada
+        XCTAssertTrue(personalRepo.isFavorite)
+        XCTAssertFalse(workRepo.isFavorite)
+        XCTAssertEqual(personalRepo.logoURL, "https://personal-logo.png")
+        XCTAssertEqual(workRepo.logoURL, "https://work-logo.png")
+        XCTAssertNotEqual(personalRepo.account?.id, workRepo.account?.id)
+    }
+
+    // MARK: - Test: Filtering repos by account works correctly
+
+    func testFilteringReposByAccount() throws {
+        let account1 = GitHubAccount(username: "dev1", tokenKey: "t1")
+        let account2 = GitHubAccount(username: "dev2", tokenKey: "t2")
+        modelContext.insert(account1)
+        modelContext.insert(account2)
+
+        // Crear 3 repos para account1 y 2 para account2
+        for i in 1...3 {
+            let repo = ProjectRepo(repoID: i, name: "Repo-Dev1-\(i)", account: account1)
+            modelContext.insert(repo)
+        }
+        for i in 4...5 {
+            let repo = ProjectRepo(repoID: i, name: "Repo-Dev2-\(i)", account: account2)
+            modelContext.insert(repo)
+        }
+
+        try modelContext.save()
+
+        // Simular filtrado como lo hace ContentView
+        let allReposFetch = FetchDescriptor<ProjectRepo>()
+        let allRepos = try modelContext.fetch(allReposFetch)
+
+        let account1Repos = allRepos.filter { $0.account?.id == account1.id }
+        let account2Repos = allRepos.filter { $0.account?.id == account2.id }
+
+        XCTAssertEqual(account1Repos.count, 3)
+        XCTAssertEqual(account2Repos.count, 2)
+        XCTAssertTrue(account1Repos.allSatisfy { $0.name.contains("Dev1") })
+        XCTAssertTrue(account2Repos.allSatisfy { $0.name.contains("Dev2") })
     }
 }

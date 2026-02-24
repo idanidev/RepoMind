@@ -1,0 +1,4 @@
+app_identifier "idanidev.RepoMind"
+apple_id ENV["APPLE_ID"]          # tu email de Apple Developer, en variable de entorno
+team_id "AXK73U74AC"
+itc_team_id "AXK73U74AC"          # puede ser distinto si tienes varios equipos en App Store Connect

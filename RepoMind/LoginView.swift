@@ -6,6 +6,7 @@ import UIKit
 
 struct LoginView: View {
     @Binding var isAuthenticated: Bool
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     @State private var token = ""
     @State private var isValidating = false
@@ -15,6 +16,7 @@ struct LoginView: View {
     @State private var showTokenInput = false
 
     @State private var biometricAuth = BiometricAuthManager()
+    @State private var showPaywall = false
 
     private let tokenCreationURL = URL(
         string: "https://github.com/settings/tokens/new?scopes=repo,user")!
@@ -46,9 +48,14 @@ struct LoginView: View {
                 onboardingActions
             }
         }
+        .frame(maxWidth: horizontalSizeClass == .regular ? 600 : .infinity)
+        .frame(maxWidth: .infinity)
         .scrollDismissesKeyboard(.interactively)
         .animation(.spring(duration: 0.45), value: showTokenInput)
         .animation(.spring(duration: 0.3), value: validationSuccess)
+        .sheet(isPresented: $showPaywall) {
+            PaywallView()
+        }
         .task {
             await attemptBiometricLogin()
         }
@@ -220,20 +227,26 @@ struct LoginView: View {
             let user = try await GitHubService.shared.validateToken(trimmed)
 
             // 2. Check Subscription Limits
-            // Fetch existing accounts count
             let descriptor = FetchDescriptor<GitHubAccount>()
             let existingCount = (try? context.fetchCount(descriptor)) ?? 0
 
-            if trimmed != "mock-pro"
-                && !SubscriptionManager.shared.canAddAccount(currentCount: existingCount)
-            {
-                throw NSError(
-                    domain: "RepoMind", code: 403,
-                    userInfo: [
-                        NSLocalizedDescriptionKey:
-                            String(localized: "account_limit_error")
-                    ])
+            #if DEBUG
+            let isMockToken = trimmed.hasPrefix("mock-")
+            #else
+            let isMockToken = false
+            #endif
+
+            if !isMockToken && !SubscriptionManager.shared.canAddAccount(currentCount: existingCount) {
+                showPaywall = true
+                isValidating = false
+                return
             }
+
+            #if DEBUG
+            if trimmed == "mock-pro" {
+                SubscriptionManager.shared.isMockPro = true
+            }
+            #endif
 
             userName = user.name ?? user.login
             validationSuccess = true
@@ -242,7 +255,6 @@ struct LoginView: View {
             let accountKey = "github-token-\(user.login)"
             try await KeychainManager.shared.saveToken(trimmed, for: accountKey)
 
-            // 4. Create Account Entity
             // 4. Upsert Account Entity (Prevent Duplicates)
             let targetLogin = user.login  // Local var for Predicate capture
             var accountDescriptor = FetchDescriptor<GitHubAccount>(
@@ -251,21 +263,28 @@ struct LoginView: View {
             accountDescriptor.fetchLimit = 1
             let existingAccount = try? context.fetch(accountDescriptor).first
 
+            #if DEBUG
+            let isProAccount = trimmed == "mock-pro"
+            #else
+            let isProAccount = false
+            #endif
+
             if let existing = existingAccount {
                 existing.avatarURL = user.avatarUrl
                 existing.tokenKey = accountKey
-                existing.isPro = trimmed == "mock-pro"
+                existing.isPro = isProAccount
             } else {
                 let newAccount = GitHubAccount(
                     username: user.login,
                     avatarURL: user.avatarUrl,
                     tokenKey: accountKey,
-                    isPro: trimmed == "mock-pro"
+                    isPro: isProAccount
                 )
                 context.insert(newAccount)
             }
 
-            // Mock: Auto-create secondary account for Pro (Upsert)
+            #if DEBUG
+            // Mock: Auto-create secondary account for Pro
             if trimmed == "mock-pro" {
                 let secondaryToken = "mock-pro-personal"
                 let secondaryUser = "ProPersonal"
@@ -291,6 +310,7 @@ struct LoginView: View {
                     context.insert(secondaryAccount)
                 }
             }
+            #endif
 
             // Success haptic
             let generator = UINotificationFeedbackGenerator()
@@ -338,17 +358,10 @@ struct RepoMindLogo: View {
                 .blur(radius: 20)
                 .scaleEffect(isAnimating ? 1.1 : 1.0)
 
-            // Main Hexagon (simplified abstract shape)
-            Image(systemName: "cube.fill")
+            // Logo personalizado desde Assets
+            Image("AppLogo")
                 .resizable()
                 .scaledToFit()
-                .foregroundStyle(
-                    .linearGradient(
-                        colors: [.accentColor, .purple],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
                 .shadow(color: .accentColor.opacity(0.3), radius: 10, y: 5)
         }
         .onAppear {
