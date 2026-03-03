@@ -49,13 +49,13 @@ final class VoiceManager {
     private var isStopping = false
 
     // Silence Detection
-    nonisolated(unsafe) private var silenceTimer: Timer?
-    private let silenceThreshold: Float = 0.02
-    private let silenceDuration: TimeInterval = 2.0
+    private var silenceTimer: Timer?
+    private let silenceThreshold: Float = 0.06  // Por encima del ruido de fondo típico
+    private let silenceDuration: TimeInterval = 1.5  // Más ágil que 2.0
     private var lastAudioDetectedTime: Date = .now
 
-    // ✅ FIX: Track smart routing task for cancellation
-    nonisolated(unsafe) private var smartRoutingTask: Task<Void, Never>?
+    // Track smart routing task for cancellation
+    private var smartRoutingTask: Task<Void, Never>?
 
     // MARK: - Initialization
 
@@ -130,8 +130,12 @@ final class VoiceManager {
     // ✅ FIX: Explicit cleanup before deallocation to prevent
     // TaskLocal/malloc crash when smartRoutingTask outlives the object.
     deinit {
-        silenceTimer?.invalidate()
-        smartRoutingTask?.cancel()
+        // VoiceManager es @MainActor, por lo que siempre se destruye en el main actor.
+        // MainActor.assumeIsolated permite acceder a propiedades aisladas desde deinit (Swift 6).
+        MainActor.assumeIsolated {
+            silenceTimer?.invalidate()
+            smartRoutingTask?.cancel()
+        }
     }
 
     private func configureRecognizers() {
@@ -367,6 +371,13 @@ final class VoiceManager {
                 // Update text from whichever recognizer triggers first/most recently
                 self.transcribedText = text
                 self.processSmartRouting(text: text)
+
+                // Si ya llevamos suficiente silencio cuando llega el texto, parar de inmediato
+                let silentSinceLastAudio = Date.now.timeIntervalSince(self.lastAudioDetectedTime)
+                if silentSinceLastAudio > self.silenceDuration {
+                    self.stopRecording()
+                    return
+                }
             }
 
             if let error {

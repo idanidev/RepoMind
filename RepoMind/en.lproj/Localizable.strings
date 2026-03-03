@@ -229,6 +229,9 @@
 "one_time_payment_label" = "One-time payment. Lifetime access.";
 "purchase_error" = "Error processing purchase. Please try again.";
 "purchase_success_toast" = "Welcome to RepoMind Pro!";
+"paywall_already_pro_title" = "You already have Pro!";
+"paywall_already_pro_subtitle" = "All features are unlocked. Enjoy RepoMind Pro.";
+"purchase_pending_toast" = "Purchase pending approval. You'll get notified when it's approved.";
 "restore_success_toast" = "Purchases restored! Welcome to Pro.";
 "restore_no_purchases_toast" = "No active subscriptions found.";
 "restore_empty_toast" = "No previous purchases found.";
@@ -246,3 +249,32 @@
 "repo_limit_upgrade" = "You need Pro to add more repositories.";
 "repo_limit_banner_title" = "Repository limit reached";
 "repo_limit_banner_subtitle" = "You have %d hidden repos. Unlock them with Pro.";
+
+/* Backup & Restore */
+"backup_section_header" = "Backup";
+"export_backup_button" = "Export Backup";
+"import_backup_button" = "Import Backup";
+"backup_footer" = "Export a JSON file with all your repos and tasks. Import it later on any device to restore your data.";
+"import_success_toast" = "%d projects imported";
+
+/* Repo File Browser */
+"browser_folders_header" = "Folders";
+"browser_images_header" = "Images";
+"browser_empty_folder" = "No images in this folder";
+"browser_local_repo_title" = "Local Project";
+"browser_local_repo_message" = "Local projects aren't linked to GitHub, so there's no repository to browse.";
+"local_project_icon_header" = "Icon";
+"local_icon_pick_photo" = "Choose from Photo Library";
+"local_icon_saving" = "Saving...";
+"local_icon_footer" = "Choose an image from your device to use as this project's icon.";
+
+/* Local Projects */
+"add_local_project_label" = "Add local project";
+"add_local_project_title" = "New Local Project";
+"local_project_name_header" = "Name";
+"local_project_name_placeholder" = "My project";
+"local_project_description_header" = "Description";
+"local_project_description_placeholder" = "Optional description";
+"local_project_footer" = "This project will only be stored locally on this device and won't sync with GitHub.";
+"local_project_created_toast" = "Local project created";
+"biometric_reason" = "Authenticate to access your RepoMind repositories.";

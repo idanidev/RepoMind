@@ -6,11 +6,7 @@ PROJECT      = "RepoMind.xcodeproj"
 
 platform :ios do
 
-  # ── API KEY (se carga una vez y se reutiliza en todas las lanes) ─────────────
-  # Necesitas 3 variables de entorno (ponlas en ~/.zshrc):
-  #   ASC_KEY_ID       → Key ID  (ej: ABC1234567)
-  #   ASC_ISSUER_ID    → Issuer ID (ej: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
-  #   ASC_KEY_FILEPATH → Ruta al .p8 (ej: /Users/dani/.appstoreconnect/private_keys/AuthKey_ABC1234567.p8)
+  # ── API KEY ─────────────────────────────────────────────────────────────────
   def api_key
     app_store_connect_api_key(
       key_id:        ENV["ASC_KEY_ID"],
@@ -71,8 +67,8 @@ platform :ios do
     build
 
     upload_to_testflight(
-      api_key:                          api_key,
-      ipa:                              "./build/RepoMind.ipa",
+      api_key:                           api_key,
+      ipa:                               "./build/RepoMind.ipa",
       skip_waiting_for_build_processing: true
     )
 
@@ -81,14 +77,15 @@ platform :ios do
 
 
   # ── LANE: release ───────────────────────────────────────────────────────────
-  desc "Sube la app a App Store y la envía a revisión"
+  # Solo compila y sube el binario. NO envía a revisión (usa `submit` después).
+  desc "Compila y sube el IPA a App Store Connect (sin enviar a revisión)"
   lane :release do
     build
 
     deliver(
       api_key:                      api_key,
       ipa:                          "./build/RepoMind.ipa",
-      submit_for_review:            true,
+      submit_for_review:            false,
       automatic_release:            false,
       force:                        true,
       skip_screenshots:             true,
@@ -99,19 +96,45 @@ platform :ios do
       }
     )
 
-    UI.success "🚀 App enviada a revisión en App Store"
+    UI.success "✅ IPA subido a App Store Connect. Ejecuta `fastlane submit` cuando el build esté procesado."
+  end
+
+
+  # ── LANE: submit ────────────────────────────────────────────────────────────
+  # Envía a revisión el build ya procesado por Apple (~15 min después de release).
+  desc "Envía a revisión el build ya subido (sin recompilar)"
+  lane :submit do |options|
+    app_ver = options[:version] || get_version_number(xcodeproj: PROJECT, target: SCHEME)
+
+    deliver(
+      api_key:                      api_key,
+      app_version:                  app_ver,
+      skip_binary_upload:           true,
+      submit_for_review:            true,
+      reject_if_possible:           true,
+      automatic_release:            false,
+      force:                        true,
+      skip_screenshots:             true,
+      skip_metadata:                true,
+      run_precheck_before_submit:   false,
+      submission_information: {
+        export_compliance_uses_encryption: false
+      }
+    )
+
+    UI.success "🚀 iOS v#{app_ver} enviada a revisión en App Store"
   end
 
 
   # ── LANE: bump_version ──────────────────────────────────────────────────────
-  desc "Sube la versión de marketing"
+  desc "Sube la versión de marketing (ej: fastlane bump_version version:1.1)"
   lane :bump_version do |options|
     version = options[:version] || UI.input("Nueva versión (ej: 1.1.0):")
     increment_version_number(
       version_number: version,
       xcodeproj:      PROJECT
     )
-    UI.success "Versión actualizada a #{version}"
+    UI.success "✅ Versión actualizada a #{version}"
   end
 
 
@@ -137,8 +160,8 @@ platform :mac do
 
   MAC_BUNDLE_ID = "maccatalyst.#{BUNDLE_ID}"
 
-  # ── LANE: mac_certificates ──────────────────────────────────────────────────
-  desc "Genera el perfil Mac Catalyst (maccatalyst.idanidev.RepoMind)"
+  # ── LANE: certificates ──────────────────────────────────────────────────────
+  desc "Genera el perfil Mac Catalyst"
   lane :certificates do
     match(
       type:           "appstore",
@@ -150,7 +173,7 @@ platform :mac do
   end
 
 
-  # ── LANE: mac_build ─────────────────────────────────────────────────────────
+  # ── LANE: build ─────────────────────────────────────────────────────────────
   desc "Compila la app macOS (Mac Catalyst) en modo Release"
   lane :build do
     build_number = Time.now.strftime("%Y%m%d%H%M")
@@ -167,7 +190,6 @@ platform :mac do
     key_id        = ENV["ASC_KEY_ID"]
     issuer_id     = ENV["ASC_ISSUER_ID"]
 
-    # Escribe el export options plist (destination:upload sube automáticamente)
     File.write(export_plist, <<~PLIST)
       <?xml version="1.0" encoding="UTF-8"?>
       <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -182,7 +204,6 @@ platform :mac do
     PLIST
 
     Dir.chdir(root_dir) do
-      # 1. Archive
       sh "xcodebuild " \
          "-scheme #{SCHEME} " \
          "-project #{PROJECT} " \
@@ -197,7 +218,6 @@ platform :mac do
          "-authenticationKeyIssuerID #{issuer_id} " \
          "| xcpretty || true"
 
-      # 2. Export → PKG en ./build/
       sh "xcodebuild " \
          "-exportArchive " \
          "-archivePath '#{archive_path}' " \
@@ -211,8 +231,9 @@ platform :mac do
   end
 
 
-  # ── LANE: mac_release ───────────────────────────────────────────────────────
-  desc "Sube la app macOS a App Store y la envía a revisión"
+  # ── LANE: release ───────────────────────────────────────────────────────────
+  # Solo compila y sube el PKG. NO envía a revisión (usa `mac submit` después).
+  desc "Compila y sube el PKG a App Store Connect (sin enviar a revisión)"
   lane :release do
     build
 
@@ -220,7 +241,7 @@ platform :mac do
       api_key:                    api_key,
       pkg:                        "./build/RepoMind.pkg",
       platform:                   "osx",
-      submit_for_review:          true,
+      submit_for_review:          false,
       automatic_release:          false,
       force:                      true,
       skip_screenshots:           true,
@@ -231,7 +252,33 @@ platform :mac do
       }
     )
 
-    UI.success "🚀 App macOS enviada a revisión en App Store"
+    UI.success "✅ PKG subido a App Store Connect. Ejecuta `fastlane mac submit` cuando el build esté procesado."
+  end
+
+
+  # ── LANE: submit ────────────────────────────────────────────────────────────
+  desc "Envía a revisión el build macOS ya subido (sin recompilar)"
+  lane :submit do |options|
+    app_ver = options[:version] || get_version_number(xcodeproj: "../#{SCHEME}.xcodeproj", target: SCHEME)
+
+    deliver(
+      api_key:                      api_key,
+      platform:                     "osx",
+      app_version:                  app_ver,
+      skip_binary_upload:           true,
+      submit_for_review:            true,
+      reject_if_possible:           true,
+      automatic_release:            false,
+      force:                        true,
+      skip_screenshots:             true,
+      skip_metadata:                true,
+      run_precheck_before_submit:   false,
+      submission_information: {
+        export_compliance_uses_encryption: false
+      }
+    )
+
+    UI.success "🚀 macOS v#{app_ver} enviada a revisión en App Store"
   end
 
 

@@ -17,6 +17,27 @@ nonisolated struct GitHubUser: Decodable, Sendable {
     }
 }
 
+nonisolated struct RepoContentItem: Decodable, Sendable, Identifiable {
+    let name: String
+    let path: String
+    let type: String   // "file" or "dir"
+    let downloadUrl: String?
+
+    var id: String { path }
+
+    var isImage: Bool {
+        let lower = name.lowercased()
+        return lower.hasSuffix(".png") || lower.hasSuffix(".jpg") ||
+               lower.hasSuffix(".jpeg") || lower.hasSuffix(".gif") ||
+               lower.hasSuffix(".webp")
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case name, path, type
+        case downloadUrl = "download_url"
+    }
+}
+
 nonisolated struct GitHubRepo: Decodable, Sendable, Identifiable {
     let id: Int
     let name: String
@@ -73,9 +94,8 @@ actor GitHubService {
     private let session: URLSession
     private let decoder: JSONDecoder
 
-    // ✅ FIX: Retry configuration
-    private let maxRetries = 3
-    private let retryDelay: TimeInterval = 1.0
+    private let maxRetries = 2
+    private let retryDelay: TimeInterval = 0.5
 
     private init() {
         let config = URLSessionConfiguration.default
@@ -83,7 +103,8 @@ actor GitHubService {
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2022-11-28",
         ]
-        config.timeoutIntervalForRequest = 15
+        config.timeoutIntervalForRequest = 10
+        config.timeoutIntervalForResource = 30
         self.session = URLSession(configuration: config)
         self.decoder = JSONDecoder()
     }
@@ -151,6 +172,21 @@ actor GitHubService {
         return try decoder.decode([GitHubRepo].self, from: data)
     }
 
+    // MARK: - Fetch Repo Contents (File Browser)
+
+    func fetchContents(owner: String, repo: String, path: String, token: String) async throws -> [RepoContentItem] {
+        let encodedPath = path.isEmpty ? "" : "/\(path)"
+        let request = try buildRequest(
+            path: "/repos/\(owner)/\(repo)/contents\(encodedPath)",
+            token: token
+        )
+        let (data, response) = try await performRequestWithRetry(request)
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+            throw GitHubError.invalidResponse((response as? HTTPURLResponse)?.statusCode ?? 0)
+        }
+        return try decoder.decode([RepoContentItem].self, from: data)
+    }
+
     // ✅ NEW: Fetch all repos with automatic pagination
     func fetchAllRepos(token: String, maxPages: Int = 5) async throws -> [GitHubRepo] {
         var allRepos: [GitHubRepo] = []
@@ -215,12 +251,15 @@ actor GitHubService {
         let fallbackFormatter = ISO8601DateFormatter()
         fallbackFormatter.formatOptions = [.withInternetDateTime]
 
-        for remote in remoteRepos {
-            let remoteID = remote.id
-            let fetchDescriptor = FetchDescriptor<ProjectRepo>(
-                predicate: #Predicate { $0.repoID == remoteID })
+        // Single fetch — avoids N+1 queries (one per remote repo)
+        let allLocal = try context.fetch(FetchDescriptor<ProjectRepo>())
+        let localByID = Dictionary(grouping: allLocal, by: \.repoID)
 
-            let existing = try context.fetch(fetchDescriptor)
+        // Track whether anything actually changed to avoid unnecessary CloudKit writes
+        var madeChanges = false
+
+        for remote in remoteRepos {
+            let existing = localByID[remote.id] ?? []
             let parsedDate =
                 formatter.date(from: remote.updatedAt) ?? fallbackFormatter.date(
                     from: remote.updatedAt) ?? .now
@@ -231,17 +270,34 @@ actor GitHubService {
                 for duplicate in existing.dropFirst() {
                     context.delete(duplicate)
                 }
+                madeChanges = true
             }
 
             if let repo = existing.first {
-                repo.name = remote.name
-                repo.repoDescription = remote.description ?? ""
-                repo.updatedAt = parsedDate
-                repo.htmlURL = remote.htmlUrl
-                repo.language = remote.language
-                repo.stargazersCount = remote.stargazersCount
-                repo.account = account
-                if isStarred { repo.isFavorite = true }
+                // Only update — and only mark dirty — when something actually changed.
+                // Using updatedAt as the primary change signal; also check account link
+                // and star status independently since they can change without a repo update.
+                let dateChanged = abs(repo.updatedAt.timeIntervalSince(parsedDate)) > 1
+                let accountChanged = repo.account?.id != account.id
+                let starChanged = isStarred && !repo.isFavorite
+
+                if dateChanged {
+                    repo.name = remote.name
+                    repo.repoDescription = remote.description ?? ""
+                    repo.updatedAt = parsedDate
+                    repo.htmlURL = remote.htmlUrl
+                    repo.language = remote.language
+                    repo.stargazersCount = remote.stargazersCount
+                    madeChanges = true
+                }
+                if accountChanged {
+                    repo.account = account
+                    madeChanges = true
+                }
+                if starChanged {
+                    repo.isFavorite = true
+                    madeChanges = true
+                }
                 // No buscamos logo aquí para repos existentes (ya lo tienen o el usuario lo configuró)
             } else {
                 // Crear repo nuevo
@@ -258,68 +314,132 @@ actor GitHubService {
                     account: account
                 )
                 context.insert(repo)
+                madeChanges = true
 
-                // Buscar logo en background para repos nuevos (solo iOS apps)
-                if remote.language == "Swift" || remote.language == "Objective-C" {
-                    // Extraer owner del htmlUrl
-                    let ownerName: String
-                    if let url = URL(string: remote.htmlUrl), url.pathComponents.count >= 2 {
-                        ownerName = url.pathComponents[1]
-                    } else {
-                        ownerName = account.username
-                    }
+                // Buscar logo en background para todos los repos nuevos
+                let ownerName: String
+                if let url = URL(string: remote.htmlUrl), url.pathComponents.count >= 2 {
+                    ownerName = url.pathComponents[1]
+                } else {
+                    ownerName = account.username
+                }
 
-                    Task.detached {
-                        if let logoURL = await self.fetchRepoLogoURL(
-                            owner: ownerName, repo: remote.name, token: token)
-                        {
-                            await MainActor.run {
-                                repo.logoURL = logoURL
-                                #if DEBUG
-                                print("🖼️ Logo encontrado para \(remote.name): \(logoURL)")
-                                #endif
-                            }
+                Task.detached {
+                    if let logoURL = await self.fetchRepoLogoURL(
+                        owner: ownerName, repo: remote.name, token: token, language: remote.language)
+                    {
+                        await MainActor.run {
+                            repo.logoURL = logoURL
                         }
                     }
                 }
             }
         }
 
-        try context.save()
+        // Only write to CloudKit when something actually changed
+        if madeChanges {
+            try context.save()
+        }
     }
 
     // MARK: - Fetch Repo Logo
 
-    /// Intenta encontrar un logo/icono del repositorio usando la API de GitHub
-    func fetchRepoLogoURL(owner: String, repo: String, token: String) async -> String? {
-        // Primero buscar AppIcon.appiconset en rutas comunes
+    /// Estrategia por capas:
+    /// 1. App Store Search API (solo Swift/ObjC)
+    /// 2. AppIcon.appiconset en el repo (solo Swift/ObjC)
+    /// 3. Avatar del owner como fallback universal
+    func fetchRepoLogoURL(owner: String, repo: String, token: String, language: String? = nil) async -> String? {
+        let isAppleRepo = language == "Swift" || language == "Objective-C"
+
+        // Tier 1: App Store Search (apps publicadas)
+        if isAppleRepo {
+            if let appStoreURL = await searchAppStoreIcon(repoName: repo) {
+                return appStoreURL
+            }
+        }
+
+        // Tier 2: AppIcon en el repositorio
+        if isAppleRepo {
+            if let repoIcon = await findAppIconInRepo(owner: owner, repo: repo, token: token) {
+                return repoIcon
+            }
+        }
+
+        // Tier 3: Avatar del owner/org (siempre disponible, sin llamadas extra)
+        return "https://avatars.githubusercontent.com/\(owner)"
+    }
+
+    /// Busca el icono en el App Store usando la iTunes Search API
+    private func searchAppStoreIcon(repoName: String) async -> String? {
+        let searchTerm = repoName
+            .replacingOccurrences(of: "-", with: " ")
+            .replacingOccurrences(of: "_", with: " ")
+
+        guard let encoded = searchTerm.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+              let url = URL(string: "https://itunes.apple.com/search?term=\(encoded)&entity=software&limit=5") else {
+            return nil
+        }
+
+        do {
+            let (data, response) = try await URLSession.shared.data(from: url)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { return nil }
+
+            struct AppStoreResponse: Decodable {
+                let results: [AppStoreApp]
+            }
+            struct AppStoreApp: Decodable {
+                let trackName: String
+                let artworkUrl512: String?
+            }
+
+            let result = try decoder.decode(AppStoreResponse.self, from: data)
+
+            // Normalizar nombre del repo para comparar
+            let normalizedRepo = repoName.lowercased()
+                .replacingOccurrences(of: "-", with: "")
+                .replacingOccurrences(of: "_", with: "")
+
+            for app in result.results {
+                let normalizedApp = app.trackName.lowercased()
+                    .replacingOccurrences(of: " ", with: "")
+                // Match exacto o el repo contiene el nombre de la app (o viceversa)
+                if normalizedApp == normalizedRepo ||
+                   normalizedApp.contains(normalizedRepo) ||
+                   normalizedRepo.contains(normalizedApp) {
+                    return app.artworkUrl512
+                }
+            }
+        } catch {
+            return nil
+        }
+
+        return nil
+    }
+
+    /// Busca AppIcon.appiconset dentro del repositorio
+    private func findAppIconInRepo(owner: String, repo: String, token: String) async -> String? {
+        // Rutas comunes donde suele estar el AppIcon
         let assetsPaths = [
-            // Rutas típicas de proyectos iOS
             "\(repo)/Assets.xcassets/AppIcon.appiconset",
             "Assets.xcassets/AppIcon.appiconset",
             "App/Assets.xcassets/AppIcon.appiconset",
             "Sources/Assets.xcassets/AppIcon.appiconset",
             "iOS/Assets.xcassets/AppIcon.appiconset",
-            // Con nombre del repo como carpeta
             "\(repo)/\(repo)/Assets.xcassets/AppIcon.appiconset",
         ]
 
         for assetsPath in assetsPaths {
-            if let logoURL = await findPNGInPath(
-                owner: owner, repo: repo, path: assetsPath, token: token)
-            {
+            if let logoURL = await findPNGInPath(owner: owner, repo: repo, path: assetsPath, token: token) {
                 return logoURL
             }
         }
 
-        // Buscar recursivamente en el repositorio para encontrar Assets.xcassets
-        if let logoURL = await searchForAppIconRecursively(
-            owner: owner, repo: repo, token: token, path: "", depth: 0)
-        {
+        // Búsqueda recursiva
+        if let logoURL = await searchForAppIconRecursively(owner: owner, repo: repo, token: token, path: "", depth: 0) {
             return logoURL
         }
 
-        // Fallback: buscar archivos comunes de logo
+        // Fallback: logos comunes en el repo
         let fallbackPaths = [
             "logo.png", "icon.png", "Logo.png", "Icon.png",
             "assets/logo.png", "assets/icon.png",

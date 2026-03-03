@@ -188,9 +188,32 @@ struct PaywallView: View {
 
     // MARK: - Pricing
 
+    // MARK: - Already Pro
+
+    private var alreadyProView: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "crown.fill")
+                .font(.title2)
+                .foregroundStyle(.purple)
+            Text("paywall_already_pro_title")
+                .font(.subheadline.weight(.semibold))
+            Text("paywall_already_pro_subtitle")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 20)
+        .background(.background, in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    // MARK: - Pricing
+
     private var pricingSection: some View {
         Group {
-            if subscription.isLoading && subscription.products.isEmpty {
+            if subscription.isPro {
+                alreadyProView
+            } else if subscription.isLoadingProducts && subscription.products.isEmpty {
                 // Still loading
                 ProgressView()
                     .frame(maxWidth: .infinity, minHeight: 100)
@@ -238,9 +261,15 @@ struct PaywallView: View {
                     await subscription.reloadProducts()
                 }
             } label: {
-                Label("retry_button", systemImage: "arrow.clockwise")
-                    .font(.subheadline.weight(.medium))
+                if subscription.isLoadingProducts {
+                    ProgressView()
+                        .controlSize(.small)
+                } else {
+                    Label("retry_button", systemImage: "arrow.clockwise")
+                        .font(.subheadline.weight(.medium))
+                }
             }
+            .disabled(subscription.isLoadingProducts)
 
             #if DEBUG
                 Divider()
@@ -277,18 +306,26 @@ struct PaywallView: View {
 
     @ViewBuilder
     private var purchaseButton: some View {
-        if !subscription.products.isEmpty {
+        if !subscription.products.isEmpty && !subscription.isPro {
             Button {
                 guard let product = subscription.lifetimeProduct else { return }
                 Task {
                     do {
-                        let success = try await subscription.purchase(product)
-                        if success {
+                        let outcome = try await subscription.purchase(product)
+                        switch outcome {
+                        case .success:
                             ToastManager.shared.show(
                                 String(localized: "purchase_success_toast"),
                                 style: .success
                             )
                             dismiss()
+                        case .pending:
+                            ToastManager.shared.show(
+                                String(localized: "purchase_pending_toast"),
+                                style: .info
+                            )
+                        case .cancelled:
+                            break
                         }
                     } catch {
                         purchaseError = error.localizedDescription
@@ -296,7 +333,7 @@ struct PaywallView: View {
                 }
             } label: {
                 Group {
-                    if subscription.isLoading {
+                    if subscription.isPurchasing {
                         ProgressView()
                             .tint(.white)
                     } else {
@@ -309,7 +346,7 @@ struct PaywallView: View {
                 .foregroundStyle(.white)
                 .background(.purple, in: RoundedRectangle(cornerRadius: 14))
             }
-            .disabled(subscription.lifetimeProduct == nil || subscription.isLoading)
+            .disabled(subscription.lifetimeProduct == nil || subscription.isPurchasing)
         }
     }
 
@@ -319,22 +356,26 @@ struct PaywallView: View {
         VStack(spacing: 12) {
             Button {
                 Task {
-                    let restored = await subscription.restorePurchases()
-                    if restored {
-                        ToastManager.shared.show(
-                            String(localized: "restore_success_toast"),
-                            style: .success
-                        )
-                        dismiss()
-                    } else {
-                        ToastManager.shared.show(
-                            String(localized: "restore_no_purchases_toast"),
-                            style: .info
-                        )
+                    do {
+                        let restored = try await subscription.restorePurchases()
+                        if restored {
+                            ToastManager.shared.show(
+                                String(localized: "restore_success_toast"),
+                                style: .success
+                            )
+                            dismiss()
+                        } else {
+                            ToastManager.shared.show(
+                                String(localized: "restore_no_purchases_toast"),
+                                style: .info
+                            )
+                        }
+                    } catch {
+                        ToastManager.shared.show(error.localizedDescription, style: .error)
                     }
                 }
             } label: {
-                if subscription.isLoading {
+                if subscription.isRestoring {
                     ProgressView()
                         .controlSize(.small)
                 } else {
@@ -343,7 +384,7 @@ struct PaywallView: View {
                         .foregroundStyle(.purple)
                 }
             }
-            .disabled(subscription.isLoading)
+            .disabled(subscription.isRestoring)
 
             HStack(spacing: 16) {
                 Link(

@@ -233,6 +233,9 @@
 "subscribe_button" = "Suscribirse";
 "purchase_error" = "Error al procesar la compra. Inténtalo de nuevo.";
 "purchase_success_toast" = "¡Bienvenido a RepoMind Pro!";
+"paywall_already_pro_title" = "¡Ya tienes Pro!";
+"paywall_already_pro_subtitle" = "Todas las funciones están desbloqueadas. Disfruta de RepoMind Pro.";
+"purchase_pending_toast" = "Compra pendiente de aprobación. Te avisaremos cuando esté aprobada.";
 "restore_success_toast" = "¡Compras restauradas! Bienvenido a Pro.";
 "restore_no_purchases_toast" = "No se encontraron suscripciones activas.";
 "restore_empty_toast" = "No se encontraron compras anteriores.";
@@ -250,3 +253,32 @@
 "repo_limit_upgrade" = "Necesitas Pro para añadir más repositorios.";
 "repo_limit_banner_title" = "Límite de repositorios alcanzado";
 "repo_limit_banner_subtitle" = "Tienes %d repos ocultos. Desbloquéalos con Pro.";
+
+/* Copia de seguridad */
+"backup_section_header" = "Copia de seguridad";
+"export_backup_button" = "Exportar backup";
+"import_backup_button" = "Importar backup";
+"backup_footer" = "Exporta un archivo JSON con todos tus repos y tareas. Impórtalo en cualquier dispositivo para restaurar tus datos.";
+"import_success_toast" = "%d proyectos importados";
+
+/* Navegador de archivos del repo */
+"browser_folders_header" = "Carpetas";
+"browser_images_header" = "Imágenes";
+"browser_empty_folder" = "No hay imágenes en esta carpeta";
+"browser_local_repo_title" = "Proyecto local";
+"browser_local_repo_message" = "Los proyectos locales no están conectados a GitHub, así que no hay repositorio que explorar.";
+"local_project_icon_header" = "Icono";
+"local_icon_pick_photo" = "Elegir de la Fototeca";
+"local_icon_saving" = "Guardando...";
+"local_icon_footer" = "Elige una imagen de tu dispositivo para usarla como icono de este proyecto.";
+
+/* Proyectos locales */
+"add_local_project_label" = "Añadir proyecto local";
+"add_local_project_title" = "Nuevo proyecto local";
+"local_project_name_header" = "Nombre";
+"local_project_name_placeholder" = "Mi proyecto";
+"local_project_description_header" = "Descripción";
+"local_project_description_placeholder" = "Descripción opcional";
+"local_project_footer" = "Este proyecto se guardará solo en este dispositivo y no se sincronizará con GitHub.";
+"local_project_created_toast" = "Proyecto local creado";
+"biometric_reason" = "Autentícate para acceder a tus repositorios de RepoMind.";

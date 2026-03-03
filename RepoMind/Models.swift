@@ -11,7 +11,7 @@ final class GitHubAccount {
     var tokenKey: String = ""
     var isPro: Bool = false
 
-    @Relationship(deleteRule: .cascade, inverse: \ProjectRepo.account)
+    @Relationship(deleteRule: .nullify, inverse: \ProjectRepo.account)
     var repos: [ProjectRepo]?
 
     init(
@@ -39,6 +39,7 @@ final class ProjectRepo {
     var htmlURL: String = ""
     var isFavorite: Bool = false
     var isArchived: Bool = false
+    var isLocal: Bool = false
     var language: String?
     var stargazersCount: Int = 0
     var logoURL: String?
@@ -59,6 +60,7 @@ final class ProjectRepo {
         htmlURL: String = "",
         isFavorite: Bool = false,
         isArchived: Bool = false,
+        isLocal: Bool = false,
         language: String? = nil,
         stargazersCount: Int = 0,
         logoURL: String? = nil,
@@ -71,6 +73,7 @@ final class ProjectRepo {
         self.htmlURL = htmlURL
         self.isFavorite = isFavorite
         self.isArchived = isArchived
+        self.isLocal = isLocal
         self.language = language
         self.stargazersCount = stargazersCount
         self.logoURL = logoURL

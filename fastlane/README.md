@@ -45,7 +45,15 @@ Sube una build a TestFlight
 [bundle exec] fastlane ios release
 ```
 
-Sube la app a App Store y la envía a revisión
+Compila y sube el IPA a App Store Connect (sin enviar a revisión)
+
+### ios submit
+
+```sh
+[bundle exec] fastlane ios submit
+```
+
+Envía a revisión el build ya subido (sin recompilar)
 
 ### ios bump_version
 
@@ -53,7 +61,44 @@ Sube la app a App Store y la envía a revisión
 [bundle exec] fastlane ios bump_version
 ```
 
-Sube la versión de marketing
+Sube la versión de marketing (ej: fastlane bump_version version:1.1)
+
+----
+
+
+## Mac
+
+### mac certificates
+
+```sh
+[bundle exec] fastlane mac certificates
+```
+
+Genera el perfil Mac Catalyst
+
+### mac build
+
+```sh
+[bundle exec] fastlane mac build
+```
+
+Compila la app macOS (Mac Catalyst) en modo Release
+
+### mac release
+
+```sh
+[bundle exec] fastlane mac release
+```
+
+Compila y sube el PKG a App Store Connect (sin enviar a revisión)
+
+### mac submit
+
+```sh
+[bundle exec] fastlane mac submit
+```
+
+Envía a revisión el build macOS ya subido (sin recompilar)
 
 ----
 

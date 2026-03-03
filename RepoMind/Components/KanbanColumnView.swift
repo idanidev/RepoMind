@@ -240,7 +240,7 @@ struct KanbanColumnView: View {
         }
         .buttonStyle(.plain)
         .clipShape(.rect(bottomLeadingRadius: 16, bottomTrailingRadius: 16))
-        .accessibilityLabel("Add task to \(column.name)")
+        .accessibilityLabel(String(format: String(localized: "Add task to %@"), column.name))
     }
 
     // MARK: - Drop Handling
@@ -385,37 +385,12 @@ struct TaskCardEnhanced: View {
     }
 
     private var fullTaskImage: UIImage? {
-        if let data = task.imageData, let img = UIImage(data: data) { return img }
-        if let path = task.imagePath,
-            let data = FileManager.default.contents(atPath: path),
-            let img = UIImage(data: data) { return img }
-        return nil
+        TaskImageHelper.fullImage(from: task)
     }
 
     private func loadThumbnail() async {
-        let data = task.imageData
-        let path = task.imagePath
-
-        let result = await Task.detached(priority: .utility) { () -> UIImage? in
-            if let d = data, let img = UIImage(data: d) {
-                return Self.makeThumbnail(img)
-            } else if let p = path,
-                let d = FileManager.default.contents(atPath: p),
-                let img = UIImage(data: d)
-            {
-                return Self.makeThumbnail(img)
-            }
-            return nil
-        }.value
-
-        thumbnailImage = result
-    }
-
-    private static func makeThumbnail(_ image: UIImage) -> UIImage {
-        let size = CGSize(width: 400, height: 200)
-        return UIGraphicsImageRenderer(size: size).image { _ in
-            image.draw(in: CGRect(origin: .zero, size: size))
-        }
+        thumbnailImage = await TaskImageHelper.loadThumbnail(
+            from: task, size: CGSize(width: 400, height: 200))
     }
 }
 

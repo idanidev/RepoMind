@@ -109,6 +109,24 @@ struct KanbanBoardView: View {
             pageIndicator
                 .padding(.bottom, 8)
         }
+        .onAppear {
+            // Inicializar con la primera columna visible
+            if !sortedColumns.isEmpty {
+                viewModel.currentColumn = sortedColumns[0]
+            }
+        }
+        .onChange(of: currentPage) { _, newPage in
+            // Actualizar la columna activa cuando el usuario desliza
+            if newPage < sortedColumns.count {
+                viewModel.currentColumn = sortedColumns[newPage]
+            }
+        }
+        .onChange(of: sortedColumns) { _, columns in
+            // Si las columnas cambian (ej. se añade una), mantener consistencia
+            if currentPage < columns.count {
+                viewModel.currentColumn = columns[currentPage]
+            }
+        }
     }
 
     // MARK: - Column Page

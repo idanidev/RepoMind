@@ -1,4 +1,5 @@
 import Foundation
+import Security
 import StoreKit
 import SwiftUI
 
@@ -13,6 +14,15 @@ final class SubscriptionManager {
         case proLifetime = "com.idanidev.repomind.pro"
     }
 
+    // MARK: - Purchase Outcome
+
+    enum PurchaseOutcome {
+        case success
+        case cancelled
+        /// Awaiting parental / Ask to Buy approval.
+        case pending
+    }
+
     // MARK: - Free Tier Limits
 
     let maxFreeRepos = 3
@@ -23,7 +33,13 @@ final class SubscriptionManager {
 
     private(set) var products: [Product] = []
     private(set) var purchasedProductIDs: Set<String> = []
-    private(set) var isLoading = false
+
+    private(set) var isLoadingProducts = false
+    private(set) var isPurchasing = false
+    private(set) var isRestoring = false
+
+    /// Convenience: `true` when any async operation is in flight.
+    var isLoading: Bool { isLoadingProducts || isPurchasing || isRestoring }
 
     /// Mock testing support — only effective in DEBUG builds.
     /// In RELEASE builds, setting this has no effect and isPro relies solely on StoreKit.
@@ -50,9 +66,7 @@ final class SubscriptionManager {
 
     var currentPlanName: String {
         if isMockPro { return "Pro (Test)" }
-        if purchasedProductIDs.contains(ProductID.proLifetime.rawValue) {
-            return String(localized: "plan_pro")
-        }
+        if isPro { return String(localized: "plan_pro") }
         return String(localized: "plan_free")
     }
 
@@ -61,8 +75,8 @@ final class SubscriptionManager {
     private var transactionListener: Task<Void, Error>?
 
     private init() {
-        // Restore cached state for offline access
-        if UserDefaults.standard.bool(forKey: "cachedIsPro") {
+        // Restore cached state for offline access (stored in Keychain)
+        if Self.keychainRead() {
             purchasedProductIDs.insert("cached")
         }
 
@@ -96,8 +110,8 @@ final class SubscriptionManager {
         }
 
         let task = Task {
-            isLoading = true
-            defer { isLoading = false }
+            isLoadingProducts = true
+            defer { isLoadingProducts = false }
             do {
                 let ids = ProductID.allCases.map(\.rawValue)
                 let loaded = try await Product.products(for: ids)
@@ -137,9 +151,9 @@ final class SubscriptionManager {
 
     // MARK: - Purchase
 
-    func purchase(_ product: Product) async throws -> Bool {
-        isLoading = true
-        defer { isLoading = false }
+    func purchase(_ product: Product) async throws -> PurchaseOutcome {
+        isPurchasing = true
+        defer { isPurchasing = false }
 
         let result = try await product.purchase()
 
@@ -148,32 +162,26 @@ final class SubscriptionManager {
             let transaction = try checkVerified(verification)
             await updatePurchasedProducts()
             await transaction.finish()
-            return true
+            return .success
         case .userCancelled:
-            return false
+            return .cancelled
         case .pending:
-            return false
+            return .pending
         @unknown default:
-            return false
+            return .cancelled
         }
     }
 
     // MARK: - Restore Purchases
 
-    /// Returns `true` if a Pro subscription was found after restoring.
+    /// Syncs purchases with the App Store and returns `true` if the user is Pro.
+    /// Throws if `AppStore.sync()` fails (e.g. no network) so callers can show the real error.
     @discardableResult
-    func restorePurchases() async -> Bool {
-        isLoading = true
-        defer { isLoading = false }
+    func restorePurchases() async throws -> Bool {
+        isRestoring = true
+        defer { isRestoring = false }
 
-        do {
-            try await AppStore.sync()
-        } catch {
-            #if DEBUG
-            print("[SubscriptionManager] AppStore.sync failed: \(error)")
-            #endif
-        }
-
+        try await AppStore.sync()
         await updatePurchasedProducts()
         return isPro
     }
@@ -207,14 +215,18 @@ final class SubscriptionManager {
         }
 
         purchasedProductIDs = newPurchased
-        UserDefaults.standard.set(!newPurchased.isEmpty, forKey: "cachedIsPro")
+        Self.keychainSave(!newPurchased.isEmpty)
     }
 
     private func listenForTransactions() -> Task<Void, Error> {
         Task.detached { [weak self] in
             for await result in Transaction.updates {
-                if case .verified(let transaction) = result {
+                switch result {
+                case .verified(let transaction):
                     await self?.updatePurchasedProducts()
+                    await transaction.finish()
+                case .unverified(let transaction, _):
+                    // Don't grant entitlement, but finish so StoreKit stops resending it.
                     await transaction.finish()
                 }
             }
@@ -228,5 +240,35 @@ final class SubscriptionManager {
         case .unverified(_, let error):
             throw error
         }
+    }
+
+    // MARK: - Keychain Cache (more tamper-resistant than UserDefaults)
+
+    private static let keychainService = "idanidev.RepoMind"
+    private static let keychainAccount = "cachedIsPro"
+
+    private static func keychainSave(_ flag: Bool) {
+        let deleteQuery: [CFString: Any] = [
+            kSecClass: kSecClassGenericPassword,
+            kSecAttrService: keychainService,
+            kSecAttrAccount: keychainAccount
+        ]
+        SecItemDelete(deleteQuery as CFDictionary)
+        guard flag else { return }
+        var addQuery = deleteQuery
+        addQuery[kSecValueData] = Data([1])
+        SecItemAdd(addQuery as CFDictionary, nil)
+    }
+
+    private static func keychainRead() -> Bool {
+        let query: [CFString: Any] = [
+            kSecClass: kSecClassGenericPassword,
+            kSecAttrService: keychainService,
+            kSecAttrAccount: keychainAccount,
+            kSecReturnData: true,
+            kSecMatchLimit: kSecMatchLimitOne
+        ]
+        var result: AnyObject?
+        return SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess
     }
 }

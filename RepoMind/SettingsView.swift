@@ -1,17 +1,42 @@
 import StoreKit
 import SwiftData
 import SwiftUI
+import UniformTypeIdentifiers
+
+// MARK: - Backup Document
+
+struct BackupDocument: FileDocument {
+    static var readableContentTypes: [UTType] { [.json] }
+    var data: Data
+
+    init(data: Data) { self.data = data }
+
+    init(configuration: ReadConfiguration) throws {
+        guard let data = configuration.file.regularFileContents else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        self.data = data
+    }
+
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        FileWrapper(regularFileWithContents: data)
+    }
+}
+
+// MARK: - Settings View
 
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.modelContext) private var modelContext
-    @Query private var repos: [ProjectRepo]
-    @Query private var accounts: [GitHubAccount]
+    @Environment(\.modelContext) private var context
 
-    @State private var isSearchingIcons = false
-    @State private var iconsFound = 0
+    @Query private var repos: [ProjectRepo]
+
     @State private var showPaywall = false
     @State private var showManageSubscription = false
+    @State private var showExporter = false
+    @State private var showImporter = false
+    @State private var backupDocument: BackupDocument?
+    @State private var isImporting = false
 
     private let subscription = SubscriptionManager.shared
 
@@ -24,30 +49,6 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             List {
-                // MARK: - Iconos de repos
-
-                Section {
-                    Button {
-                        Task {
-                            await searchAllIcons()
-                        }
-                    } label: {
-                        HStack {
-                            Label("search_app_icons_button", systemImage: "photo.badge.arrow.down")
-                            Spacer()
-                            if isSearchingIcons {
-                                ProgressView()
-                                    .controlSize(.small)
-                            }
-                        }
-                    }
-                    .disabled(isSearchingIcons)
-                } header: {
-                    Text("repositories_title")
-                } footer: {
-                    Text("search_icons_footer")
-                }
-
                 // MARK: - Subscription
 
                 Section("subscription_header") {
@@ -77,21 +78,25 @@ struct SettingsView: View {
 
                     Button {
                         Task {
-                            let restored = await subscription.restorePurchases()
-                            if restored {
-                                ToastManager.shared.show(
-                                    String(localized: "restore_success_toast"),
-                                    style: .success
-                                )
-                            } else {
-                                ToastManager.shared.show(
-                                    String(localized: "restore_no_purchases_toast"),
-                                    style: .info
-                                )
+                            do {
+                                let restored = try await subscription.restorePurchases()
+                                if restored {
+                                    ToastManager.shared.show(
+                                        String(localized: "restore_success_toast"),
+                                        style: .success
+                                    )
+                                } else {
+                                    ToastManager.shared.show(
+                                        String(localized: "restore_no_purchases_toast"),
+                                        style: .info
+                                    )
+                                }
+                            } catch {
+                                ToastManager.shared.show(error.localizedDescription, style: .error)
                             }
                         }
                     } label: {
-                        if subscription.isLoading {
+                        if subscription.isRestoring {
                             HStack {
                                 Text("restore_purchases_button")
                                 Spacer()
@@ -102,7 +107,37 @@ struct SettingsView: View {
                             Text("restore_purchases_button")
                         }
                     }
-                    .disabled(subscription.isLoading)
+                    .disabled(subscription.isRestoring)
+                }
+
+                // MARK: - Backup
+
+                Section {
+                    Button {
+                        exportBackup()
+                    } label: {
+                        Label("export_backup_button", systemImage: "square.and.arrow.up")
+                    }
+                    .disabled(repos.isEmpty)
+
+                    Button {
+                        showImporter = true
+                    } label: {
+                        if isImporting {
+                            HStack {
+                                Text("import_backup_button")
+                                Spacer()
+                                ProgressView().controlSize(.small)
+                            }
+                        } else {
+                            Label("import_backup_button", systemImage: "square.and.arrow.down")
+                        }
+                    }
+                    .disabled(isImporting)
+                } header: {
+                    Text("backup_section_header")
+                } footer: {
+                    Text("backup_footer")
                 }
 
                 // MARK: - Debug (solo en desarrollo)
@@ -159,66 +194,170 @@ struct SettingsView: View {
                 PaywallView()
             }
             .manageSubscriptionsSheet(isPresented: $showManageSubscription)
+            .fileExporter(
+                isPresented: $showExporter,
+                document: backupDocument,
+                contentType: .json,
+                defaultFilename: "repomind-backup"
+            ) { result in
+                if case .failure(let error) = result {
+                    ToastManager.shared.show(error.localizedDescription, style: .error)
+                }
+            }
+            .fileImporter(
+                isPresented: $showImporter,
+                allowedContentTypes: [.json],
+                allowsMultipleSelection: false
+            ) { result in
+                Task { await handleImport(result) }
+            }
         }
         .presentationDetents([.large])
         .frame(idealWidth: 500)
     }
 
-    // MARK: - Search Icons
+    // MARK: - Export
 
-    private func searchAllIcons() async {
-        isSearchingIcons = true
-        iconsFound = 0
+    private func exportBackup() {
+        do {
+            backupDocument = BackupDocument(data: try buildBackupJSON())
+            showExporter = true
+        } catch {
+            ToastManager.shared.show(error.localizedDescription, style: .error)
+        }
+    }
 
-        // Filtrar repos iOS sin logo
-        let iosRepos = repos.filter {
-            ($0.language == "Swift" || $0.language == "Objective-C") && $0.logoURL == nil
+    private func buildBackupJSON() throws -> Data {
+        struct BTask: Codable {
+            let content: String
+            let status: String
+            let orderIndex: Int
+        }
+        struct BColumn: Codable {
+            let name: String
+            let orderIndex: Int
+            let colorHex: String
+            let tasks: [BTask]
+        }
+        struct BRepo: Codable {
+            let name: String
+            let description: String
+            let isLocal: Bool
+            let logoURL: String?
+            let columns: [BColumn]
+        }
+        struct BRoot: Codable {
+            let version: Int
+            let exportedAt: String
+            let repos: [BRepo]
         }
 
-        guard !iosRepos.isEmpty else {
-            isSearchingIcons = false
-            ToastManager.shared.show(String(localized: "no_ios_repos_icon_toast"), style: .info)
-            return
+        let repoBackups = repos.map { repo -> BRepo in
+            let cols = (repo.columns ?? []).sorted { $0.orderIndex < $1.orderIndex }
+            let colBackups = cols.map { col -> BColumn in
+                let tasks = (col.tasks ?? []).sorted { $0.orderIndex < $1.orderIndex }
+                let taskBackups = tasks.map { BTask(content: $0.content, status: $0.status, orderIndex: $0.orderIndex) }
+                return BColumn(name: col.name, orderIndex: col.orderIndex, colorHex: col.colorHex, tasks: taskBackups)
+            }
+            return BRepo(name: repo.name, description: repo.repoDescription, isLocal: repo.isLocal, logoURL: repo.logoURL, columns: colBackups)
         }
 
-        ToastManager.shared.show(String(format: String(localized: "searching_icons_progress"), iosRepos.count), style: .info)
+        let root = BRoot(
+            version: 1,
+            exportedAt: ISO8601DateFormatter().string(from: .now),
+            repos: repoBackups
+        )
 
-        for repo in iosRepos {
-            guard let account = repo.account else { continue }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        return try encoder.encode(root)
+    }
 
-            do {
-                if let token = try await KeychainManager.shared.retrieveToken(for: account.tokenKey)
-                {
-                    // Extraer owner del htmlURL
-                    let owner: String
-                    if let url = URL(string: repo.htmlURL), url.pathComponents.count >= 2 {
-                        owner = url.pathComponents[1]
-                    } else {
-                        owner = account.username
-                    }
+    // MARK: - Import
 
-                    if let logoURL = await GitHubService.shared.fetchRepoLogoURL(
-                        owner: owner, repo: repo.name, token: token)
-                    {
-                        await MainActor.run {
-                            repo.logoURL = logoURL
-                            iconsFound += 1
-                        }
+    private func handleImport(_ result: Result<[URL], Error>) async {
+        isImporting = true
+        defer { isImporting = false }
+
+        do {
+            guard let url = try result.get().first else { return }
+
+            guard url.startAccessingSecurityScopedResource() else { return }
+            defer { url.stopAccessingSecurityScopedResource() }
+
+            let data = try Data(contentsOf: url)
+
+            struct BTask: Codable {
+                let content: String
+                let status: String
+                let orderIndex: Int
+            }
+            struct BColumn: Codable {
+                let name: String
+                let orderIndex: Int
+                let colorHex: String
+                let tasks: [BTask]
+            }
+            struct BRepo: Codable {
+                let name: String
+                let description: String
+                let isLocal: Bool
+                let logoURL: String?
+                let columns: [BColumn]
+            }
+            struct BRoot: Codable {
+                let version: Int
+                let exportedAt: String
+                let repos: [BRepo]
+            }
+
+            let backup = try JSONDecoder().decode(BRoot.self, from: data)
+
+            for repoData in backup.repos {
+                let repo = ProjectRepo(
+                    repoID: 0,
+                    name: repoData.name,
+                    repoDescription: repoData.description,
+                    isLocal: repoData.isLocal,
+                    logoURL: repoData.logoURL
+                )
+                context.insert(repo)
+
+                for colData in repoData.columns {
+                    let col = KanbanColumn(
+                        name: colData.name,
+                        orderIndex: colData.orderIndex,
+                        colorHex: colData.colorHex,
+                        project: repo
+                    )
+                    context.insert(col)
+
+                    for taskData in colData.tasks {
+                        let task = TaskItem(
+                            content: taskData.content,
+                            status: taskData.status,
+                            column: col,
+                            project: repo,
+                            orderIndex: taskData.orderIndex
+                        )
+                        context.insert(task)
                     }
                 }
-            } catch { }
-        }
+            }
 
-        isSearchingIcons = false
+            try context.save()
 
-        if iconsFound > 0 {
-            ToastManager.shared.show(String(format: String(localized: "icons_found_toast"), iconsFound), style: .success)
-        } else {
-            ToastManager.shared.show(String(localized: "no_icons_found_toast"), style: .info)
+            ToastManager.shared.show(
+                String(format: String(localized: "import_success_toast"), backup.repos.count),
+                style: .success
+            )
+        } catch {
+            ToastManager.shared.show(error.localizedDescription, style: .error)
         }
     }
 }
 
 #Preview {
     SettingsView()
+        .modelContainer(for: [ProjectRepo.self, KanbanColumn.self, TaskItem.self], inMemory: true)
 }

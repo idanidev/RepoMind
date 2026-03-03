@@ -20,25 +20,25 @@ actor KeychainManager {
             throw KeychainError.encodingFailed
         }
 
-        // Delete existing item first
-        let deleteQuery: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: accountKey,
-            kSecAttrSynchronizable as String: true,  // Ensure duplicate checks match sync items
-        ]
-        SecItemDelete(deleteQuery as CFDictionary)
+        // Delete existing item first (cover both old synced items and new non-synced ones)
+        for syncable in [true, false] as [Bool] {
+            let deleteQuery: [String: Any] = [
+                kSecClass as String: kSecClassGenericPassword,
+                kSecAttrService as String: service,
+                kSecAttrAccount as String: accountKey,
+                kSecAttrSynchronizable as String: syncable,
+            ]
+            SecItemDelete(deleteQuery as CFDictionary)
+        }
 
-        // Add new item
+        // Add new item — stored only on this device, never uploaded to iCloud Keychain
         let addQuery: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: accountKey,
             kSecValueData as String: data,
-            // Allow iCloud Keychain Sync
-            kSecAttrSynchronizable as String: true,
-            // Accessible when unlocked (synced items have constraints)
-            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlocked,
+            kSecAttrSynchronizable as String: false,
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
         ]
 
         let status = SecItemAdd(addQuery as CFDictionary, nil)
@@ -50,46 +50,52 @@ actor KeychainManager {
     // MARK: - Retrieve Token
 
     func retrieveToken(for accountKey: String = "github-pat") throws -> String? {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: accountKey,
-            kSecAttrSynchronizable as String: true,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne,
-        ]
+        // Try non-synced (current format) first, fall back to legacy synced items
+        for syncable in [false, true] as [Bool] {
+            let query: [String: Any] = [
+                kSecClass as String: kSecClassGenericPassword,
+                kSecAttrService as String: service,
+                kSecAttrAccount as String: accountKey,
+                kSecAttrSynchronizable as String: syncable,
+                kSecReturnData as String: true,
+                kSecMatchLimit as String: kSecMatchLimitOne,
+            ]
 
-        var result: AnyObject?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
+            var result: AnyObject?
+            let status = SecItemCopyMatching(query as CFDictionary, &result)
 
-        switch status {
-        case errSecSuccess:
-            guard let data = result as? Data,
-                let token = String(data: data, encoding: .utf8)
-            else {
-                throw KeychainError.decodingFailed
+            switch status {
+            case errSecSuccess:
+                guard let data = result as? Data,
+                    let token = String(data: data, encoding: .utf8)
+                else {
+                    throw KeychainError.decodingFailed
+                }
+                return token
+            case errSecItemNotFound:
+                continue
+            default:
+                throw KeychainError.retrieveFailed(status)
             }
-            return token
-        case errSecItemNotFound:
-            return nil
-        default:
-            throw KeychainError.retrieveFailed(status)
         }
+        return nil
     }
 
     // MARK: - Delete Token
 
     func deleteToken(for accountKey: String = "github-pat") throws {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: accountKey,
-            kSecAttrSynchronizable as String: true,
-        ]
-
-        let status = SecItemDelete(query as CFDictionary)
-        guard status == errSecSuccess || status == errSecItemNotFound else {
-            throw KeychainError.deleteFailed(status)
+        // Delete both non-synced and legacy synced items
+        for syncable in [false, true] as [Bool] {
+            let query: [String: Any] = [
+                kSecClass as String: kSecClassGenericPassword,
+                kSecAttrService as String: service,
+                kSecAttrAccount as String: accountKey,
+                kSecAttrSynchronizable as String: syncable,
+            ]
+            let status = SecItemDelete(query as CFDictionary)
+            guard status == errSecSuccess || status == errSecItemNotFound else {
+                throw KeychainError.deleteFailed(status)
+            }
         }
     }
 
@@ -163,7 +169,7 @@ final class BiometricAuthManager {
         do {
             let success = try await context.evaluatePolicy(
                 .deviceOwnerAuthenticationWithBiometrics,
-                localizedReason: "Unlock GitVoiceManager to access your repositories."
+                localizedReason: String(localized: "biometric_reason")
             )
             isAuthenticated = success
         } catch {

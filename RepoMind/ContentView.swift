@@ -1,3 +1,4 @@
+import PhotosUI
 import SwiftData
 import SwiftUI
 
@@ -81,6 +82,13 @@ struct RepoListView: View {
     // ✅ FIX: Cached filtered repos (Performance)
     @State private var filteredRepos: [ProjectRepo] = []
 
+    @AppStorage("lastSyncTimestamp") private var lastSyncTimestamp: Double = 0
+    private let autoSyncInterval: TimeInterval = 5 * 60 // 5 minutes
+
+    private var shouldAutoSync: Bool {
+        repos.isEmpty || Date().timeIntervalSince1970 - lastSyncTimestamp > autoSyncInterval
+    }
+
     var body: some View {
         NavigationStack {
             Group {
@@ -100,7 +108,7 @@ struct RepoListView: View {
             }
             .task {
                 updateFilteredRepos()
-                if repos.isEmpty {
+                if shouldAutoSync {
                     await syncRepos()
                 }
             }
@@ -111,10 +119,18 @@ struct RepoListView: View {
             .onChange(of: activeFilter) { _, _ in
                 updateFilteredRepos()
             }
-            .onChange(of: searchText) { _, _ in
+            .onChange(of: selectedAccount) { _, _ in
                 updateFilteredRepos()
             }
-            .onChange(of: selectedAccount) { _, _ in
+            .onChange(of: subscription.isPro) { _, _ in
+                updateFilteredRepos()
+            }
+            // Debounce search so filtering doesn't fire on every keystroke
+            .task(id: searchText) {
+                if !searchText.isEmpty {
+                    try? await Task.sleep(for: .milliseconds(300))
+                }
+                guard !Task.isCancelled else { return }
                 updateFilteredRepos()
             }
             .sheet(isPresented: $showSettings) {
@@ -125,6 +141,10 @@ struct RepoListView: View {
             }
             .sheet(item: $repoToConfigureIcon) { repo in
                 RepoIconConfigSheet(repo: repo)
+            }
+            .sheet(isPresented: $showAddLocalProject) {
+                AddLocalProjectSheet()
+                    .environment(\.modelContext, context)
             }
         }
     }
@@ -156,9 +176,7 @@ struct RepoListView: View {
         }
 
         var sorted = result.sorted { lhs, rhs in
-            if lhs.isFavorite != rhs.isFavorite {
-                return lhs.isFavorite
-            }
+            if lhs.isFavorite != rhs.isFavorite { return lhs.isFavorite }
             return lhs.updatedAt > rhs.updatedAt
         }
 
@@ -174,14 +192,19 @@ struct RepoListView: View {
             }
         }
 
-        filteredRepos = sorted
+        withAnimation(.smooth(duration: 0.35)) {
+            filteredRepos = sorted
+        }
     }
 
     // MARK: - Toolbar
 
     @State private var showSettings = false
     @State private var showPaywall = false
+    @State private var showAddLocalProject = false
     @State private var subscription = SubscriptionManager.shared
+    private static let syncSuccessFeedback = UINotificationFeedbackGenerator()
+    private static let deleteImpactFeedback = UIImpactFeedbackGenerator(style: .medium)
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
@@ -196,6 +219,14 @@ struct RepoListView: View {
                     Label("settings_label", systemImage: "gearshape")
                 }
                 .accessibilityLabel("settings_label")
+
+                Button {
+                    showAddLocalProject = true
+                } label: {
+                    Label("add_local_project_label", systemImage: "folder.badge.plus")
+                }
+                .labelStyle(.iconOnly)
+                .accessibilityLabel("add_local_project_label")
 
                 filterMenu
                 syncButton
@@ -375,14 +406,9 @@ struct RepoListView: View {
 
     private func toggleFavorite(for repo: ProjectRepo) async {
         let wasStarred = repo.isFavorite
+        repo.isFavorite.toggle()
+        updateFilteredRepos()
 
-        // Actualizar localmente primero (optimistic update)
-        withAnimation {
-            repo.isFavorite.toggle()
-            updateFilteredRepos()
-        }
-
-        // Sincronizar con GitHub
         guard let account = repo.account else { return }
 
         do {
@@ -396,11 +422,8 @@ struct RepoListView: View {
                 }
             }
         } catch {
-            // Revertir si falla
-            withAnimation {
-                repo.isFavorite = wasStarred
-                updateFilteredRepos()
-            }
+            repo.isFavorite = wasStarred
+            updateFilteredRepos()
             ToastManager.shared.show(
                 String(localized: "github_sync_error"), style: .error)
         }
@@ -408,6 +431,7 @@ struct RepoListView: View {
 
     private func deleteButton(for repo: ProjectRepo) -> some View {
         Button(role: .destructive) {
+            Self.deleteImpactFeedback.impactOccurred()
             withAnimation { context.delete(repo) }
         } label: {
             Label("delete_task", systemImage: "trash")
@@ -493,8 +517,11 @@ struct RepoListView: View {
                 }
             }
 
+            lastSyncTimestamp = Date().timeIntervalSince1970
+
             if !repos.isEmpty {
                 ToastManager.shared.show(String(localized: "repos_synced_toast"), style: .success)
+                Self.syncSuccessFeedback.notificationOccurred(.success)
             }
         } catch {
             ToastManager.shared.show(error.localizedDescription, style: .error)
@@ -504,7 +531,7 @@ struct RepoListView: View {
     private func logout() {
         Task {
             try? context.delete(model: GitHubAccount.self)
-            try? context.delete(model: ProjectRepo.self)
+            // Repos y tareas se conservan (account = nil) y se reconectan al volver a iniciar sesión
             try? await KeychainManager.shared.deleteToken()
 
             // Reset mock Pro state on logout
@@ -564,7 +591,10 @@ struct RepoRow: View {
     let repo: ProjectRepo
 
     private var taskCount: Int {
-        repo.tasks?.count ?? 0
+        guard let tasks = repo.tasks, !tasks.isEmpty else { return 0 }
+        // Excluir tareas en la última columna (done)
+        let lastColumnId = repo.columns?.max(by: { $0.orderIndex < $1.orderIndex })?.id
+        return tasks.filter { $0.column?.id != lastColumnId }.count
     }
 
     var body: some View {
@@ -735,270 +765,460 @@ struct RepoRow: View {
     }
 }
 
-// MARK: - Repo Icon Config Sheet
+// MARK: - Add Local Project Sheet
 
-struct RepoIconConfigSheet: View {
-    @Bindable var repo: ProjectRepo
+struct AddLocalProjectSheet: View {
+    @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
 
-    @State private var iconPath: String = ""
-    @State private var isSearching = false
-    @State private var isSaving = false
-    @State private var errorMessage: String?
+    @Query private var allRepos: [ProjectRepo]
+
+    @State private var name = ""
+    @State private var description = ""
+    @State private var photoItem: PhotosPickerItem?
+    @State private var selectedIconURL: String?
 
     var body: some View {
         NavigationStack {
             Form {
-                // Vista previa del icono actual
-                Section {
+                // Icon picker
+                Section("local_project_icon_header") {
                     HStack {
                         Spacer()
-                        currentIconPreview
+                        PhotosPicker(selection: $photoItem, matching: .images, photoLibrary: .shared()) {
+                            Group {
+                                if let urlStr = selectedIconURL, let url = URL(string: urlStr) {
+                                    AsyncImage(url: url) { phase in
+                                        switch phase {
+                                        case .success(let image):
+                                            image.resizable().aspectRatio(contentMode: .fill)
+                                        default:
+                                            iconPlaceholder
+                                        }
+                                    }
+                                } else {
+                                    iconPlaceholder
+                                }
+                            }
+                            .frame(width: 80, height: 80)
+                            .clipShape(RoundedRectangle(cornerRadius: 18))
+                            .overlay(alignment: .bottomTrailing) {
+                                Image(systemName: "plus.circle.fill")
+                                    .font(.title3)
+                                    .foregroundStyle(.white, .purple)
+                                    .offset(x: 4, y: 4)
+                            }
+                        }
                         Spacer()
                     }
-                } header: {
-                    Text("icon_current_header")
+                    .padding(.vertical, 4)
                 }
 
-                // Ruta personalizada
                 Section {
-                    TextField("icon_path_placeholder", text: $iconPath)
-                        .textInputAutocapitalization(.never)
+                    TextField("local_project_name_placeholder", text: $name)
                         .autocorrectionDisabled()
-                        .onChange(of: iconPath) { _, _ in
-                            errorMessage = nil
-                        }
-
-                    Text("icon_path_example")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-
-                    // Mostrar error dentro del formulario
-                    if let error = errorMessage {
-                        HStack {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .foregroundStyle(.orange)
-                            Text(error)
-                                .font(.caption)
-                                .foregroundStyle(.red)
-                        }
-                        .padding(.vertical, 4)
-                    }
                 } header: {
-                    Text("icon_path_header")
-                } footer: {
-                    Text("icon_path_footer")
+                    Text("local_project_name_header")
                 }
 
-                // Buscar automáticamente
                 Section {
-                    Button {
-                        Task {
-                            await searchForIcon()
-                        }
-                    } label: {
-                        HStack {
-                            if isSearching {
-                                ProgressView()
-                                    .padding(.trailing, 8)
-                            }
-                            Text(isSearching ? "icon_searching" : "icon_search_button")
-                        }
-                    }
-                    .disabled(isSearching)
+                    TextField("local_project_description_placeholder", text: $description, axis: .vertical)
+                        .lineLimit(3...5)
+                } header: {
+                    Text("local_project_description_header")
                 } footer: {
-                    Text("icon_search_footer")
-                }
-
-                // Quitar icono
-                if repo.logoURL != nil {
-                    Section {
-                        Button(role: .destructive) {
-                            repo.logoURL = nil
-                            dismiss()
-                        } label: {
-                            Text("icon_remove_button")
-                        }
-                    }
+                    Text("local_project_footer")
                 }
             }
-            .navigationTitle("icon_configure_title")
+            .navigationTitle("add_local_project_title")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("cancel_button") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    if isSaving {
-                        ProgressView()
-                            .controlSize(.small)
+                    Button("save_button") {
+                        createLocalProject()
+                    }
+                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+        .presentationDetents([.large])
+        .onChange(of: photoItem) { _, newItem in
+            guard let newItem else { return }
+            Task { await savePhoto(newItem) }
+        }
+    }
+
+    private var iconPlaceholder: some View {
+        RoundedRectangle(cornerRadius: 18)
+            .fill(Color(.tertiarySystemFill))
+            .overlay {
+                Image(systemName: "photo.badge.plus")
+                    .font(.largeTitle)
+                    .foregroundStyle(.secondary)
+            }
+    }
+
+    private func savePhoto(_ item: PhotosPickerItem) async {
+        guard let data = try? await item.loadTransferable(type: Data.self),
+              let uiImage = UIImage(data: data),
+              let jpegData = uiImage.jpegData(compressionQuality: 0.8),
+              let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+        else { return }
+
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let fileURL = dir.appendingPathComponent(UUID().uuidString + ".jpg")
+        try? jpegData.write(to: fileURL)
+        selectedIconURL = fileURL.absoluteString
+    }
+
+    private func createLocalProject() {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else { return }
+
+        guard SubscriptionManager.shared.canAddRepo(currentCount: allRepos.count) else {
+            ToastManager.shared.show(String(localized: "repo_limit_upgrade"), style: .info)
+            return
+        }
+
+        let repo = ProjectRepo(
+            repoID: 0,
+            name: trimmedName,
+            repoDescription: description.trimmingCharacters(in: .whitespacesAndNewlines),
+            isLocal: true,
+            logoURL: selectedIconURL
+        )
+        context.insert(repo)
+        try? context.save()
+
+        ToastManager.shared.show(String(localized: "local_project_created_toast"), style: .success)
+        dismiss()
+    }
+}
+
+// MARK: - Repo Icon Config Sheet (File Browser)
+
+struct RepoIconConfigSheet: View {
+    @Bindable var repo: ProjectRepo
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var token: String?
+    @State private var pathStack: [RepoContentItem] = []
+    @State private var items: [RepoContentItem] = []
+    @State private var isLoading = false
+    @State private var errorMessage: String?
+    @State private var photoItem: PhotosPickerItem?
+    @State private var isSavingPhoto = false
+
+    private var owner: String {
+        if let url = URL(string: repo.htmlURL), url.pathComponents.count >= 2 {
+            return url.pathComponents[1]
+        }
+        return repo.account?.username ?? ""
+    }
+
+    private var currentPath: String {
+        pathStack.last?.path ?? ""
+    }
+
+    private var navigationTitle: String {
+        pathStack.last?.name ?? repo.name
+    }
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if repo.isLocal {
+                    localRepoIconView
+                } else if isLoading && items.isEmpty {
+                    ProgressView()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if let error = errorMessage, items.isEmpty {
+                    errorStateView(error)
+                } else {
+                    fileListView
+                }
+            }
+            .navigationTitle(navigationTitle)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    if pathStack.isEmpty {
+                        Button("cancel_button") { dismiss() }
                     } else {
-                        Button("save_button") {
-                            saveIconPath()
+                        Button {
+                            navigateUp()
+                        } label: {
+                            HStack(spacing: 2) {
+                                Image(systemName: "chevron.left")
+                                    .fontWeight(.semibold)
+                                Text("back_button")
+                            }
                         }
-                        .disabled(iconPath.isEmpty)
+                    }
+                }
+                if repo.logoURL != nil {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button(role: .destructive) {
+                            repo.logoURL = nil
+                            dismiss()
+                        } label: {
+                            Text("icon_remove_button")
+                                .foregroundStyle(.red)
+                        }
                     }
                 }
             }
-            .onAppear {
-                // Extraer path del URL actual si existe
-                if let url = repo.logoURL, url.contains("raw.githubusercontent.com") {
-                    // Extraer la parte del path
-                    let parts = url.components(separatedBy: "/")
-                    if let mainIndex = parts.firstIndex(of: "main") ?? parts.firstIndex(of: "master")
-                    {
-                        iconPath = parts.dropFirst(mainIndex + 1).joined(separator: "/")
-                    }
-                }
+            .task {
+                await loadToken()
+                guard !repo.isLocal else { return }
+                await loadContents(path: "")
             }
         }
         .presentationDetents([.medium, .large])
     }
 
-    @ViewBuilder
-    private var currentIconPreview: some View {
-        if let logoURL = repo.logoURL, let url = URL(string: logoURL) {
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .success(let image):
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                case .failure:
-                    iconPlaceholder(text: "Error")
-                case .empty:
-                    ProgressView()
-                @unknown default:
-                    iconPlaceholder(text: "?")
-                }
-            }
-            .frame(width: 80, height: 80)
-            .clipShape(RoundedRectangle(cornerRadius: 16))
-        } else {
-            iconPlaceholder(text: String(localized: "icon_no_icon"))
-        }
-    }
+    // MARK: - File List
 
-    private func iconPlaceholder(text: String) -> some View {
-        RoundedRectangle(cornerRadius: 16)
-            .fill(Color(.tertiarySystemFill))
-            .frame(width: 80, height: 80)
-            .overlay {
-                VStack(spacing: 4) {
-                    Image(systemName: "photo")
-                        .font(.title2)
-                    Text(text)
-                        .font(.caption2)
-                }
-                .foregroundStyle(.secondary)
-            }
-    }
-
-    private func saveIconPath() {
-        guard !iconPath.isEmpty else {
-            dismiss()
-            return
-        }
-
-        // Extraer owner del htmlURL del repo (más preciso que account.username)
-        let owner: String
-        if let htmlURL = URL(string: repo.htmlURL),
-           htmlURL.pathComponents.count >= 2
-        {
-            owner = htmlURL.pathComponents[1]
-        } else if let account = repo.account {
-            owner = account.username
-        } else {
-            errorMessage = String(localized: "icon_owner_error")
-            return
-        }
-
-        // Limpiar el path (solo quitar espacios y slashes al inicio/final)
-        let cleanPath = iconPath.trimmingCharacters(in: CharacterSet(charactersIn: "/ "))
-
-        #if DEBUG
-        print("🔍 Configurando icono: owner=\(owner) repo=\(repo.name) path=\(cleanPath)")
-        #endif
-
-        // Intentar construir la URL y verificarla
-        isSaving = true
-        errorMessage = nil
-
-        Task {
-            let branches = ["main", "master", "develop"]
-            var foundURL: String?
-
-            for branch in branches {
-                let testURL =
-                    "https://raw.githubusercontent.com/\(owner)/\(repo.name)/\(branch)/\(cleanPath)"
-
-                if let url = URL(string: testURL) {
-                    var request = URLRequest(url: url)
-                    request.httpMethod = "HEAD"
-
-                    do {
-                        let (_, response) = try await URLSession.shared.data(for: request)
-                        if let httpResponse = response as? HTTPURLResponse,
-                           httpResponse.statusCode == 200 {
-                            foundURL = testURL
-                            break
+    private var fileListView: some View {
+        List {
+            // Current icon preview
+            if let logoURL = repo.logoURL, let url = URL(string: logoURL) {
+                Section("icon_current_header") {
+                    HStack {
+                        Spacer()
+                        AsyncImage(url: url) { phase in
+                            switch phase {
+                            case .success(let image):
+                                image.resizable().aspectRatio(contentMode: .fit)
+                            default:
+                                Image(systemName: "photo")
+                                    .font(.title2)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
-                    } catch { }
+                        .frame(width: 64, height: 64)
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                        Spacer()
+                    }
+                    .padding(.vertical, 4)
                 }
             }
 
-            await MainActor.run {
-                isSaving = false
+            let folders = items.filter { $0.type == "dir" }
+            let images = items.filter { $0.isImage }
 
-                if let url = foundURL {
-                    repo.logoURL = url
-                    ToastManager.shared.show(String(localized: "icon_configured_toast"), style: .success)
-                    dismiss()
-                } else {
-                    errorMessage = String(localized: "icon_not_found_error")
+            if !folders.isEmpty {
+                Section("browser_folders_header") {
+                    ForEach(folders) { item in
+                        Button {
+                            Task { await navigateInto(item) }
+                        } label: {
+                            Label(item.name, systemImage: "folder.fill")
+                                .foregroundStyle(.primary)
+                        }
+                    }
                 }
+            }
+
+            if !images.isEmpty {
+                Section("browser_images_header") {
+                    ForEach(images) { item in
+                        Button {
+                            selectImage(item)
+                        } label: {
+                            HStack(spacing: 12) {
+                                Group {
+                                    if let urlStr = item.downloadUrl, let url = URL(string: urlStr) {
+                                        AsyncImage(url: url) { phase in
+                                            switch phase {
+                                            case .success(let image):
+                                                image.resizable().aspectRatio(contentMode: .fill)
+                                            default:
+                                                Image(systemName: "photo")
+                                                    .foregroundStyle(.secondary)
+                                            }
+                                        }
+                                    } else {
+                                        Image(systemName: "photo").foregroundStyle(.secondary)
+                                    }
+                                }
+                                .frame(width: 44, height: 44)
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                                Text(item.name)
+                                    .foregroundStyle(.primary)
+                                    .lineLimit(1)
+
+                                Spacer()
+
+                                if repo.logoURL == item.downloadUrl {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .foregroundStyle(.purple)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if folders.isEmpty && images.isEmpty && !isLoading {
+                Section {
+                    Text("browser_empty_folder")
+                        .foregroundStyle(.secondary)
+                        .italic()
+                }
+            }
+        }
+        .listStyle(.insetGrouped)
+        .overlay {
+            if isLoading {
+                ProgressView()
+                    .padding()
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
             }
         }
     }
 
-    private func searchForIcon() async {
-        guard let account = repo.account else {
-            errorMessage = String(localized: "icon_no_account_error")
-            return
+    // MARK: - Local Repo Photo Picker
+
+    private var localRepoIconView: some View {
+        List {
+            if let logoURL = repo.logoURL, let url = URL(string: logoURL) {
+                Section("icon_current_header") {
+                    HStack {
+                        Spacer()
+                        AsyncImage(url: url) { phase in
+                            switch phase {
+                            case .success(let image):
+                                image.resizable().aspectRatio(contentMode: .fit)
+                            default:
+                                Image(systemName: "photo")
+                                    .font(.title2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .frame(width: 64, height: 64)
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                        Spacer()
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+
+            Section {
+                PhotosPicker(
+                    selection: $photoItem,
+                    matching: .images,
+                    photoLibrary: .shared()
+                ) {
+                    Label("local_icon_pick_photo", systemImage: "photo.on.rectangle")
+                        .foregroundStyle(.primary)
+                }
+
+                if isSavingPhoto {
+                    HStack {
+                        Text("local_icon_saving")
+                        Spacer()
+                        ProgressView().controlSize(.small)
+                    }
+                }
+            } footer: {
+                Text("local_icon_footer")
+            }
         }
+        .listStyle(.insetGrouped)
+        .onChange(of: photoItem) { _, newItem in
+            guard let newItem else { return }
+            Task { await saveLocalPhoto(newItem) }
+        }
+    }
 
-        isSearching = true
+    private func errorStateView(_ message: String) -> some View {
+        VStack(spacing: 16) {
+            Image(systemName: "wifi.exclamationmark")
+                .font(.largeTitle)
+                .foregroundStyle(.secondary)
+            Text(message)
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal)
+            Button("retry_button") {
+                Task { await loadContents(path: currentPath) }
+            }
+            .buttonStyle(.bordered)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: - Navigation
+
+    private func navigateInto(_ item: RepoContentItem) async {
+        pathStack.append(item)
+        await loadContents(path: item.path)
+    }
+
+    private func navigateUp() {
+        pathStack.removeLast()
+        let path = pathStack.last?.path ?? ""
+        Task { await loadContents(path: path) }
+    }
+
+    private func selectImage(_ item: RepoContentItem) {
+        guard let downloadUrl = item.downloadUrl else { return }
+        repo.logoURL = downloadUrl
+        ToastManager.shared.show(String(localized: "icon_configured_toast"), style: .success)
+        dismiss()
+    }
+
+    // MARK: - Local Photo Save
+
+    private func saveLocalPhoto(_ item: PhotosPickerItem) async {
+        isSavingPhoto = true
+        defer { isSavingPhoto = false }
+
+        guard let data = try? await item.loadTransferable(type: Data.self),
+              let uiImage = UIImage(data: data),
+              let jpegData = uiImage.jpegData(compressionQuality: 0.8)
+        else { return }
+
+        let filename = UUID().uuidString + ".jpg"
+        guard let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+        else { return }
+
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let fileURL = dir.appendingPathComponent(filename)
+        try? jpegData.write(to: fileURL)
+
+        repo.logoURL = fileURL.absoluteString
+        ToastManager.shared.show(String(localized: "icon_configured_toast"), style: .success)
+        dismiss()
+    }
+
+    // MARK: - Data Loading
+
+    private func loadToken() async {
+        guard let account = repo.account else { return }
+        token = try? await KeychainManager.shared.retrieveToken(for: account.tokenKey)
+    }
+
+    private func loadContents(path: String) async {
+        guard let token, !owner.isEmpty else { return }
+        isLoading = true
         errorMessage = nil
-
         do {
-            if let token = try await KeychainManager.shared.retrieveToken(for: account.tokenKey) {
-                let owner: String
-                if let htmlURL = URL(string: repo.htmlURL),
-                   htmlURL.pathComponents.count >= 2 {
-                    owner = htmlURL.pathComponents[1]
-                } else {
-                    owner = account.username
-                }
-
-                if let foundURL = await GitHubService.shared.fetchRepoLogoURL(
-                    owner: owner, repo: repo.name, token: token)
-                {
-                    repo.logoURL = foundURL
-                    isSearching = false
-                    ToastManager.shared.show(String(localized: "icon_found_toast"), style: .success)
-                    dismiss()
-                } else {
-                    isSearching = false
-                    errorMessage = String(localized: "icon_not_found_search_error")
-                }
-            } else {
-                isSearching = false
-                errorMessage = String(localized: "icon_token_error")
+            let raw = try await GitHubService.shared.fetchContents(
+                owner: owner, repo: repo.name, path: path, token: token)
+            items = raw.sorted { lhs, rhs in
+                if lhs.type != rhs.type { return lhs.type == "dir" }
+                return lhs.name.localizedCompare(rhs.name) == .orderedAscending
             }
         } catch {
-            isSearching = false
-            errorMessage = String(format: String(localized: "icon_search_error"), error.localizedDescription)
+            errorMessage = error.localizedDescription
         }
+        isLoading = false
     }
 }
 
@@ -1018,9 +1238,19 @@ struct AdaptiveRepoListView: View {
     @State private var filteredRepos: [ProjectRepo] = []
     @State private var showSettings = false
     @State private var showPaywall = false
+    @State private var showAddLocalProject = false
     @State private var subscription = SubscriptionManager.shared
     @State private var repoToConfigureIcon: ProjectRepo?
     @State private var columnVisibility: NavigationSplitViewVisibility = .automatic
+    private static let syncSuccessFeedback = UINotificationFeedbackGenerator()
+    private static let deleteImpactFeedback = UIImpactFeedbackGenerator(style: .medium)
+
+    @AppStorage("lastSyncTimestamp") private var lastSyncTimestamp: Double = 0
+    private let autoSyncInterval: TimeInterval = 5 * 60
+
+    private var shouldAutoSync: Bool {
+        repos.isEmpty || Date().timeIntervalSince1970 - lastSyncTimestamp > autoSyncInterval
+    }
 
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
@@ -1034,18 +1264,30 @@ struct AdaptiveRepoListView: View {
         }
         .task {
             updateFilteredRepos()
-            if repos.isEmpty {
+            if shouldAutoSync {
                 await syncRepos()
             }
         }
         .onChange(of: repos) { _, _ in updateFilteredRepos() }
         .onChange(of: activeFilter) { _, _ in updateFilteredRepos() }
-        .onChange(of: searchText) { _, _ in updateFilteredRepos() }
         .onChange(of: selectedAccount) { _, _ in updateFilteredRepos() }
+        .onChange(of: subscription.isPro) { _, _ in updateFilteredRepos() }
+        // Debounce search so filtering doesn't fire on every keystroke
+        .task(id: searchText) {
+            if !searchText.isEmpty {
+                try? await Task.sleep(for: .milliseconds(300))
+            }
+            guard !Task.isCancelled else { return }
+            updateFilteredRepos()
+        }
         .sheet(isPresented: $showSettings) { SettingsView() }
         .sheet(isPresented: $showPaywall) { PaywallView() }
         .sheet(item: $repoToConfigureIcon) { repo in
             RepoIconConfigSheet(repo: repo)
+        }
+        .sheet(isPresented: $showAddLocalProject) {
+            AddLocalProjectSheet()
+                .environment(\.modelContext, context)
         }
         .onReceive(NotificationCenter.default.publisher(for: .syncReposShortcut)) { _ in
             Task { await syncRepos() }
@@ -1146,6 +1388,10 @@ struct AdaptiveRepoListView: View {
                     Button { showSettings = true } label: {
                         Label("settings_label", systemImage: "gearshape")
                     }
+                    Button { showAddLocalProject = true } label: {
+                        Label("add_local_project_label", systemImage: "folder.badge.plus")
+                    }
+                    .labelStyle(.iconOnly)
                     syncButton
                 }
             }
@@ -1256,12 +1502,15 @@ struct AdaptiveRepoListView: View {
                 sorted = favorites + Array(nonFavorites.prefix(slotsForNonFav))
             }
         }
-        filteredRepos = sorted
+        withAnimation(.smooth(duration: 0.35)) {
+            filteredRepos = sorted
+        }
     }
 
     private func toggleFavorite(for repo: ProjectRepo) async {
         let wasStarred = repo.isFavorite
-        withAnimation { repo.isFavorite.toggle(); updateFilteredRepos() }
+        repo.isFavorite.toggle()
+        updateFilteredRepos()
         guard let account = repo.account else { return }
         do {
             if let token = try await KeychainManager.shared.retrieveToken(for: account.tokenKey) {
@@ -1272,7 +1521,8 @@ struct AdaptiveRepoListView: View {
                 }
             }
         } catch {
-            withAnimation { repo.isFavorite = wasStarred; updateFilteredRepos() }
+            repo.isFavorite = wasStarred
+            updateFilteredRepos()
             ToastManager.shared.show(String(localized: "github_sync_error"), style: .error)
         }
     }
@@ -1287,8 +1537,10 @@ struct AdaptiveRepoListView: View {
                     try await GitHubService.shared.syncRepos(account: account, token: token, into: context)
                 }
             }
+            lastSyncTimestamp = Date().timeIntervalSince1970
             if !repos.isEmpty {
                 ToastManager.shared.show(String(localized: "repos_synced_toast"), style: .success)
+                Self.syncSuccessFeedback.notificationOccurred(.success)
             }
         } catch {
             ToastManager.shared.show(error.localizedDescription, style: .error)
@@ -1298,7 +1550,7 @@ struct AdaptiveRepoListView: View {
     private func logout() {
         Task {
             try? context.delete(model: GitHubAccount.self)
-            try? context.delete(model: ProjectRepo.self)
+            // Repos y tareas se conservan (account = nil) y se reconectan al volver a iniciar sesión
             try? await KeychainManager.shared.deleteToken()
             SubscriptionManager.shared.isMockPro = false
             withAnimation { isAuthenticated = false }

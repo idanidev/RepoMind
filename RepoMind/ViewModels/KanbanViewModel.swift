@@ -30,6 +30,9 @@ final class KanbanViewModel {
     // Drag State
     var draggingTask: TaskItem?
 
+    // Columna actualmente visible (actualizada desde la vista)
+    var currentColumn: KanbanColumn?
+
     // Feedback generators
     private static let selectionFeedback = UISelectionFeedbackGenerator()
     private static let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
@@ -58,8 +61,10 @@ final class KanbanViewModel {
         }
 
         if targetColumn == nil {
+            // Usar la columna visible actualmente; si no, la primera
             targetColumn =
-                (project.columns ?? [])
+                currentColumn
+                ?? (project.columns ?? [])
                 .sorted { $0.orderIndex < $1.orderIndex }
                 .first
         }
@@ -167,6 +172,7 @@ final class KanbanViewModel {
         withAnimation(.snappy) {
             modelContext.delete(task)
         }
+        Self.impactFeedback.impactOccurred()
     }
 
     func showMoveTaskSheet(_ task: TaskItem) {
