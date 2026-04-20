@@ -1,0 +1,24 @@
+Hello App Review team,
+
+HOW TO TEST THE APP
+1. Launch RepoMind.
+2. On the login screen, tap "Sign in with GitHub" and use the demo credentials provided in the Demo Account fields above (a dedicated GitHub account created exclusively for App Review).
+3. Once signed in you can browse the connected GitHub repositories, create Kanban boards, add tasks and use voice-to-text.
+
+HOW TO TEST IN-APP PURCHASE (Pro Lifetime)
+1. From the main screen tap the gear icon (Settings) → "Current Plan" or open Settings → Subscription.
+2. Tap "Upgrade to Pro" / paywall to trigger the StoreKit purchase sheet for product "com.idanidev.repomind.pro".
+3. Use a sandbox tester Apple ID to complete the purchase. The app immediately unlocks Pro features (unlimited repos, unlimited Kanban columns, multiple GitHub accounts).
+4. "Restore Purchases" is available from Settings → Subscription → Restore Purchases.
+
+NOTES
+- The app uses GitHub OAuth (https://github.com/login/oauth) for authentication. No backend of our own.
+- All user data is stored locally on device with optional iCloud (CloudKit) sync. No server-side data collection.
+- Free tier limits: 3 repos, 1 GitHub account, 3 Kanban columns. Pro Lifetime removes all limits.
+- The Pro Lifetime IAP is a non-consumable, one-time purchase.
+- Support URL: https://idanidev.github.io/RepoMind/
+- Privacy: https://idanidev.github.io/RepoMind/privacy.html
+- Terms: https://idanidev.github.io/RepoMind/terms.html
+
+Contact: idanideveloper@gmail.com
+Thank you!

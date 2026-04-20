@@ -82,9 +82,12 @@ platform :ios do
   lane :release do
     build
 
+    app_ver = get_version_number(xcodeproj: PROJECT, target: SCHEME)
+
     deliver(
       api_key:                      api_key,
       ipa:                          "./build/RepoMind.ipa",
+      app_version:                  app_ver,
       submit_for_review:            false,
       automatic_release:            false,
       force:                        true,
@@ -96,7 +99,7 @@ platform :ios do
       }
     )
 
-    UI.success "✅ IPA subido a App Store Connect. Ejecuta `fastlane submit` cuando el build esté procesado."
+    UI.success "✅ IPA v#{app_ver} subido a App Store Connect. Ejecuta `fastlane submit` cuando el build esté procesado."
   end
 
 
@@ -123,6 +126,52 @@ platform :ios do
     )
 
     UI.success "🚀 iOS v#{app_ver} enviada a revisión en App Store"
+  end
+
+
+  # ── LANE: upload_metadata ───────────────────────────────────────────────────
+  desc "Sube descripción, keywords y support URL a App Store Connect"
+  lane :upload_metadata do |options|
+    app_ver = options[:version] || get_version_number(xcodeproj: PROJECT, target: SCHEME)
+
+    deliver(
+      api_key:                      api_key,
+      app_version:                  app_ver,
+      skip_binary_upload:           true,
+      submit_for_review:            false,
+      automatic_release:            false,
+      force:                        true,
+      skip_screenshots:             true,
+      skip_metadata:                false,
+      run_precheck_before_submit:   false,
+      metadata_path:                "./fastlane/metadata"
+    )
+
+    UI.success "✅ Metadata subida a App Store Connect"
+  end
+
+
+  # ── LANE: upload_screenshots ────────────────────────────────────────────────
+  desc "Sube screenshots a App Store Connect (sin recompilar)"
+  lane :upload_screenshots do |options|
+    app_ver = options[:version] || get_version_number(xcodeproj: PROJECT, target: SCHEME)
+
+    deliver(
+      api_key:                      api_key,
+      app_version:                  app_ver,
+      skip_binary_upload:           true,
+      submit_for_review:            false,
+      automatic_release:            false,
+      force:                        true,
+      skip_screenshots:             false,
+      overwrite_screenshots:        true,
+      skip_metadata:                true,
+      run_precheck_before_submit:   false,
+      screenshots_path:             "./fastlane/screenshots",
+      ignore_language_directory_validation: true
+    )
+
+    UI.success "✅ Screenshots subidos a App Store Connect"
   end
 
 
@@ -237,9 +286,12 @@ platform :mac do
   lane :release do
     build
 
+    app_ver = get_version_number(xcodeproj: PROJECT, target: SCHEME)
+
     deliver(
       api_key:                    api_key,
       pkg:                        "./build/RepoMind.pkg",
+      app_version:                app_ver,
       platform:                   "osx",
       submit_for_review:          false,
       automatic_release:          false,
@@ -252,14 +304,37 @@ platform :mac do
       }
     )
 
-    UI.success "✅ PKG subido a App Store Connect. Ejecuta `fastlane mac submit` cuando el build esté procesado."
+    UI.success "✅ PKG v#{app_ver} subido a App Store Connect. Ejecuta `fastlane mac submit` cuando el build esté procesado."
+  end
+
+
+  # ── LANE: upload_metadata ───────────────────────────────────────────────────
+  desc "Sube metadata (descripción, keywords, support URL, review info) de macOS"
+  lane :upload_metadata do |options|
+    app_ver = options[:version] || get_version_number(xcodeproj: PROJECT, target: SCHEME)
+
+    deliver(
+      api_key:                      api_key,
+      platform:                     "osx",
+      app_version:                  app_ver,
+      skip_binary_upload:           true,
+      submit_for_review:            false,
+      automatic_release:            false,
+      force:                        true,
+      skip_screenshots:             true,
+      skip_metadata:                false,
+      run_precheck_before_submit:   false,
+      metadata_path:                "./fastlane/metadata"
+    )
+
+    UI.success "✅ Metadata macOS subida a App Store Connect"
   end
 
 
   # ── LANE: submit ────────────────────────────────────────────────────────────
   desc "Envía a revisión el build macOS ya subido (sin recompilar)"
   lane :submit do |options|
-    app_ver = options[:version] || get_version_number(xcodeproj: "../#{SCHEME}.xcodeproj", target: SCHEME)
+    app_ver = options[:version] || get_version_number(xcodeproj: PROJECT, target: SCHEME)
 
     deliver(
       api_key:                      api_key,
