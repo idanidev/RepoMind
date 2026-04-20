@@ -1,24 +1,30 @@
 Hello App Review team,
 
+NO ACCOUNT REQUIRED — DEMO MODE
+The app includes a built-in Demo Mode so no GitHub account is needed to review the features.
+
 HOW TO TEST THE APP
 1. Launch RepoMind.
-2. On the login screen, tap "Sign in with GitHub" and use the demo credentials provided in the Demo Account fields above (a dedicated GitHub account created exclusively for App Review).
-3. Once signed in you can browse the connected GitHub repositories, create Kanban boards, add tasks and use voice-to-text.
+2. On the login screen, tap "Try Demo" (or "Probar demo" in Spanish). This is the bottom button in the "Start" section.
+3. The app enters Demo Mode with three sample repositories and Kanban boards pre-populated locally. No network call is made.
+4. Explore the app: Kanban boards, tasks, voice-to-text, favorites, search, etc.
 
-HOW TO TEST IN-APP PURCHASE (Pro Lifetime)
-1. From the main screen tap the gear icon (Settings) → "Current Plan" or open Settings → Subscription.
-2. Tap "Upgrade to Pro" / paywall to trigger the StoreKit purchase sheet for product "com.idanidev.repomind.pro".
-3. Use a sandbox tester Apple ID to complete the purchase. The app immediately unlocks Pro features (unlimited repos, unlimited Kanban columns, multiple GitHub accounts).
-4. "Restore Purchases" is available from Settings → Subscription → Restore Purchases.
+HOW TO TEST THE IN-APP PURCHASE (Pro Lifetime)
+1. From Demo Mode (or after a real GitHub login), open Settings (gear icon).
+2. Tap on "Current Plan" or the upgrade banner to open the paywall.
+3. Tap the purchase button for Pro Lifetime (product ID: com.idanidev.repomind.pro).
+4. Use a sandbox tester Apple ID to complete the purchase. The app unlocks Pro features (unlimited repos, multiple GitHub accounts, unlimited Kanban columns).
+5. "Restore Purchases" is available from the same Settings screen.
+
+IMPORTANT: Demo Mode does NOT grant Pro access — free tier limits still apply (3 repos, 1 account, 3 Kanban columns). This is intentional so the IAP flow can be reviewed properly without bypassing payment.
 
 NOTES
-- The app uses GitHub OAuth (https://github.com/login/oauth) for authentication. No backend of our own.
-- All user data is stored locally on device with optional iCloud (CloudKit) sync. No server-side data collection.
-- Free tier limits: 3 repos, 1 GitHub account, 3 Kanban columns. Pro Lifetime removes all limits.
-- The Pro Lifetime IAP is a non-consumable, one-time purchase.
+- Authentication (outside Demo Mode) uses GitHub Personal Access Tokens (PAT). Users generate a token on github.com and paste it. No OAuth redirect, no backend.
+- All user data is stored locally on device with optional iCloud (CloudKit) sync. No server-side data collection by us.
+- Pro Lifetime is a non-consumable, one-time purchase.
 - Support URL: https://idanidev.github.io/RepoMind/
-- Privacy: https://idanidev.github.io/RepoMind/privacy.html
-- Terms: https://idanidev.github.io/RepoMind/terms.html
+- Privacy Policy: https://idanidev.github.io/RepoMind/privacy.html
+- Terms of Use: https://idanidev.github.io/RepoMind/terms.html
 
 Contact: idanideveloper@gmail.com
 Thank you!
