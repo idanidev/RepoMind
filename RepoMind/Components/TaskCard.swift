@@ -5,7 +5,7 @@ struct TaskCard: View {
     let task: TaskItem
 
     var body: some View {
-        GlassEffectContainer(cornerRadius: 14) {
+        GlassEffectContainer(cornerRadius: isMacIdiom ? MacDesign.cardCornerRadius : 14) {
             HStack(spacing: 8) {
                 // ✅ FIX: Don't use LocalizedStringKey for user-generated content
                 Text(task.content)
@@ -26,6 +26,7 @@ struct TaskCard: View {
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .hoverable(cornerRadius: isMacIdiom ? MacDesign.cardCornerRadius : 14, intensity: 0.04)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityDescription)
     }

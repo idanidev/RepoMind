@@ -1,3 +1,5 @@
+import CloudKit
+import Combine
 import PhotosUI
 import SwiftData
 import SwiftUI
@@ -8,16 +10,25 @@ struct ContentView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @AppStorage("isAuthenticated") private var isAuthenticated = false
+    @AppStorage("isDemoMode") private var isDemoMode = false
     @Query private var accounts: [GitHubAccount]
 
+    /// Waiting for CloudKit to deliver accounts on first launch of a new device
+    @State private var isAwaitingCloudKit = true
+
     private var shouldShowMain: Bool {
-        isAuthenticated || !accounts.isEmpty
+        // Demo mode: show main only while demo is active
+        if isDemoMode { return !accounts.isEmpty }
+        // Real mode: ignore demo accounts (they may linger from a previous session or CloudKit sync)
+        return isAuthenticated || accounts.contains { $0.username != "demo-user" }
     }
 
     var body: some View {
         ZStack(alignment: .top) {
             Group {
-                if shouldShowMain {
+                if isAwaitingCloudKit && !shouldShowMain {
+                    iCloudSyncingView
+                } else if shouldShowMain {
                     if horizontalSizeClass == .regular {
                         AdaptiveRepoListView()
                     } else {
@@ -28,14 +39,117 @@ struct ContentView: View {
                 }
             }
             .animation(.easeInOut(duration: 0.3), value: shouldShowMain)
+            .animation(.easeInOut(duration: 0.3), value: isAwaitingCloudKit)
 
             ToastOverlay()
         }
-        .onChange(of: accounts.isEmpty) { _, isEmpty in
-            // Si llegan cuentas via CloudKit, marcar como autenticado
-            if !isEmpty {
-                isAuthenticated = true
+        .task {
+            #if DEBUG
+            if isDemoMode {
+                isAwaitingCloudKit = false
+                SubscriptionManager.shared.isDemoMode = true
+            } else {
+                purgeStaleDemo()
+                await waitForCloudKitAccounts()
             }
+            #else
+            // In production, demo mode is not supported — always clean up
+            if isDemoMode {
+                isDemoMode = false
+                purgeStaleDemo()
+            }
+            await waitForCloudKitAccounts()
+            #endif
+        }
+        .onChange(of: accounts.isEmpty) { _, isEmpty in
+            // Accounts arrived via CloudKit — auto-login (ignore stale demo accounts)
+            let hasRealAccounts = accounts.contains { $0.username != "demo-user" }
+            if hasRealAccounts && !isDemoMode {
+                isAuthenticated = true
+                isAwaitingCloudKit = false
+            }
+        }
+    }
+
+    // MARK: - CloudKit startup sync
+
+    private var iCloudSyncingView: some View {
+        VStack(spacing: 20) {
+            Spacer()
+            Image(systemName: "icloud.and.arrow.down")
+                .font(.system(size: 48))
+                .foregroundStyle(.secondary)
+            ProgressView()
+                .scaleEffect(1.2)
+            Text("icloud_syncing_message")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Button {
+                isAwaitingCloudKit = false
+            } label: {
+                Text("icloud_sign_in_manually")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .padding(.bottom, 40)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// Deletes any persisted demo accounts / negative-ID repos so they don't
+    /// interfere with real account detection or subscription counts.
+    private func purgeStaleDemo() {
+        let accountDesc = FetchDescriptor<GitHubAccount>(
+            predicate: #Predicate { $0.username == "demo-user" }
+        )
+        if let existing = try? context.fetch(accountDesc) {
+            existing.forEach { context.delete($0) }
+        }
+        let repoDesc = FetchDescriptor<ProjectRepo>(
+            predicate: #Predicate { $0.repoID < 0 }
+        )
+        if let existing = try? context.fetch(repoDesc) {
+            existing.forEach { context.delete($0) }
+        }
+    }
+
+    /// On a fresh device, give CloudKit up to 30 s to deliver accounts before showing LoginView.
+    /// First does a quick CKQuery — if no records exist in iCloud, goes straight to LoginView.
+    private func waitForCloudKitAccounts() async {
+        guard !shouldShowMain else {
+            isAwaitingCloudKit = false
+            return
+        }
+
+        let status = try? await CKContainer.default().accountStatus()
+        guard status == .available else {
+            isAwaitingCloudKit = false
+            return
+        }
+
+        let hasData = await cloudKitHasAccounts()
+        guard hasData else {
+            isAwaitingCloudKit = false
+            return
+        }
+
+        let deadline = Date().addingTimeInterval(30)
+        while accounts.isEmpty && Date() < deadline {
+            try? await Task.sleep(for: .milliseconds(500))
+        }
+
+        isAwaitingCloudKit = false
+    }
+
+    private func cloudKitHasAccounts() async -> Bool {
+        let db = CKContainer(identifier: "iCloud.idanidev.RepoMind").privateCloudDatabase
+        do {
+            let zones = try await db.allRecordZones()
+            return zones.contains { $0.zoneID.zoneName == "com.apple.coredata.cloudkit.zone" }
+        } catch {
+            return false
         }
     }
 }
@@ -71,6 +185,7 @@ enum RepoFilter: String, CaseIterable, Identifiable {
 struct RepoListView: View {
     @Environment(\.modelContext) private var context
     @AppStorage("isAuthenticated") private var isAuthenticated = false
+    @AppStorage("isDemoMode") private var isDemoMode = false
     @Query(sort: \ProjectRepo.updatedAt, order: .reverse) private var repos: [ProjectRepo]
     @Query private var accounts: [GitHubAccount]
 
@@ -83,7 +198,9 @@ struct RepoListView: View {
     @State private var filteredRepos: [ProjectRepo] = []
 
     @AppStorage("lastSyncTimestamp") private var lastSyncTimestamp: Double = 0
-    private let autoSyncInterval: TimeInterval = 5 * 60 // 5 minutes
+    private let autoSyncInterval: TimeInterval = 7 * 24 * 60 * 60 // 1 week
+
+    @State private var isWaitingForCloudKit = false
 
     private var shouldAutoSync: Bool {
         repos.isEmpty || Date().timeIntervalSince1970 - lastSyncTimestamp > autoSyncInterval
@@ -92,8 +209,8 @@ struct RepoListView: View {
     var body: some View {
         NavigationStack {
             Group {
-                if repos.isEmpty && isLoading {
-                    skeletonList
+                if (repos.isEmpty && isLoading) || isWaitingForCloudKit {
+                    cloudKitWaitingView
                 } else if repos.isEmpty {
                     emptyState
                 } else {
@@ -108,9 +225,20 @@ struct RepoListView: View {
             }
             .task {
                 updateFilteredRepos()
-                if shouldAutoSync {
-                    await syncRepos()
+                if repos.isEmpty {
+                    await waitForCloudKitThenSync()
+                } else if shouldAutoSync {
+                    await syncRepos(silent: true)
                 }
+            }
+            // Refresh when CloudKit delivers remote data
+            .onReceive(
+                NotificationCenter.default.publisher(
+                    for: NSNotification.Name("NSPersistentStoreRemoteChangeNotification"))
+                    .receive(on: RunLoop.main)
+            ) { _ in
+                isWaitingForCloudKit = false
+                updateFilteredRepos()
             }
             // ✅ FIX: Update cache when dependencies change
             .onChange(of: repos) { _, _ in
@@ -180,14 +308,13 @@ struct RepoListView: View {
             return lhs.updatedAt > rhs.updatedAt
         }
 
-        // Free-tier: show only the most recent repos up to the limit.
-        // Favorites always pass through so the user never loses starred repos.
+        // Free-tier: show only up to the limit, prioritising favourites.
         if !subscription.isPro && activeFilter == .all {
             let limit = subscription.maxFreeRepos
             if sorted.count > limit {
-                let favorites = sorted.filter { $0.isFavorite }
-                let nonFavorites = sorted.filter { !$0.isFavorite }
+                let favorites = Array(sorted.filter { $0.isFavorite }.prefix(limit))
                 let slotsForNonFav = max(0, limit - favorites.count)
+                let nonFavorites = sorted.filter { !$0.isFavorite }
                 sorted = favorites + Array(nonFavorites.prefix(slotsForNonFav))
             }
         }
@@ -209,7 +336,17 @@ struct RepoListView: View {
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         ToolbarItem(placement: .topBarLeading) {
-            accountMenu
+            HStack(spacing: 6) {
+                accountMenu
+                if isDemoMode {
+                    Text("demo_mode_badge")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(.orange, in: Capsule())
+                }
+            }
         }
         ToolbarItem(placement: .topBarTrailing) {
             HStack(spacing: 12) {
@@ -229,7 +366,7 @@ struct RepoListView: View {
                 .accessibilityLabel("add_local_project_label")
 
                 filterMenu
-                syncButton
+                if !isDemoMode { syncButton }
             }
         }
     }
@@ -312,6 +449,39 @@ struct RepoListView: View {
         .disabled(isLoading)
         .accessibilityLabel("sync_repos_label")
         .accessibilityHint(isLoading ? "syncing" : "sync_hint")
+    }
+
+    // MARK: - CloudKit Wait
+
+    private var cloudKitWaitingView: some View {
+        VStack(spacing: 16) {
+            ProgressView()
+                .controlSize(.large)
+            Text("icloud_syncing_message")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func waitForCloudKitThenSync() async {
+        let status = try? await CKContainer.default().accountStatus()
+        guard status == .available else {
+            // iCloud not available — go straight to GitHub sync
+            await syncRepos()
+            return
+        }
+
+        // iCloud available: give CloudKit up to 8s to deliver remote data
+        isWaitingForCloudKit = true
+        let deadline = Date().addingTimeInterval(8)
+        while repos.isEmpty && Date() < deadline {
+            try? await Task.sleep(for: .milliseconds(400))
+        }
+        isWaitingForCloudKit = false
+
+        // Then sync with GitHub regardless
+        await syncRepos()
     }
 
     // MARK: - Skeleton Loading
@@ -499,7 +669,8 @@ struct RepoListView: View {
 
     // MARK: - Actions
 
-    private func syncRepos() async {
+    private func syncRepos(silent: Bool = false) async {
+        guard !isDemoMode else { return }
         isLoading = true
         defer { isLoading = false }
 
@@ -519,27 +690,31 @@ struct RepoListView: View {
 
             lastSyncTimestamp = Date().timeIntervalSince1970
 
-            if !repos.isEmpty {
+            if !silent && !repos.isEmpty {
                 ToastManager.shared.show(String(localized: "repos_synced_toast"), style: .success)
                 Self.syncSuccessFeedback.notificationOccurred(.success)
             }
         } catch {
-            ToastManager.shared.show(error.localizedDescription, style: .error)
+            if !silent {
+                ToastManager.shared.show(error.localizedDescription, style: .error)
+            }
         }
     }
 
     private func logout() {
         Task {
-            try? context.delete(model: GitHubAccount.self)
-            // Repos y tareas se conservan (account = nil) y se reconectan al volver a iniciar sesión
-            try? await KeychainManager.shared.deleteToken()
-
-            // Reset mock Pro state on logout
-            SubscriptionManager.shared.isMockPro = false
-
-            withAnimation {
-                isAuthenticated = false
+            if isDemoMode {
+                try? context.delete(model: GitHubAccount.self)
+                try? context.delete(model: ProjectRepo.self)
+                isDemoMode = false
+                SubscriptionManager.shared.isDemoMode = false
+            } else {
+                try? context.delete(model: GitHubAccount.self)
+                try? await KeychainManager.shared.deleteToken()
             }
+            SubscriptionManager.shared.isMockPro = false
+            lastSyncTimestamp = 0
+            withAnimation { isAuthenticated = false }
         }
     }
 }
@@ -589,12 +764,20 @@ struct SkeletonRepoRow: View {
 
 struct RepoRow: View {
     let repo: ProjectRepo
+    var isSelected: Bool = false
+    var unreadFeedback: Int = 0
+
+    private var secondaryStyle: HierarchicalShapeStyle { isSelected ? .primary : .secondary }
 
     private var taskCount: Int {
         guard let tasks = repo.tasks, !tasks.isEmpty else { return 0 }
-        // Excluir tareas en la última columna (done)
-        let lastColumnId = repo.columns?.max(by: { $0.orderIndex < $1.orderIndex })?.id
-        return tasks.filter { $0.column?.id != lastColumnId }.count
+        let columns = repo.columns ?? []
+        guard let lastColumnId = columns.max(by: { $0.orderIndex < $1.orderIndex })?.id else { return 0 }
+        let validColumnIds = Set(columns.map(\.id))
+        return tasks.filter { task in
+            guard let columnId = task.column?.id, validColumnIds.contains(columnId) else { return false }
+            return columnId != lastColumnId
+        }.count
     }
 
     var body: some View {
@@ -621,7 +804,7 @@ struct RepoRow: View {
                 if !repo.repoDescription.isEmpty {
                     Text(repo.repoDescription)
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(secondaryStyle)
                         .lineLimit(2)
                 }
 
@@ -635,23 +818,46 @@ struct RepoRow: View {
                             Text(language)
                                 .font(.caption)
                         }
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(secondaryStyle)
                     }
 
                     Spacer()
 
+                    // Badge de feedback sin leer
+                    if unreadFeedback > 0 {
+                        ZStack {
+                            Capsule().fill(Color.red)
+                            HStack(spacing: 4) {
+                                Image(systemName: "bell.badge.fill")
+                                    .font(.caption2)
+                                Text("\(unreadFeedback)")
+                                    .font(.caption.weight(.semibold))
+                            }
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                        }
+                        .fixedSize()
+                        .drawingGroup()
+                        .accessibilityLabel(Text("feedback_unread_badge \(unreadFeedback)"))
+                    }
+
                     // Badge de tareas destacado
                     if taskCount > 0 {
-                        HStack(spacing: 4) {
-                            Image(systemName: "checklist")
-                                .font(.caption2)
-                            Text("\(taskCount)")
-                                .font(.caption.weight(.semibold))
+                        ZStack {
+                            Capsule().fill(Color.purple)
+                            HStack(spacing: 4) {
+                                Image(systemName: "checklist")
+                                    .font(.caption2)
+                                Text("\(taskCount)")
+                                    .font(.caption.weight(.semibold))
+                            }
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
                         }
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(.purple, in: Capsule())
+                        .fixedSize()
+                        .drawingGroup()
                     }
 
                     if repo.stargazersCount > 0 {
@@ -661,12 +867,14 @@ struct RepoRow: View {
                             Text("\(repo.stargazersCount)")
                                 .font(.caption)
                         }
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(secondaryStyle)
                     }
                 }
             }
         }
         .padding(.vertical, 6)
+        .padding(.horizontal, isMacIdiom ? 4 : 0)
+        .hoverable(cornerRadius: 8, intensity: isSelected ? 0 : 0.05)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityDescription)
         .accessibilityHint("view_details_hint")
@@ -845,6 +1053,7 @@ struct AddLocalProjectSheet: View {
             }
         }
         .presentationDetents([.large])
+        .frame(idealWidth: 480)
         .onChange(of: photoItem) { _, newItem in
             guard let newItem else { return }
             Task { await savePhoto(newItem) }
@@ -978,6 +1187,7 @@ struct RepoIconConfigSheet: View {
             }
         }
         .presentationDetents([.medium, .large])
+        .frame(idealWidth: 540)
     }
 
     // MARK: - File List
@@ -1227,8 +1437,10 @@ struct RepoIconConfigSheet: View {
 struct AdaptiveRepoListView: View {
     @Environment(\.modelContext) private var context
     @AppStorage("isAuthenticated") private var isAuthenticated = false
+    @AppStorage("isDemoMode") private var isDemoMode = false
     @Query(sort: \ProjectRepo.updatedAt, order: .reverse) private var repos: [ProjectRepo]
     @Query private var accounts: [GitHubAccount]
+    @Query private var feedbackIssues: [FeedbackIssue]
 
     @State private var isLoading = false
     @State private var searchText = ""
@@ -1241,12 +1453,14 @@ struct AdaptiveRepoListView: View {
     @State private var showAddLocalProject = false
     @State private var subscription = SubscriptionManager.shared
     @State private var repoToConfigureIcon: ProjectRepo?
-    @State private var columnVisibility: NavigationSplitViewVisibility = .automatic
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
     private static let syncSuccessFeedback = UINotificationFeedbackGenerator()
     private static let deleteImpactFeedback = UIImpactFeedbackGenerator(style: .medium)
 
     @AppStorage("lastSyncTimestamp") private var lastSyncTimestamp: Double = 0
     private let autoSyncInterval: TimeInterval = 5 * 60
+
+    @State private var isWaitingForCloudKit = false
 
     private var shouldAutoSync: Bool {
         repos.isEmpty || Date().timeIntervalSince1970 - lastSyncTimestamp > autoSyncInterval
@@ -1264,9 +1478,19 @@ struct AdaptiveRepoListView: View {
         }
         .task {
             updateFilteredRepos()
-            if shouldAutoSync {
-                await syncRepos()
+            if repos.isEmpty {
+                await waitForCloudKitThenSync()
+            } else if shouldAutoSync {
+                await syncRepos(silent: true)
             }
+        }
+        .onReceive(
+            NotificationCenter.default.publisher(
+                for: NSNotification.Name("NSPersistentStoreRemoteChangeNotification"))
+                .receive(on: RunLoop.main)
+        ) { _ in
+            isWaitingForCloudKit = false
+            updateFilteredRepos()
         }
         .onChange(of: repos) { _, _ in updateFilteredRepos() }
         .onChange(of: activeFilter) { _, _ in updateFilteredRepos() }
@@ -1294,6 +1518,11 @@ struct AdaptiveRepoListView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .openSettingsShortcut)) { _ in
             showSettings = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .toggleSidebarShortcut)) { _ in
+            withAnimation {
+                columnVisibility = (columnVisibility == .all) ? .detailOnly : .all
+            }
         }
     }
 
@@ -1326,7 +1555,60 @@ struct AdaptiveRepoListView: View {
 
     private func sidebarRepoRow(_ repo: ProjectRepo) -> some View {
         NavigationLink(value: repo) {
-            RepoRow(repo: repo)
+            RepoRow(
+                repo: repo,
+                isSelected: selectedRepo?.persistentModelID == repo.persistentModelID,
+                unreadFeedback: repo.unreadFeedbackCount(in: feedbackIssues)
+            )
+        }
+        .contextMenu {
+            Button {
+                Task { await toggleFavorite(for: repo) }
+            } label: {
+                Label(
+                    repo.isFavorite ? "unfavorite" : "favorite",
+                    systemImage: repo.isFavorite ? "star.slash" : "star.fill"
+                )
+            }
+            Button {
+                withAnimation {
+                    repo.isArchived.toggle()
+                    updateFilteredRepos()
+                }
+            } label: {
+                Label(
+                    repo.isArchived ? "unarchive" : "archive",
+                    systemImage: repo.isArchived ? "tray.and.arrow.up" : "archivebox"
+                )
+            }
+            if !repo.htmlURL.isEmpty {
+                Button {
+                    if let url = URL(string: repo.htmlURL) {
+                        UIPasteboard.general.string = repo.htmlURL
+                        _ = url
+                    }
+                } label: {
+                    Label("copy_url", systemImage: "doc.on.doc")
+                }
+                Button {
+                    if let url = URL(string: repo.htmlURL) {
+                        UIApplication.shared.open(url)
+                    }
+                } label: {
+                    Label("open_in_github", systemImage: "arrow.up.forward.app")
+                }
+            }
+            Divider()
+            Button(role: .destructive) {
+                withAnimation {
+                    if selectedRepo?.persistentModelID == repo.persistentModelID {
+                        selectedRepo = nil
+                    }
+                    context.delete(repo)
+                }
+            } label: {
+                Label("delete_task", systemImage: "trash")
+            }
         }
         .swipeActions(edge: .leading) {
             Button {
@@ -1341,7 +1623,12 @@ struct AdaptiveRepoListView: View {
         }
         .swipeActions(edge: .trailing) {
             Button(role: .destructive) {
-                withAnimation { context.delete(repo) }
+                withAnimation {
+                    if selectedRepo?.persistentModelID == repo.persistentModelID {
+                        selectedRepo = nil
+                    }
+                    context.delete(repo)
+                }
             } label: {
                 Label("delete_task", systemImage: "trash")
             }
@@ -1379,7 +1666,7 @@ struct AdaptiveRepoListView: View {
                 }
             }
         }
-        .listStyle(.insetGrouped)
+        .macSidebarListStyle()
         .navigationTitle("repositories_title")
         .toolbar {
             ToolbarItem(placement: .topBarLeading) { accountMenuButton }
@@ -1397,8 +1684,13 @@ struct AdaptiveRepoListView: View {
             }
         }
         .overlay {
-            if repos.isEmpty && isLoading {
-                ProgressView()
+            if isWaitingForCloudKit || (repos.isEmpty && isLoading) {
+                VStack(spacing: 12) {
+                    ProgressView().controlSize(.large)
+                    Text("icloud_syncing_message")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
             } else if repos.isEmpty {
                 ContentUnavailableView {
                     Label("no_repos_title", systemImage: "tray")
@@ -1471,6 +1763,23 @@ struct AdaptiveRepoListView: View {
         .disabled(isLoading)
     }
 
+    // MARK: - CloudKit Wait
+
+    private func waitForCloudKitThenSync() async {
+        let status = try? await CKContainer.default().accountStatus()
+        guard status == .available else {
+            await syncRepos()
+            return
+        }
+        isWaitingForCloudKit = true
+        let deadline = Date().addingTimeInterval(8)
+        while repos.isEmpty && Date() < deadline {
+            try? await Task.sleep(for: .milliseconds(400))
+        }
+        isWaitingForCloudKit = false
+        await syncRepos()
+    }
+
     // MARK: - Logic (shared with RepoListView)
 
     private func updateFilteredRepos() {
@@ -1496,9 +1805,9 @@ struct AdaptiveRepoListView: View {
         if !subscription.isPro && activeFilter == .all {
             let limit = subscription.maxFreeRepos
             if sorted.count > limit {
-                let favorites = sorted.filter { $0.isFavorite }
-                let nonFavorites = sorted.filter { !$0.isFavorite }
+                let favorites = Array(sorted.filter { $0.isFavorite }.prefix(limit))
                 let slotsForNonFav = max(0, limit - favorites.count)
+                let nonFavorites = sorted.filter { !$0.isFavorite }
                 sorted = favorites + Array(nonFavorites.prefix(slotsForNonFav))
             }
         }
@@ -1527,7 +1836,8 @@ struct AdaptiveRepoListView: View {
         }
     }
 
-    private func syncRepos() async {
+    private func syncRepos(silent: Bool = false) async {
+        guard !isDemoMode else { return }
         isLoading = true
         defer { isLoading = false }
         guard !accounts.isEmpty else { return }
@@ -1538,21 +1848,31 @@ struct AdaptiveRepoListView: View {
                 }
             }
             lastSyncTimestamp = Date().timeIntervalSince1970
-            if !repos.isEmpty {
+            if !silent && !repos.isEmpty {
                 ToastManager.shared.show(String(localized: "repos_synced_toast"), style: .success)
                 Self.syncSuccessFeedback.notificationOccurred(.success)
             }
         } catch {
-            ToastManager.shared.show(error.localizedDescription, style: .error)
+            if !silent {
+                ToastManager.shared.show(error.localizedDescription, style: .error)
+            }
         }
     }
 
     private func logout() {
         Task {
-            try? context.delete(model: GitHubAccount.self)
-            // Repos y tareas se conservan (account = nil) y se reconectan al volver a iniciar sesión
-            try? await KeychainManager.shared.deleteToken()
+            if isDemoMode {
+                try? context.delete(model: GitHubAccount.self)
+                try? context.delete(model: ProjectRepo.self)
+                isDemoMode = false
+                SubscriptionManager.shared.isDemoMode = false
+            } else {
+                try? context.delete(model: GitHubAccount.self)
+                try? await KeychainManager.shared.deleteToken()
+            }
             SubscriptionManager.shared.isMockPro = false
+            lastSyncTimestamp = 0
+            selectedRepo = nil
             withAnimation { isAuthenticated = false }
         }
     }

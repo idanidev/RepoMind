@@ -19,6 +19,11 @@ struct RepoMindCommands: Commands {
                 NotificationCenter.default.post(name: .toggleViewShortcut, object: nil)
             }
             .keyboardShortcut("t", modifiers: [.command, .shift])
+
+            Button("toggle_sidebar") {
+                NotificationCenter.default.post(name: .toggleSidebarShortcut, object: nil)
+            }
+            .keyboardShortcut("s", modifiers: [.command, .control])
         }
 
         CommandGroup(replacing: .appSettings) {
@@ -35,4 +40,5 @@ extension Notification.Name {
     static let syncReposShortcut = Notification.Name("syncReposShortcut")
     static let toggleViewShortcut = Notification.Name("toggleViewShortcut")
     static let openSettingsShortcut = Notification.Name("openSettingsShortcut")
+    static let toggleSidebarShortcut = Notification.Name("toggleSidebarShortcut")
 }

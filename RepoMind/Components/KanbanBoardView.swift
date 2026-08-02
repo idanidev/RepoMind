@@ -25,6 +25,8 @@ struct KanbanBoardView: View {
             .padding(.trailing, 20)
             .padding(.bottom, 60)
         }
+        .onAppear { viewModel.updateVoiceContextualStrings() }
+        .onChange(of: sortedColumns) { viewModel.updateVoiceContextualStrings() }
         .sheet(isPresented: $viewModel.showMoveSheet) {
             if let task = viewModel.taskToMove {
                 MoveTaskSheet(
@@ -43,51 +45,60 @@ struct KanbanBoardView: View {
     // MARK: - Regular Layout (iPad/Mac)
 
     private var regularLayout: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(alignment: .top, spacing: 16) {
-                ForEach(sortedColumns) { column in
-                    KanbanColumnView(
-                        column: column,
-                        draggedTask: $viewModel.draggingTask,
-                        onDropTask: { task, index in
-                            viewModel.moveTask(task, to: column, atIndex: index)
-                        },
-                        onAdd: { viewModel.prepareAddTask(for: column) },
-                        onEditTask: { task in viewModel.editingTask = task },
-                        onDeleteTask: { task in viewModel.deleteTask(task) },
-                        onDeleteColumn: { viewModel.deleteColumn(column) },
-                        onRenameColumn: { viewModel.startRenaming(column) },
-                        onMoveTask: { task in viewModel.showMoveTaskSheet(task) }
-                    )
-                    .frame(width: 320)
-                    .frame(maxHeight: .infinity)
-                }
+        GeometryReader { geometry in
+            let count = CGFloat(max(1, sortedColumns.count))
+            let totalSpacing = 32 + (count + 1) * 16
+            let idealWidth = max(300, min(480, (geometry.size.width - totalSpacing) / count))
+            let doneColumnID = viewModel.doneColumn(from: sortedColumns)?.id
 
-                // Add column button
-                Button(action: { viewModel.showAddColumnSheet = true }) {
-                    VStack(spacing: 12) {
-                        Image(systemName: "plus.circle.fill")
-                            .font(.system(size: 40))
-                            .foregroundStyle(.secondary)
-                        Text("add_column")
-                            .font(.subheadline.weight(.medium))
-                            .foregroundStyle(.secondary)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(alignment: .top, spacing: 16) {
+                    ForEach(sortedColumns) { column in
+                        KanbanColumnView(
+                            column: column,
+                            draggedTask: $viewModel.draggingTask,
+                            onDropTask: { task, index in
+                                viewModel.moveTask(task, to: column, atIndex: index)
+                            },
+                            onAdd: { viewModel.prepareAddTask(for: column) },
+                            onEditTask: { task in viewModel.editingTask = task },
+                            onDeleteTask: { task in viewModel.deleteTask(task) },
+                            onDeleteColumn: { viewModel.deleteColumn(column) },
+                            onRenameColumn: { viewModel.startRenaming(column) },
+                            onMoveTask: { task in viewModel.showMoveTaskSheet(task) },
+                            onCheckboxTask: { task in viewModel.moveTaskToDoneColumn(task) },
+                            isDoneColumn: column.id == doneColumnID
+                        )
+                        .frame(width: idealWidth)
+                        .frame(maxHeight: .infinity)
                     }
-                    .frame(width: 320, height: 180)
-                    .background(
-                        RoundedRectangle(cornerRadius: 16)
-                            .fill(Color(.secondarySystemBackground).opacity(0.5))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16)
-                            .strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [8]))
-                            .foregroundStyle(.tertiary)
-                    )
+
+                    // Add column button
+                    Button(action: { viewModel.showAddColumnSheet = true }) {
+                        VStack(spacing: 12) {
+                            Image(systemName: "plus.circle.fill")
+                                .font(.system(size: 40))
+                                .foregroundStyle(.secondary)
+                            Text("add_column")
+                                .font(.subheadline.weight(.medium))
+                                .foregroundStyle(.secondary)
+                        }
+                        .frame(width: min(idealWidth, 320), height: 180)
+                        .background(
+                            RoundedRectangle(cornerRadius: 16)
+                                .fill(Color(.secondarySystemBackground).opacity(0.5))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16)
+                                .strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [8]))
+                                .foregroundStyle(.tertiary)
+                        )
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
+                .padding(.horizontal, isMacIdiom ? MacDesign.columnHorizontalPadding : 16)
+                .padding(.vertical, isMacIdiom ? 16 : 8)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
         }
     }
 
@@ -132,7 +143,8 @@ struct KanbanBoardView: View {
     // MARK: - Column Page
 
     private func columnPage(for column: KanbanColumn) -> some View {
-        GeometryReader { geometry in
+        let doneColumnID = viewModel.doneColumn(from: sortedColumns)?.id
+        return GeometryReader { geometry in
             KanbanColumnView(
                 column: column,
                 draggedTask: $viewModel.draggingTask,
@@ -156,7 +168,11 @@ struct KanbanBoardView: View {
                 },
                 onMoveTask: { task in
                     viewModel.showMoveTaskSheet(task)
-                }
+                },
+                onCheckboxTask: { task in
+                    viewModel.moveTaskToDoneColumn(task)
+                },
+                isDoneColumn: column.id == doneColumnID
             )
             .frame(width: geometry.size.width - 32)
             .frame(maxHeight: .infinity)
@@ -271,5 +287,6 @@ struct MoveTaskSheet: View {
             }
         }
         .presentationDetents([.medium])
+        .frame(idealWidth: 400)
     }
 }
