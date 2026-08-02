@@ -20,7 +20,7 @@ actor KeychainManager {
             throw KeychainError.encodingFailed
         }
 
-        // Delete existing item first (cover both old synced items and new non-synced ones)
+        // Delete existing item first (cover both synced and non-synced variants)
         for syncable in [true, false] as [Bool] {
             let deleteQuery: [String: Any] = [
                 kSecClass as String: kSecClassGenericPassword,
@@ -31,14 +31,14 @@ actor KeychainManager {
             SecItemDelete(deleteQuery as CFDictionary)
         }
 
-        // Add new item — stored only on this device, never uploaded to iCloud Keychain
+        // Add new item — synced via iCloud Keychain for seamless cross-device login
         let addQuery: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: accountKey,
             kSecValueData as String: data,
-            kSecAttrSynchronizable as String: false,
-            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+            kSecAttrSynchronizable as String: true,
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlocked,
         ]
 
         let status = SecItemAdd(addQuery as CFDictionary, nil)
@@ -50,8 +50,8 @@ actor KeychainManager {
     // MARK: - Retrieve Token
 
     func retrieveToken(for accountKey: String = "github-pat") throws -> String? {
-        // Try non-synced (current format) first, fall back to legacy synced items
-        for syncable in [false, true] as [Bool] {
+        // Try synced (iCloud Keychain) first, fall back to legacy non-synced items
+        for syncable in [true, false] as [Bool] {
             let query: [String: Any] = [
                 kSecClass as String: kSecClassGenericPassword,
                 kSecAttrService as String: service,
@@ -84,8 +84,8 @@ actor KeychainManager {
     // MARK: - Delete Token
 
     func deleteToken(for accountKey: String = "github-pat") throws {
-        // Delete both non-synced and legacy synced items
-        for syncable in [false, true] as [Bool] {
+        // Delete both synced and non-synced items
+        for syncable in [true, false] as [Bool] {
             let query: [String: Any] = [
                 kSecClass as String: kSecClassGenericPassword,
                 kSecAttrService as String: service,
