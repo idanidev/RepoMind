@@ -22,7 +22,9 @@
       "Write",
       "Edit",
       "Glob",
-      "Grep"
+      "Grep",
+      "Bash(node bridge/dist/*)",
+      "Bash(npm --prefix bridge *)"
     ],
     "deny": [
       "Bash(rm -rf *)",
@@ -34,6 +36,18 @@
       "Read(./.env.*)",
       "Read(./fastlane/.env*)",
       "Read(./fastlane/Appfile)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node bridge/dist/brief.js"
+          }
+        ]
+      }
     ]
   }
 }
