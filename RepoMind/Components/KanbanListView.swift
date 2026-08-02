@@ -30,6 +30,8 @@ struct KanbanListView: View {
             .padding(.trailing, 20)
             .padding(.bottom, 24)
         }
+        .onAppear { viewModel.updateVoiceContextualStrings() }
+        .onChange(of: sortedColumns) { viewModel.updateVoiceContextualStrings() }
     }
 
 }
@@ -56,6 +58,9 @@ struct KanbanListColumnSection: View {
     }
 
     var body: some View {
+        let doneColumnID = viewModel.doneColumn(from: (viewModel.project.columns ?? []))?.id
+        let isThisDoneColumn = column.id == doneColumnID
+
         VStack(alignment: .leading, spacing: 12) {
             columnHeader(for: column)
 
@@ -66,7 +71,9 @@ struct KanbanListColumnSection: View {
                         ForEach(tasks) { task in
                             ListTaskCard(
                                 task: task,
-                                columnColor: Color(hex: column.colorHex)
+                                columnColor: Color(hex: column.colorHex),
+                                isCompleted: isThisDoneColumn,
+                                onCheckbox: { viewModel.moveTaskToDoneColumn(task) }
                             ) {
                                 viewModel.editingTask = task
                             }
@@ -78,7 +85,9 @@ struct KanbanListColumnSection: View {
                         ForEach(tasks) { task in
                             ListTaskCard(
                                 task: task,
-                                columnColor: Color(hex: column.colorHex)
+                                columnColor: Color(hex: column.colorHex),
+                                isCompleted: isThisDoneColumn,
+                                onCheckbox: { viewModel.moveTaskToDoneColumn(task) }
                             ) {
                                 viewModel.editingTask = task
                             }
@@ -146,27 +155,40 @@ struct KanbanListColumnSection: View {
 struct ListTaskCard: View {
     let task: TaskItem
     let columnColor: Color
+    let isCompleted: Bool
+    let onCheckbox: () -> Void
     let onTap: () -> Void
 
-    @State private var thumbnailImage: UIImage?
+    @State private var showFullPhoto = false
 
     var body: some View {
-        Button(action: onTap) {
-            HStack(spacing: 12) {
-                // Indicador de color lateral
-                RoundedRectangle(cornerRadius: 2)
-                    .fill(columnColor)
-                    .frame(width: 4)
+        HStack(spacing: 12) {
+            // Checkbox
+            Button(action: isCompleted ? {} : onCheckbox) {
+                Image(systemName: isCompleted ? "checkmark.circle.fill" : "circle")
+                    .font(.title3)
+                    .foregroundStyle(isCompleted ? Color.green : Color.secondary)
+            }
+            .buttonStyle(.plain)
+            .disabled(isCompleted)
 
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(task.content)
-                        .font(.body)
-                        .foregroundStyle(.primary)
-                        .lineLimit(3)
-                        .multilineTextAlignment(.leading)
+            // Indicador de color lateral
+            RoundedRectangle(cornerRadius: 2)
+                .fill(columnColor)
+                .frame(width: 4)
 
-                    HStack(spacing: 12) {
-                        if (task.imagePath != nil || task.imageData != nil) && thumbnailImage == nil {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(task.content)
+                    .font(.body)
+                    .foregroundStyle(.primary)
+                    .lineLimit(3)
+                    .multilineTextAlignment(.leading)
+
+                HStack(spacing: 12) {
+                    if task.imagePath != nil || task.imageData != nil {
+                        Button {
+                            showFullPhoto = true
+                        } label: {
                             HStack(spacing: 4) {
                                 Image(systemName: "photo.fill")
                                     .font(.caption2)
@@ -175,80 +197,50 @@ struct ListTaskCard: View {
                             }
                             .foregroundStyle(.blue)
                         }
-
-                        if task.audioPath != nil {
-                            HStack(spacing: 4) {
-                                Image(systemName: "waveform")
-                                    .font(.caption2)
-                                Text("audio_badge")
-                                    .font(.caption2)
-                            }
-                            .foregroundStyle(.purple)
-                        }
-
-                        Spacer()
-
-                        Text(task.createdAt, style: .relative)
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
+                        .buttonStyle(.plain)
                     }
-                }
 
-                Spacer(minLength: 0)
-
-                if let image = thumbnailImage {
-                    Image(uiImage: image)
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(width: 60, height: 60)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                        .onDrag { NSItemProvider(object: fullTaskImage ?? image) }
-                        .contextMenu {
-                            if let img = fullTaskImage {
-                                ShareLink(
-                                    item: TransferableImage(image: img),
-                                    preview: SharePreview(task.content, image: Image(uiImage: img))
-                                ) {
-                                    Label("share_image", systemImage: "square.and.arrow.up")
-                                }
-                                Button {
-                                    if let data = img.pngData() {
-                                        UIPasteboard.general.setData(
-                                            data, forPasteboardType: "public.png")
-                                    }
-                                    ToastManager.shared.show(
-                                        String(localized: "image_copied_toast"), style: .success)
-                                } label: {
-                                    Label("copy_image", systemImage: "doc.on.doc")
-                                }
-                            }
+                    if task.audioPath != nil {
+                        HStack(spacing: 4) {
+                            Image(systemName: "waveform")
+                                .font(.caption2)
+                            Text("audio_badge")
+                                .font(.caption2)
                         }
+                        .foregroundStyle(.purple)
+                    }
+
+                    Spacer()
+
+                    Text(shortDate(task.createdAt))
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
                 }
-
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
             }
-            .padding(14)
-            .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: 12))
-            .shadow(color: .black.opacity(0.04), radius: 4, y: 2)
+
+            Spacer(minLength: 0)
+
+            Image(systemName: "chevron.right")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
         }
-        .buttonStyle(.plain)
-        .task {
-            await loadThumbnail()
-        }
-        .onChange(of: task.imageData) { _, _ in
-            thumbnailImage = nil
-            Task { await loadThumbnail() }
+        .padding(14)
+        .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: 12))
+        .shadow(color: .black.opacity(0.04), radius: 4, y: 2)
+        .contentShape(RoundedRectangle(cornerRadius: 12))
+        .onTapGesture { onTap() }
+        .sheet(isPresented: $showFullPhoto) {
+            if let image = TaskImageHelper.fullImage(from: task) {
+                FullPhotoView(image: image)
+            }
         }
     }
 
-    private var fullTaskImage: UIImage? {
-        TaskImageHelper.fullImage(from: task)
-    }
-
-    private func loadThumbnail() async {
-        thumbnailImage = await TaskImageHelper.loadThumbnail(
-            from: task, size: CGSize(width: 120, height: 120))
+    private func shortDate(_ date: Date) -> String {
+        let cal = Calendar.current
+        if cal.isDateInToday(date) {
+            return date.formatted(date: .omitted, time: .shortened)
+        }
+        return date.formatted(.dateTime.day().month(.abbreviated))
     }
 }
