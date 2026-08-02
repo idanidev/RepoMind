@@ -23,6 +23,34 @@ struct BackupDocument: FileDocument {
     }
 }
 
+// MARK: - Backup DTOs (shared between export and import)
+
+private enum BackupDTO {
+    struct Task: Codable {
+        let content: String
+        let status: String
+        let orderIndex: Int
+    }
+    struct Column: Codable {
+        let name: String
+        let orderIndex: Int
+        let colorHex: String
+        let tasks: [Task]
+    }
+    struct Repo: Codable {
+        let name: String
+        let description: String
+        let isLocal: Bool
+        let logoURL: String?
+        let columns: [Column]
+    }
+    struct Root: Codable {
+        let version: Int
+        let exportedAt: String
+        let repos: [Repo]
+    }
+}
+
 // MARK: - Settings View
 
 struct SettingsView: View {
@@ -148,20 +176,20 @@ struct SettingsView: View {
                         get: { subscription.isMockPro },
                         set: { subscription.isMockPro = $0 }
                     )) {
-                        Label("Simular Pro", systemImage: "crown.fill")
+                        Label("debug_simulate_pro_label", systemImage: "crown.fill")
                             .foregroundStyle(.purple)
                     }
                     .tint(.purple)
 
                     if subscription.isMockPro {
-                        Text("La app se comporta como usuario Pro.")
+                        Text("debug_simulate_pro_hint")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                 } header: {
                     Text("Debug")
                 } footer: {
-                    Text("Solo visible en builds de desarrollo. No tiene efecto en producción.")
+                    Text("debug_only_visible_hint")
                 }
                 #endif
 
@@ -175,8 +203,8 @@ struct SettingsView: View {
                             .foregroundStyle(.secondary)
                     }
 
-                    Link("privacy_policy", destination: URL(string: "https://idanidev.github.io/repomind/privacy")!)
-                    Link("terms_of_use", destination: URL(string: "https://idanidev.github.io/repomind/terms")!)
+                    Link("privacy_policy", destination: URL(string: "https://idanidev.github.io/RepoMind/privacy")!)
+                    Link("terms_of_use", destination: URL(string: "https://idanidev.github.io/RepoMind/terms")!)
                 }
             }
             .navigationTitle("settings_title")
@@ -228,41 +256,17 @@ struct SettingsView: View {
     }
 
     private func buildBackupJSON() throws -> Data {
-        struct BTask: Codable {
-            let content: String
-            let status: String
-            let orderIndex: Int
-        }
-        struct BColumn: Codable {
-            let name: String
-            let orderIndex: Int
-            let colorHex: String
-            let tasks: [BTask]
-        }
-        struct BRepo: Codable {
-            let name: String
-            let description: String
-            let isLocal: Bool
-            let logoURL: String?
-            let columns: [BColumn]
-        }
-        struct BRoot: Codable {
-            let version: Int
-            let exportedAt: String
-            let repos: [BRepo]
-        }
-
-        let repoBackups = repos.map { repo -> BRepo in
+        let repoBackups = repos.map { repo -> BackupDTO.Repo in
             let cols = (repo.columns ?? []).sorted { $0.orderIndex < $1.orderIndex }
-            let colBackups = cols.map { col -> BColumn in
+            let colBackups = cols.map { col -> BackupDTO.Column in
                 let tasks = (col.tasks ?? []).sorted { $0.orderIndex < $1.orderIndex }
-                let taskBackups = tasks.map { BTask(content: $0.content, status: $0.status, orderIndex: $0.orderIndex) }
-                return BColumn(name: col.name, orderIndex: col.orderIndex, colorHex: col.colorHex, tasks: taskBackups)
+                let taskBackups = tasks.map { BackupDTO.Task(content: $0.content, status: $0.status, orderIndex: $0.orderIndex) }
+                return BackupDTO.Column(name: col.name, orderIndex: col.orderIndex, colorHex: col.colorHex, tasks: taskBackups)
             }
-            return BRepo(name: repo.name, description: repo.repoDescription, isLocal: repo.isLocal, logoURL: repo.logoURL, columns: colBackups)
+            return BackupDTO.Repo(name: repo.name, description: repo.repoDescription, isLocal: repo.isLocal, logoURL: repo.logoURL, columns: colBackups)
         }
 
-        let root = BRoot(
+        let root = BackupDTO.Root(
             version: 1,
             exportedAt: ISO8601DateFormatter().string(from: .now),
             repos: repoBackups
@@ -275,6 +279,7 @@ struct SettingsView: View {
 
     // MARK: - Import
 
+    @MainActor
     private func handleImport(_ result: Result<[URL], Error>) async {
         isImporting = true
         defer { isImporting = false }
@@ -287,33 +292,17 @@ struct SettingsView: View {
 
             let data = try Data(contentsOf: url)
 
-            struct BTask: Codable {
-                let content: String
-                let status: String
-                let orderIndex: Int
-            }
-            struct BColumn: Codable {
-                let name: String
-                let orderIndex: Int
-                let colorHex: String
-                let tasks: [BTask]
-            }
-            struct BRepo: Codable {
-                let name: String
-                let description: String
-                let isLocal: Bool
-                let logoURL: String?
-                let columns: [BColumn]
-            }
-            struct BRoot: Codable {
-                let version: Int
-                let exportedAt: String
-                let repos: [BRepo]
-            }
+            let backup = try JSONDecoder().decode(BackupDTO.Root.self, from: data)
 
-            let backup = try JSONDecoder().decode(BRoot.self, from: data)
-
-            for repoData in backup.repos {
+            let currentRepoCount = repos.count
+            for (index, repoData) in backup.repos.enumerated() {
+                guard subscription.canAddRepo(currentCount: currentRepoCount + index) else {
+                    ToastManager.shared.show(
+                        String(localized: "repo_limit_upgrade"),
+                        style: .info
+                    )
+                    break
+                }
                 let repo = ProjectRepo(
                     repoID: 0,
                     name: repoData.name,
