@@ -55,6 +55,22 @@ Compila y sube el IPA a App Store Connect (sin enviar a revisión)
 
 Envía a revisión el build ya subido (sin recompilar)
 
+### ios upload_metadata
+
+```sh
+[bundle exec] fastlane ios upload_metadata
+```
+
+Sube descripción, keywords y support URL a App Store Connect
+
+### ios upload_screenshots
+
+```sh
+[bundle exec] fastlane ios upload_screenshots
+```
+
+Sube screenshots a App Store Connect (sin recompilar)
+
 ### ios bump_version
 
 ```sh
@@ -91,6 +107,14 @@ Compila la app macOS (Mac Catalyst) en modo Release
 ```
 
 Compila y sube el PKG a App Store Connect (sin enviar a revisión)
+
+### mac upload_metadata
+
+```sh
+[bundle exec] fastlane mac upload_metadata
+```
+
+Sube metadata (descripción, keywords, support URL, review info) de macOS
 
 ### mac submit
 

@@ -37,7 +37,7 @@
 "photo_delete_confirm_title" = "Delete Image?";
 "delete_task_button" = "Delete Task";
 
-/* Pricing (missing from es.lproj counterpart sync) */
+/* Pricing */
 "buy_once_button" = "Unlock Pro";
 "one_time_payment_label" = "One-time payment. Lifetime access.";
 
@@ -64,6 +64,8 @@
 "icon_search_error" = "Search error: %@";
 
 /* ContentView */
+"icloud_syncing_message" = "Syncing with iCloud...";
+"icloud_sign_in_manually" = "Sign in manually";
 "connect_account_prompt" = "Connect an account to get started";
 "tasks_count" = "%d tasks";
 "stars_count" = "%d stars";
@@ -278,3 +280,108 @@
 "local_project_footer" = "This project will only be stored locally on this device and won't sync with GitHub.";
 "local_project_created_toast" = "Local project created";
 "biometric_reason" = "Authenticate to access your RepoMind repositories.";
+
+/* Demo Mode */
+"demo_mode_button" = "Try Demo";
+"demo_mode_badge" = "DEMO";
+
+/* Repo Settings & Checkbox */
+"repo_settings" = "Settings";
+"checkbox_done_column_section" = "Checkbox Done Column";
+"checkbox_done_column_footer" = "When you tap the checkbox on a task, it moves to this column.";
+"checkbox_none" = "Disabled";
+"no_done_column_configured" = "Configure a done column in repo settings ⚙";
+
+/* Debug */
+"debug_simulate_pro_label" = "Simulate Pro";
+"debug_simulate_pro_hint" = "The app behaves as a Pro user.";
+"debug_only_visible_hint" = "Only visible in development builds. Has no effect in production.";
+
+/* Deep Links */
+"deeplink_no_repo_error" = "No repository found for the deep link.";
+"deeplink_no_column_error" = "No column found for the deep link.";
+"deeplink_task_created" = "Task added to %@";
+
+/* Feedback */
+"feedback_title" = "Feedback";
+"feedback_empty_title" = "No feedback yet";
+"feedback_empty_subtitle" = "User reports, reviews, and feature requests will appear here.";
+"feedback_sync_error_title" = "Sync error";
+"ok" = "OK";
+"feedback_severity_critical" = "Critical bugs";
+"feedback_severity_minor" = "Minor bugs";
+"feedback_severity_enhancement" = "Enhancements";
+"feedback_severity_general" = "General feedback";
+"feedback_notif_critical %@" = "🔴 [%@] Critical issue reported";
+"feedback_notif_minor %@" = "🟡 [%@] Minor bug reported";
+"feedback_notif_enhancement %@" = "🟢 [%@] New enhancement request";
+"feedback_notif_general %@" = "💬 [%@] New user feedback";
+"feedback_open_button" = "Feedback";
+"feedback_unread_badge %lld" = "%lld unread";
+
+/* Mac UI */
+"copy_url" = "Copy URL";
+"open_in_github" = "Open on GitHub";
+"toggle_sidebar" = "Toggle Sidebar";
+"new_window_size_compact" = "Compact Window";
+"new_window_size_default" = "Default Window";
+"new_window_size_wide" = "Wide Window";
+"menu_view" = "View";
+"menu_window_size" = "Window Size";
+"mark_done" = "Mark as done";
+"mark_pending" = "Mark as pending";
+"close" = "Close";
+
+/* Feedback actions */
+"feedback_actions_section" = "Actions";
+"feedback_severity_section" = "Severity";
+"feedback_severity_picker" = "Severity";
+"feedback_comment_section" = "Comment on GitHub";
+"feedback_comment_placeholder" = "Reply to user...";
+"feedback_send_comment" = "Post comment";
+"feedback_open_in_github" = "Open on GitHub";
+"feedback_mark_read" = "Mark as read";
+"feedback_mark_unread" = "Mark as unread";
+"feedback_convert_to_task" = "Convert to Kanban task";
+"feedback_convert_pick_column" = "Pick destination column";
+"feedback_converted_in %@" = "Saved in column: %@";
+"feedback_close_issue" = "Close issue";
+"feedback_reopen_issue" = "Reopen issue";
+"feedback_close_confirm_title" = "Close this issue?";
+"feedback_close_confirm_message" = "It will be marked as resolved on GitHub.";
+"feedback_close_done" = "Issue closed.";
+"feedback_reopen_done" = "Issue reopened.";
+"feedback_comment_done" = "Comment posted.";
+"feedback_severity_done" = "Severity updated.";
+"feedback_snooze" = "Snooze";
+"feedback_snooze_1d" = "1 day";
+"feedback_snooze_3d" = "3 days";
+"feedback_snooze_7d" = "1 week";
+"feedback_snooze_30d" = "1 month";
+"feedback_snooze_clear" = "Cancel snooze";
+"feedback_issue_number %lld" = "Issue #%lld";
+"feedback_error_no_owner" = "Could not determine repository owner.";
+"feedback_error_http %lld" = "Network error (HTTP %lld). Try again.";
+"kanban_add_task_to %@" = "Add task to %@";
+
+/* Task ↔ GitHub Issues Sync */
+"sync_tasks_github_toggle" = "Sync tasks to GitHub Issues";
+"sync_tasks_github_section" = "GitHub Issues";
+"sync_tasks_github_footer %@" = "Each task will be published as an issue in %@. Completing it closes the issue.";
+"sync_tasks_disabled_no_permission" = "Sync was turned off — RepoMind no longer has permission to write issues on this repo.";
+"sync_tasks_disabled_alert_title" = "Task sync disabled";
+"sync_tasks_confirm_bulk_title" = "Sync existing tasks?";
+"sync_tasks_confirm_bulk %lld" = "This will create %lld issues on GitHub. Continue?";
+"sync_tasks_confirm_bulk_button" = "Create issues";
+"sync_tasks_error_no_owner" = "Could not determine the repository owner.";
+"sync_tasks_error_not_found" = "The issue no longer exists on GitHub.";
+
+/* Home Screen Quick Action — Quick Add Task */
+"quick_action_new_task_title" = "New Task";
+"quick_action_new_task_subtitle" = "Add a task to any repo";
+"quick_add_task_title" = "Quick Task";
+"quick_add_repo_section" = "Repository";
+"quick_add_repo_picker" = "Repository";
+"quick_add_no_repos_title" = "No repositories yet";
+"quick_add_no_repos_subtitle" = "Add a repo first to create tasks in it.";
+"quick_add_task_created %@" = "Added to %@";

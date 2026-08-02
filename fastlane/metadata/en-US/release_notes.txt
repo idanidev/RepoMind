@@ -1,0 +1,13 @@
+What's new:
+
+• New "Feedback" section — surfaces GitHub issues labeled user-feedback from each repo, grouped by severity (critical, minor, enhancement, general)
+• Automatic notifications when a new user report arrives
+• Quick actions per issue: convert to Kanban task, close, comment, change severity, or snooze
+• Red badge on the repo list when there's unread feedback
+
+Mac improvements:
+• Native macOS sidebar style
+• Hover effects on repos and cards
+• Context menus (right-click) on repos and tasks
+• Redesigned login with side panel
+• ⌃⌘S shortcut to toggle sidebar
