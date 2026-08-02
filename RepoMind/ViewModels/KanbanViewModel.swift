@@ -42,10 +42,97 @@ final class KanbanViewModel {
         self.modelContext = modelContext
     }
 
+    // MARK: - GitHub Issue Sync
+
+    private var isDemoMode: Bool {
+        UserDefaults.standard.bool(forKey: "isDemoMode")
+    }
+
+    private func resolveToken() async -> String? {
+        guard let account = project.account else { return nil }
+        return try? await KeychainManager.shared.retrieveToken(for: account.tokenKey)
+    }
+
+    /// The column with the highest `orderIndex` — the "final" column for sync purposes,
+    /// independent of the separately-configurable checkbox done-column.
+    private func isFinalColumn(_ column: KanbanColumn?) -> Bool {
+        guard let column else { return false }
+        let lastID = (project.columns ?? []).max(by: { $0.orderIndex < $1.orderIndex })?.id
+        return column.id == lastID
+    }
+
+    /// Runs a GitHub sync operation without ever blocking or failing the local mutation.
+    /// On success clears `needsIssueSync`; on permission/existence errors disables the toggle;
+    /// on any other failure marks the task for retry via `reconcile`.
+    private func runSync(_ task: TaskItem, _ operation: @escaping (String) async throws -> Void) {
+        guard project.syncTasksToGitHub, !isDemoMode else { return }
+        let repo = project
+        Task {
+            guard let token = await self.resolveToken() else {
+                task.needsIssueSync = true
+                try? self.modelContext.save()
+                return
+            }
+            do {
+                try await operation(token)
+                task.needsIssueSync = false
+            } catch TaskIssueSyncService.SyncError.noPermission, TaskIssueSyncService.SyncError.notFound {
+                repo.syncTasksToGitHub = false
+                repo.syncTasksDisabledReason = String(localized: "sync_tasks_disabled_no_permission")
+            } catch {
+                task.needsIssueSync = true
+            }
+            try? self.modelContext.save()
+        }
+    }
+
+    /// Called once when the board appears — retries any tasks that failed a previous sync attempt.
+    func reconcileGitHubSyncIfNeeded() async {
+        guard project.syncTasksToGitHub, project.syncTasksDisabledReason == nil, !isDemoMode else { return }
+        guard let token = await resolveToken() else { return }
+        await TaskIssueSyncService.shared.reconcile(repo: project, context: modelContext, token: token)
+    }
+
+    /// Called by `TaskEditSheet` after content and/or column were edited.
+    func handleTaskEdited(_ task: TaskItem, previousColumn: KanbanColumn?) {
+        guard project.syncTasksToGitHub, !isDemoMode else { return }
+        let newColumn = task.column
+        let columnChanged = previousColumn?.id != newColumn?.id
+        guard columnChanged else {
+            runSync(task) { token in
+                try await TaskIssueSyncService.shared.updateIssueContent(for: task, repo: self.project, token: token)
+            }
+            return
+        }
+
+        let wasFinal = isFinalColumn(previousColumn)
+        let nowFinal = isFinalColumn(newColumn)
+        runSync(task) { token in
+            try await TaskIssueSyncService.shared.updateIssueContent(for: task, repo: self.project, token: token)
+            if nowFinal {
+                try await TaskIssueSyncService.shared.updateIssueColumn(for: task, repo: self.project, token: token)
+                try await TaskIssueSyncService.shared.closeIssue(for: task, repo: self.project, reason: "completed", token: token)
+            } else if wasFinal {
+                try await TaskIssueSyncService.shared.reopenIssue(for: task, repo: self.project, token: token)
+                try await TaskIssueSyncService.shared.updateIssueColumn(for: task, repo: self.project, token: token)
+            } else {
+                try await TaskIssueSyncService.shared.updateIssueColumn(for: task, repo: self.project, token: token)
+            }
+        }
+    }
+
     // MARK: - Voice Actions
 
     func checkVoicePermissions() async {
         await voiceManager.checkAndRequestPermissions()
+    }
+
+    /// Updates the recognizer's vocabulary with column names and routing commands.
+    /// Call this whenever columns change or before starting recording.
+    func updateVoiceContextualStrings() {
+        let columnNames = (project.columns ?? []).map(\.name)
+        let commands = ["añadir a", "mover a", "add to", "move to"]
+        voiceManager.contextualStrings = columnNames + commands
     }
 
     func createTaskFromVoice() {
@@ -111,6 +198,14 @@ final class KanbanViewModel {
         }
 
         newColumnName = ""
+
+        if project.syncTasksToGitHub, !isDemoMode {
+            let repo = project
+            Task {
+                guard let token = await self.resolveToken() else { return }
+                await TaskIssueSyncService.shared.ensureLabels(repo: repo, columns: [col], token: token)
+            }
+        }
         return true
     }
 
@@ -133,6 +228,15 @@ final class KanbanViewModel {
         col.name = name
         columnToRename = nil
         renameColumnText = ""
+
+        // New slug for the renamed column — create its label, but existing issues keep their old label (v1 limitation).
+        if project.syncTasksToGitHub, !isDemoMode {
+            let repo = project
+            Task {
+                guard let token = await self.resolveToken() else { return }
+                await TaskIssueSyncService.shared.ensureLabels(repo: repo, columns: [col], token: token)
+            }
+        }
     }
 
     // MARK: - Task Actions
@@ -166,13 +270,28 @@ final class KanbanViewModel {
         }
 
         Self.impactFeedback.impactOccurred()
+
+        runSync(task) { token in
+            try await TaskIssueSyncService.shared.createIssue(for: task, repo: self.project, token: token)
+        }
     }
 
     func deleteTask(_ task: TaskItem) {
+        let issueNumber = task.issueNumber
+        let repo = project
+        let shouldSync = repo.syncTasksToGitHub && !isDemoMode
+
         withAnimation(.snappy) {
             modelContext.delete(task)
         }
         Self.impactFeedback.impactOccurred()
+
+        if shouldSync, let issueNumber {
+            Task {
+                guard let token = await self.resolveToken() else { return }
+                try? await TaskIssueSyncService.shared.deleteIssue(issueNumber: issueNumber, repo: repo, token: token)
+            }
+        }
     }
 
     func showMoveTaskSheet(_ task: TaskItem) {
@@ -180,8 +299,45 @@ final class KanbanViewModel {
         showMoveSheet = true
     }
 
+    // MARK: - Done Column (Checkbox)
+
+    func moveTaskToDoneColumn(_ task: TaskItem) {
+        guard let doneCol = doneColumn(from: project.columns ?? []) else {
+            ToastManager.shared.show(String(localized: "no_done_column_configured"), style: .info)
+            return
+        }
+        guard task.column?.id != doneCol.id else { return }
+        moveTask(task, to: doneCol, atIndex: nil)
+        Self.impactFeedback.impactOccurred()
+    }
+
+    func setDoneColumn(_ column: KanbanColumn?) {
+        let key = "checkboxDoneColumnID_\(project.repoID)"
+        if let column {
+            UserDefaults.standard.set(column.id.uuidString, forKey: key)
+        } else {
+            UserDefaults.standard.removeObject(forKey: key)
+        }
+    }
+
+    func doneColumn(from columns: [KanbanColumn]) -> KanbanColumn? {
+        let key = "checkboxDoneColumnID_\(project.repoID)"
+        if let uuidString = UserDefaults.standard.string(forKey: key),
+           let uuid = UUID(uuidString: uuidString),
+           let saved = columns.first(where: { $0.id == uuid }) {
+            return saved
+        }
+        // Auto-detect: última columna cuyo nombre sugiera "done"
+        let doneKeywords = ["done", "hecho", "completado", "finished", "complete", "cerrado", "closed"]
+        return columns.first { col in
+            doneKeywords.contains(where: { col.name.localizedStandardContains($0) })
+        } ?? columns.last
+    }
+
     func moveTask(_ task: TaskItem, to column: KanbanColumn, atIndex index: Int?) {
         let isSameColumn = task.column?.id == column.id
+        let previousColumn = task.column
+        let wasFinal = isFinalColumn(previousColumn)
 
         withAnimation(.snappy) {
             // Si se mueve a otra columna
@@ -201,6 +357,21 @@ final class KanbanViewModel {
         }
 
         Self.selectionFeedback.selectionChanged()
+
+        if !isSameColumn {
+            let nowFinal = isFinalColumn(column)
+            runSync(task) { token in
+                if nowFinal {
+                    try await TaskIssueSyncService.shared.updateIssueColumn(for: task, repo: self.project, token: token)
+                    try await TaskIssueSyncService.shared.closeIssue(for: task, repo: self.project, reason: "completed", token: token)
+                } else if wasFinal {
+                    try await TaskIssueSyncService.shared.reopenIssue(for: task, repo: self.project, token: token)
+                    try await TaskIssueSyncService.shared.updateIssueColumn(for: task, repo: self.project, token: token)
+                } else {
+                    try await TaskIssueSyncService.shared.updateIssueColumn(for: task, repo: self.project, token: token)
+                }
+            }
+        }
     }
 
     private func reorderTask(_ task: TaskItem, inColumn column: KanbanColumn, toIndex targetIndex: Int) {

@@ -123,10 +123,14 @@ private struct TaskPhotoSection: View {
 struct TaskEditSheet: View {
     @Bindable var task: TaskItem
     var columns: [KanbanColumn]
+    /// Called after save with the task and its column *before* editing, so callers can
+    /// detect a column change (e.g. to sync the move to GitHub Issues).
+    var onSave: ((TaskItem, KanbanColumn?) -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
 
     @State private var editedContent: String = ""
     @State private var selectedColumn: KanbanColumn?
+    @State private var originalColumn: KanbanColumn?
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var taskImage: UIImage?
     @State private var showDeleteConfirmation = false
@@ -185,6 +189,7 @@ struct TaskEditSheet: View {
             .onAppear {
                 editedContent = task.content
                 selectedColumn = task.column
+                originalColumn = task.column
                 loadExistingImage()
             }
             .onChange(of: selectedPhoto) { _, newValue in
@@ -206,6 +211,7 @@ struct TaskEditSheet: View {
             }
         }
         .presentationDetents([.medium, .large])
+        .frame(idealWidth: 480)
     }
 
     private func loadExistingImage() {
@@ -236,6 +242,7 @@ struct TaskEditSheet: View {
             task.imageData = nil
         }
 
+        onSave?(task, originalColumn)
         dismiss()
     }
 
@@ -262,6 +269,7 @@ struct AddTaskSheet: View {
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var taskImage: UIImage?
     @State private var showDeleteConfirmation = false
+    @FocusState private var isContentFocused: Bool
 
     var body: some View {
         NavigationStack {
@@ -269,6 +277,7 @@ struct AddTaskSheet: View {
                 Section("task_section") {
                     TextField("task_placeholder", text: $content, axis: .vertical)
                         .lineLimit(2...5)
+                        .focused($isContentFocused)
                 }
 
                 TaskPhotoSection(
@@ -304,6 +313,9 @@ struct AddTaskSheet: View {
             }
             .onAppear {
                 selectedColumn = preselectedColumn ?? columns.first
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    isContentFocused = true
+                }
             }
             .onChange(of: selectedPhoto) { _, newValue in
                 Task {
@@ -322,5 +334,6 @@ struct AddTaskSheet: View {
             }
         }
         .presentationDetents([.medium, .large])
+        .frame(idealWidth: 480)
     }
 }

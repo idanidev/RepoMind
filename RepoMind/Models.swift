@@ -43,6 +43,11 @@ final class ProjectRepo {
     var language: String?
     var stargazersCount: Int = 0
     var logoURL: String?
+    /// Feature toggle: mirror this repo's Kanban tasks as GitHub Issues.
+    var syncTasksToGitHub: Bool = false
+    /// Set when a sync attempt fails with a permission/existence error (403/404/410),
+    /// so the toggle auto-disables and the user is warned next time the board opens.
+    var syncTasksDisabledReason: String?
 
     var account: GitHubAccount?
 
@@ -127,6 +132,10 @@ final class TaskItem {
     @Attribute(.externalStorage) var imageData: Data?
     var status: String = "todo"
     var orderIndex: Int = 0
+    /// GitHub issue number if this task is mirrored as an issue. Nil = not synced.
+    var issueNumber: Int?
+    /// Set when a GitHub sync operation fails (offline, expired token) so reconciliation retries later.
+    var needsIssueSync: Bool = false
 
     var column: KanbanColumn?
     var project: ProjectRepo?
@@ -138,7 +147,9 @@ final class TaskItem {
         audioPath: String? = nil,
         imagePath: String? = nil,
         project: ProjectRepo? = nil,
-        orderIndex: Int = 0
+        orderIndex: Int = 0,
+        issueNumber: Int? = nil,
+        needsIssueSync: Bool = false
     ) {
         self.id = UUID()
         self.content = content
@@ -149,6 +160,94 @@ final class TaskItem {
         self.column = column
         self.project = project
         self.orderIndex = orderIndex
+        self.issueNumber = issueNumber
+        self.needsIssueSync = needsIssueSync
+    }
+}
+
+// MARK: - Feedback Issue
+
+enum FeedbackSeverity: String, CaseIterable, Codable {
+    case critical
+    case minor
+    case enhancement
+    case general
+
+    static func from(labels: [String]) -> FeedbackSeverity {
+        let lower = Set(labels.map { $0.lowercased() })
+        if lower.contains("bug:critical") { return .critical }
+        if lower.contains("bug:minor") { return .minor }
+        if lower.contains("enhancement") { return .enhancement }
+        return .general
+    }
+}
+
+@Model
+final class FeedbackIssue {
+    var id: UUID = UUID()
+    /// GitHub issue number, unique per repo (NOT app-wide).
+    var issueNumber: Int = 0
+    /// `owner/repo` format — used to scope queries.
+    var repoFullName: String = ""
+    var title: String = ""
+    var bodyText: String = ""
+    var htmlURL: String = ""
+    /// Raw severity string — back to enum via `severityEnum` (CloudKit can't store enums directly).
+    var severityRaw: String = FeedbackSeverity.general.rawValue
+    /// "open" or "closed".
+    var state: String = "open"
+    /// `email`, `app_store_review`, `github`, etc. — parsed from issue body.
+    var source: String = "github"
+    /// Star rating (1–5), nil if not a review.
+    var rating: Int?
+    var createdAt: Date = Date.now
+    var updatedAt: Date = Date.now
+    var isRead: Bool = false
+    /// Hidden from main list until this date passes. Nil = visible.
+    var snoozedUntil: Date?
+    /// Persistent model id of TaskItem if user converted issue to a Kanban task.
+    var convertedTaskColumnName: String?
+
+    var severityEnum: FeedbackSeverity {
+        FeedbackSeverity(rawValue: severityRaw) ?? .general
+    }
+
+    var isSnoozed: Bool {
+        guard let until = snoozedUntil else { return false }
+        return until > .now
+    }
+
+    init(
+        issueNumber: Int,
+        repoFullName: String,
+        title: String,
+        bodyText: String = "",
+        htmlURL: String = "",
+        severity: FeedbackSeverity = .general,
+        state: String = "open",
+        source: String = "github",
+        rating: Int? = nil,
+        createdAt: Date = .now,
+        updatedAt: Date = .now,
+        isRead: Bool = false,
+        snoozedUntil: Date? = nil,
+        convertedTaskColumnName: String? = nil
+    ) {
+        self.id = UUID()
+        self.issueNumber = issueNumber
+        self.repoFullName = repoFullName
+        self.title = title
+        self.bodyText = bodyText
+        self.htmlURL = htmlURL
+        self.severityRaw = severity.rawValue
+        self.state = state
+        self.source = source
+        self.rating = rating
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.isRead = isRead
+        self.snoozedUntil = snoozedUntil
+        self.convertedTaskColumnName = convertedTaskColumnName
     }
 }
 

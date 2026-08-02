@@ -29,11 +29,15 @@ struct KanbanView: View {
     @Environment(\.modelContext) private var context
 
     @Query private var columns: [KanbanColumn]
+    @Query private var feedbackIssues: [FeedbackIssue]
 
     // ✅ FIX: Non-optional ViewModel initialized in .task
     @State private var viewModel: KanbanViewModel?
     @State private var viewMode: KanbanViewMode = .board
     @State private var showPaywall = false
+    @State private var showRepoSettings = false
+    @State private var showFeedback = false
+    @State private var showSyncDisabledAlert = false
 
     init(project: ProjectRepo) {
         self.project = project
@@ -68,6 +72,10 @@ struct KanbanView: View {
         vm.initializeDefaultColumnsIfNeeded()
         viewModel = vm
         await vm.checkVoicePermissions()
+        await vm.reconcileGitHubSyncIfNeeded()
+        if project.syncTasksDisabledReason != nil {
+            showSyncDisabledAlert = true
+        }
     }
 
     // MARK: - Toolbar
@@ -77,8 +85,40 @@ struct KanbanView: View {
         ToolbarItem(placement: .topBarTrailing) {
             HStack {
                 viewModeToggle
+                feedbackButton
                 addColumnButton
+                repoSettingsButton
             }
+        }
+    }
+
+    private var feedbackButton: some View {
+        let unread = project.unreadFeedbackCount(in: feedbackIssues)
+        return Button {
+            showFeedback = true
+        } label: {
+            ZStack(alignment: .topTrailing) {
+                Image(systemName: "bubble.left.and.exclamationmark.bubble.right")
+                if unread > 0 {
+                    Text("\(unread)")
+                        .font(.caption2.bold())
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(.red, in: Capsule())
+                        .offset(x: 8, y: -8)
+                }
+            }
+        }
+        .accessibilityLabel("feedback_open_button")
+    }
+
+    private var repoSettingsButton: some View {
+        Button {
+            showRepoSettings = true
+        } label: {
+            Label("repo_settings", systemImage: "gearshape")
+                .labelStyle(.iconOnly)
         }
     }
 
@@ -129,7 +169,9 @@ struct KanbanView: View {
             }
         }
         .sheet(item: $viewModel.editingTask) { task in
-            TaskEditSheet(task: task, columns: columns)
+            TaskEditSheet(task: task, columns: columns) { editedTask, previousColumn in
+                viewModel.handleTaskEdited(editedTask, previousColumn: previousColumn)
+            }
         }
         .sheet(isPresented: $viewModel.showAddTaskSheet) {
             AddTaskSheet(
@@ -154,6 +196,12 @@ struct KanbanView: View {
         .sheet(isPresented: $showPaywall) {
             PaywallView()
         }
+        .sheet(isPresented: $showRepoSettings) {
+            RepoSettingsSheet(viewModel: viewModel, columns: columns)
+        }
+        .sheet(isPresented: $showFeedback) {
+            NavigationStack { FeedbackView(repo: project) }
+        }
         .alert("rename_column_title", isPresented: $viewModel.showRenameColumnAlert) {
             TextField("column_name_placeholder", text: $viewModel.renameColumnText)
             Button("cancel_button", role: .cancel) {
@@ -164,6 +212,157 @@ struct KanbanView: View {
                 viewModel.renameColumn()
             }
         }
+        .alert("sync_tasks_disabled_alert_title", isPresented: $showSyncDisabledAlert) {
+            Button("ok") { project.syncTasksDisabledReason = nil }
+        } message: {
+            Text(project.syncTasksDisabledReason ?? "")
+        }
+    }
+}
+
+// MARK: - Repo Settings Sheet
+
+struct RepoSettingsSheet: View {
+    let viewModel: KanbanViewModel
+    let columns: [KanbanColumn]
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var context
+    @State private var selectedDoneColumn: KanbanColumn?
+    @State private var showBulkSyncConfirm = false
+    @AppStorage("isDemoMode") private var isDemoMode = false
+
+    private var repo: ProjectRepo { viewModel.project }
+
+    private var canSyncTasks: Bool {
+        !repo.isLocal && repo.account != nil && !isDemoMode
+    }
+
+    private var repoFullName: String {
+        guard let url = URL(string: repo.htmlURL) else { return repo.name }
+        let owner = url.pathComponents.filter { $0 != "/" }.first ?? ""
+        return owner.isEmpty ? repo.name : "\(owner)/\(repo.name)"
+    }
+
+    private var syncToggleBinding: Binding<Bool> {
+        Binding(
+            get: { repo.syncTasksToGitHub },
+            set: { newValue in
+                guard newValue else {
+                    repo.syncTasksToGitHub = false
+                    return
+                }
+                let taskCount = repo.tasks?.count ?? 0
+                if taskCount > 10 {
+                    showBulkSyncConfirm = true
+                } else {
+                    repo.syncTasksToGitHub = true
+                    repo.syncTasksDisabledReason = nil
+                    Task { await enableSync() }
+                }
+            }
+        )
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    Button {
+                        selectedDoneColumn = nil
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "circle.slash")
+                                .foregroundStyle(.secondary)
+                            Text("checkbox_none")
+                                .foregroundStyle(.primary)
+                            Spacer()
+                            if selectedDoneColumn == nil {
+                                Image(systemName: "checkmark")
+                                    .foregroundStyle(Color.accentColor)
+                            }
+                        }
+                    }
+
+                    ForEach(columns) { column in
+                        Button {
+                            selectedDoneColumn = column
+                        } label: {
+                            HStack(spacing: 12) {
+                                Circle()
+                                    .fill(Color(hex: column.colorHex))
+                                    .frame(width: 12, height: 12)
+                                Text(column.name)
+                                    .foregroundStyle(.primary)
+                                Spacer()
+                                if selectedDoneColumn?.id == column.id {
+                                    Image(systemName: "checkmark")
+                                        .foregroundStyle(Color.accentColor)
+                                }
+                            }
+                        }
+                    }
+                } header: {
+                    Text("checkbox_done_column_section")
+                } footer: {
+                    Text("checkbox_done_column_footer")
+                }
+
+                if canSyncTasks {
+                    Section {
+                        Toggle("sync_tasks_github_toggle", isOn: syncToggleBinding)
+                        if let reason = repo.syncTasksDisabledReason, !repo.syncTasksToGitHub {
+                            Text(reason)
+                                .font(.caption)
+                                .foregroundStyle(.orange)
+                        }
+                    } header: {
+                        Text("sync_tasks_github_section")
+                    } footer: {
+                        Text(String(format: String(localized: "sync_tasks_github_footer %@"), repoFullName))
+                    }
+                }
+            }
+            .navigationTitle("repo_settings")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("save") {
+                        viewModel.setDoneColumn(selectedDoneColumn)
+                        dismiss()
+                    }
+                }
+            }
+            .onAppear {
+                selectedDoneColumn = viewModel.doneColumn(from: columns)
+            }
+            .alert("sync_tasks_confirm_bulk_title", isPresented: $showBulkSyncConfirm) {
+                Button("cancel_button", role: .cancel) {}
+                Button("sync_tasks_confirm_bulk_button") {
+                    repo.syncTasksToGitHub = true
+                    repo.syncTasksDisabledReason = nil
+                    Task { await enableSync() }
+                }
+            } message: {
+                Text(String(format: String(localized: "sync_tasks_confirm_bulk %lld"), repo.tasks?.count ?? 0))
+            }
+        }
+        .presentationDetents([.medium])
+        .frame(idealWidth: 400)
+    }
+
+    private func enableSync() async {
+        guard let account = repo.account,
+              let token = try? await KeychainManager.shared.retrieveToken(for: account.tokenKey)
+        else { return }
+        await TaskIssueSyncService.shared.ensureLabels(repo: repo, columns: columns, token: token)
+        for task in repo.tasks ?? [] where task.issueNumber == nil {
+            task.needsIssueSync = true
+        }
+        try? context.save()
+        await TaskIssueSyncService.shared.reconcile(repo: repo, context: context, token: token)
     }
 }
 
