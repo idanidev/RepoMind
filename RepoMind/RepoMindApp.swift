@@ -1,5 +1,3 @@
-import CloudKit
-import CoreData
 import SwiftData
 import SwiftUI
 
@@ -7,11 +5,12 @@ import SwiftUI
     class AppDelegate: NSObject, UIApplicationDelegate {
         func application(
             _ application: UIApplication,
-            didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? =
-                nil
+            didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
         ) -> Bool {
-            // Essential for CloudKit to dispatch silent push notifications immediately
             application.registerForRemoteNotifications()
+            if let shortcutItem = launchOptions?[.shortcutItem] as? UIApplicationShortcutItem {
+                QuickActionRouter.shared.pendingItem = shortcutItem
+            }
             return true
         }
 
@@ -20,10 +19,16 @@ import SwiftUI
             didReceiveRemoteNotification userInfo: [AnyHashable: Any],
             fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
         ) {
-            #if DEBUG
-            print("☁️ [AppDelegate] didReceiveRemoteNotification: \(userInfo)")
-            #endif
             completionHandler(.newData)
+        }
+
+        func application(
+            _ application: UIApplication,
+            performActionFor shortcutItem: UIApplicationShortcutItem,
+            completionHandler: @escaping (Bool) -> Void
+        ) {
+            QuickActionRouter.shared.handle(shortcutItem)
+            completionHandler(true)
         }
     }
 #endif
@@ -35,20 +40,27 @@ struct RepoMindApp: App {
     #endif
 
     let container: ModelContainer
+    private let initError: String?
+
+    @State private var showQuickAddTask = false
 
     init() {
-        // Initialize subscription manager early so transaction listener starts
         _ = SubscriptionManager.shared
 
-        // Schema con todos los modelos
+        // Cache de imágenes en disco para logos (50MB memoria, 200MB disco)
+        URLCache.shared = URLCache(
+            memoryCapacity: 50_000_000,
+            diskCapacity: 200_000_000
+        )
+
         let schema = Schema([
             GitHubAccount.self,
             ProjectRepo.self,
             KanbanColumn.self,
             TaskItem.self,
+            FeedbackIssue.self,
         ])
 
-        // Configuración con CloudKit sync automático
         let config = ModelConfiguration(
             schema: schema,
             isStoredInMemoryOnly: false,
@@ -58,77 +70,67 @@ struct RepoMindApp: App {
 
         do {
             container = try ModelContainer(for: schema, configurations: [config])
-            #if DEBUG
-            print("☁️ [CloudKit] ModelContainer creado con cloudKitDatabase: .automatic")
-            #endif
+            initError = nil
         } catch {
-            #if DEBUG
-            print("⚠️ Migration error: \(error)")
-            #endif
-
-            // NO borramos datos - solo logueamos el error
-            // El usuario debe decidir qué hacer
-            fatalError(
-                """
-                Migration failed. Your data is safe but the app cannot start.
-                Error: \(error)
-
-                Please contact support or reinstall the app.
-                """)
+            // Fallback to in-memory container so the app doesn't crash
+            container = try! ModelContainer(for: schema, configurations: [
+                ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+            ])
+            initError = error.localizedDescription
         }
 
-        // Verificar estado de iCloud (solo en debug)
-        #if DEBUG
-            checkCloudKitStatus()
-        #endif
-    }
-
-    private func checkCloudKitStatus() {
-        CKContainer(identifier: "iCloud.idanidev.RepoMind").accountStatus { status, error in
-            switch status {
-            case .available:
-                print("☁️ [CloudKit] iCloud account DISPONIBLE - sync debería funcionar")
-            case .noAccount:
-                print("❌ [CloudKit] NO hay cuenta iCloud en este dispositivo")
-            case .restricted:
-                print("❌ [CloudKit] Cuenta iCloud RESTRINGIDA")
-            case .couldNotDetermine:
-                print(
-                    "❌ [CloudKit] No se pudo determinar estado: \(error?.localizedDescription ?? "unknown")"
-                )
-            case .temporarilyUnavailable:
-                print("⚠️ [CloudKit] iCloud temporalmente no disponible")
-            @unknown default:
-                print("❓ [CloudKit] Estado desconocido: \(status.rawValue)")
-            }
-        }
-
-        // Verificar que el container existe y es accesible
-        let container = CKContainer(identifier: "iCloud.idanidev.RepoMind")
-        print("☁️ [CloudKit] Container ID: \(container.containerIdentifier ?? "nil")")
-
-        container.fetchUserRecordID { recordID, error in
-            if let recordID {
-                print("☁️ [CloudKit] User Record ID: \(recordID.recordName) - conexión OK")
-            } else {
-                print(
-                    "❌ [CloudKit] Error obteniendo user record: \(error?.localizedDescription ?? "unknown")"
-                )
-            }
-        }
+        FeedbackNotificationManager.shared.registerBackgroundTask(container: container)
     }
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
-                .onAppear {
-                    #if targetEnvironment(macCatalyst)
-                        configureMacWindow()
-                    #endif
-                    #if DEBUG
-                        diagnoseCloudKitSync()
-                    #endif
+            if let initError {
+                VStack(spacing: 16) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 48))
+                        .foregroundStyle(.orange)
+                    Text("Database Error")
+                        .font(.title2.bold())
+                    Text(initError)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                    Text("Try reinstalling the app or contact support.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ContentView()
+                    .onAppear {
+                        #if targetEnvironment(macCatalyst)
+                            configureMacWindow()
+                        #endif
+                        FeedbackNotificationManager.shared.scheduleNextRefresh()
+                        #if canImport(UIKit)
+                            QuickActionRouter.shared.consumePendingIfNeeded()
+                        #endif
+                    }
+                    .task {
+                        // Skip when not authenticated or in demo mode (no real repos to sync).
+                        let isAuth = UserDefaults.standard.bool(forKey: "isAuthenticated")
+                        let isDemo = UserDefaults.standard.bool(forKey: "isDemoMode")
+                        guard isAuth, !isDemo else { return }
+                        await FeedbackNotificationManager.shared.syncAllInForeground(container: container)
+                    }
+                    .onOpenURL { url in
+                        DeepLinkHandler.handle(url, in: container.mainContext)
+                    }
+                    .sheet(isPresented: $showQuickAddTask) {
+                        QuickAddTaskView()
+                    }
+                    .onReceive(NotificationCenter.default.publisher(for: .quickActionTriggered)) { note in
+                        if (note.userInfo?["type"] as? String) == QuickActionRouter.quickAddTaskType {
+                            showQuickAddTask = true
+                        }
+                    }
+            }
         }
         .modelContainer(container)
         .commands {
@@ -136,52 +138,14 @@ struct RepoMindApp: App {
         }
     }
 
-    // Static flag — App is a struct so instance vars can't be mutated
-    private static var hasRegisteredSyncObservers = false
-
-    @MainActor
-    private func diagnoseCloudKitSync() {
-        let context = container.mainContext
-        do {
-            let accounts = try context.fetch(FetchDescriptor<GitHubAccount>())
-            let repos = try context.fetch(FetchDescriptor<ProjectRepo>())
-            let tasks = try context.fetch(FetchDescriptor<TaskItem>())
-            let columns = try context.fetch(FetchDescriptor<KanbanColumn>())
-            print(
-                "☁️ [CloudKit] Datos locales: \(accounts.count) accounts, \(repos.count) repos, \(columns.count) columns, \(tasks.count) tasks"
-            )
-        } catch {
-            print("❌ [CloudKit] Error fetch: \(error)")
-        }
-
-        // Registrar observers solo una vez
-        guard !Self.hasRegisteredSyncObservers else { return }
-        Self.hasRegisteredSyncObservers = true
-
-        NotificationCenter.default.addObserver(
-            forName: NSNotification.Name("NSPersistentStoreRemoteChangeNotification"),
-            object: nil,
-            queue: .main
-        ) { _ in
-            print("☁️ [CloudKit] REMOTE CHANGE recibido")
-        }
-
-        NotificationCenter.default.addObserver(
-            forName: .NSPersistentStoreCoordinatorStoresDidChange,
-            object: nil,
-            queue: .main
-        ) { notification in
-            print("☁️ [CloudKit] Store DID CHANGE: \(notification.userInfo ?? [:])")
-        }
-
-        print("☁️ [CloudKit] Listeners de sync registrados")
-    }
-
-    #if targetEnvironment(macCatalyst)
+#if targetEnvironment(macCatalyst)
         private func configureMacWindow() {
             guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene
             else { return }
-            windowScene.sizeRestrictions?.minimumSize = CGSize(width: 900, height: 600)
+            windowScene.sizeRestrictions?.minimumSize = CGSize(
+                width: MacDesign.minWindowWidth,
+                height: MacDesign.minWindowHeight
+            )
             windowScene.title = "RepoMind"
         }
     #endif
