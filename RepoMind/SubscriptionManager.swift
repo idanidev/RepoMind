@@ -48,16 +48,45 @@ final class SubscriptionManager {
         set {
             #if DEBUG
                 _isMockPro = newValue
+                UserDefaults.standard.set(newValue, forKey: Self.debugMockProKey)
             #endif
         }
     }
 
-    private var _isMockPro = false
+    private static let debugMockProKey = "debug_mock_pro"
+
+    /// In DEBUG builds we default to Pro-on because dev builds can't read the real
+    /// App Store purchase (StoreKit sandbox). The choice is persisted, so toggling it
+    /// off in Settings to test the free tier sticks across launches and reinstalls.
+    /// In RELEASE this is always `false` and Pro relies solely on StoreKit.
+    private var _isMockPro: Bool = {
+        #if DEBUG
+            if UserDefaults.standard.object(forKey: SubscriptionManager.debugMockProKey) == nil {
+                return true
+            }
+            return UserDefaults.standard.bool(forKey: SubscriptionManager.debugMockProKey)
+        #else
+            return false
+        #endif
+    }()
+
+    /// Set to `true` while Demo Mode is active — grants Pro access so reviewers see all features.
+    /// Only effective in DEBUG builds to prevent bypassing IAP in production.
+    var isDemoMode: Bool {
+        get { _isDemoMode }
+        set {
+            #if DEBUG
+                _isDemoMode = newValue
+            #endif
+        }
+    }
+
+    private var _isDemoMode = false
 
     // MARK: - Computed Properties
 
     var isPro: Bool {
-        isMockPro || !purchasedProductIDs.isEmpty
+        isMockPro || isDemoMode || !purchasedProductIDs.isEmpty
     }
 
     var lifetimeProduct: Product? {
@@ -76,8 +105,8 @@ final class SubscriptionManager {
 
     private init() {
         // Restore cached state for offline access (stored in Keychain)
-        if Self.keychainRead() {
-            purchasedProductIDs.insert("cached")
+        if let cachedID = Self.keychainReadProductID() {
+            purchasedProductIDs.insert(cachedID)
         }
 
         transactionListener = listenForTransactions()
@@ -95,7 +124,7 @@ final class SubscriptionManager {
     private(set) var lastError: String?
 
     /// Ongoing load task to coalesce concurrent calls.
-    private var loadTask: Task<Void, Never>?
+    nonisolated(unsafe) private var loadTask: Task<Void, Never>?
 
     /// Loads products if not already loaded. Safe to call multiple times —
     /// concurrent callers will await the same underlying task.
@@ -144,8 +173,9 @@ final class SubscriptionManager {
 
     /// Force reload products (e.g. from retry button).
     func reloadProducts() async {
-        products = []
+        loadTask?.cancel()
         loadTask = nil
+        products = []
         await loadProducts()
     }
 
@@ -215,7 +245,7 @@ final class SubscriptionManager {
         }
 
         purchasedProductIDs = newPurchased
-        Self.keychainSave(!newPurchased.isEmpty)
+        Self.keychainSaveProductID(newPurchased.first)
     }
 
     private func listenForTransactions() -> Task<Void, Error> {
@@ -245,22 +275,22 @@ final class SubscriptionManager {
     // MARK: - Keychain Cache (more tamper-resistant than UserDefaults)
 
     private static let keychainService = "idanidev.RepoMind"
-    private static let keychainAccount = "cachedIsPro"
+    private static let keychainAccount = "cachedProProductID"
 
-    private static func keychainSave(_ flag: Bool) {
+    private static func keychainSaveProductID(_ productID: String?) {
         let deleteQuery: [CFString: Any] = [
             kSecClass: kSecClassGenericPassword,
             kSecAttrService: keychainService,
             kSecAttrAccount: keychainAccount
         ]
         SecItemDelete(deleteQuery as CFDictionary)
-        guard flag else { return }
+        guard let productID, let data = productID.data(using: .utf8) else { return }
         var addQuery = deleteQuery
-        addQuery[kSecValueData] = Data([1])
+        addQuery[kSecValueData] = data
         SecItemAdd(addQuery as CFDictionary, nil)
     }
 
-    private static func keychainRead() -> Bool {
+    private static func keychainReadProductID() -> String? {
         let query: [CFString: Any] = [
             kSecClass: kSecClassGenericPassword,
             kSecAttrService: keychainService,
@@ -269,6 +299,10 @@ final class SubscriptionManager {
             kSecMatchLimit: kSecMatchLimitOne
         ]
         var result: AnyObject?
-        return SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess
+        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
+              let data = result as? Data,
+              let productID = String(data: data, encoding: .utf8)
+        else { return nil }
+        return productID
     }
 }
