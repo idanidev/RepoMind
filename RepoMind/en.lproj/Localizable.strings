@@ -354,3 +354,18 @@
 "icloud_sync_problem_title" = "iCloud sync isn't working";
 "icloud_sync_problem_footer" = "Your data is saved on this device, but it isn't reaching your other devices. It usually resolves on its own; if it persists, check that you're signed in to iCloud.";
 "task_pending_sync" = "Not yet published to GitHub";
+
+/* Today overview */
+"today_title" = "Today";
+"today_all_clear_title" = "Nothing waiting";
+"today_all_clear_subtitle" = "No unread feedback and nothing failing to sync.";
+"today_warnings_section" = "Needs attention";
+"today_feedback_section" = "Unread feedback";
+"today_unpublished_section" = "Not published to GitHub";
+"today_unpublished_footer" = "These tasks are saved on this device but never reached GitHub. They retry automatically.";
+"today_sync_disabled" = "Task sync turned itself off";
+"today_summary_feedback %lld" = "%lld unread";
+"today_summary_unpublished %lld" = "%lld not published";
+"today_summary_warning" = "needs attention";
+"show_older_completed %lld" = "Show %lld older";
+"more_options" = "More";

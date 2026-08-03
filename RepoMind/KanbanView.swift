@@ -27,6 +27,7 @@ enum KanbanViewMode: String, CaseIterable {
 struct KanbanView: View {
     @Bindable var project: ProjectRepo
     @Environment(\.modelContext) private var context
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     @Query private var columns: [KanbanColumn]
     @Query private var feedbackIssues: [FeedbackIssue]
@@ -84,10 +85,37 @@ struct KanbanView: View {
     private var toolbarContent: some ToolbarContent {
         ToolbarItem(placement: .topBarTrailing) {
             HStack {
-                viewModeToggle
-                feedbackButton
-                addColumnButton
-                repoSettingsButton
+                // Four icon-only buttons side by side are cramped and hard to hit on a phone.
+                // The two used constantly stay out; the occasional ones move into a menu, where
+                // they also get a readable label.
+                if horizontalSizeClass == .compact {
+                    viewModeToggle
+                    feedbackButton
+                    Menu {
+                        Button {
+                            let currentCount = project.columns?.count ?? 0
+                            if SubscriptionManager.shared.canAddKanbanColumn(currentCount: currentCount) {
+                                viewModel?.showAddColumnSheet = true
+                            } else {
+                                showPaywall = true
+                            }
+                        } label: {
+                            Label("add_column", systemImage: "rectangle.stack.badge.plus")
+                        }
+                        Button {
+                            showRepoSettings = true
+                        } label: {
+                            Label("repo_settings", systemImage: "gearshape")
+                        }
+                    } label: {
+                        Label("more_options", systemImage: "ellipsis.circle")
+                    }
+                } else {
+                    viewModeToggle
+                    feedbackButton
+                    addColumnButton
+                    repoSettingsButton
+                }
             }
         }
     }

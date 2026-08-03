@@ -18,6 +18,7 @@ struct KanbanColumnView: View {
 
     @State private var isTargeted = false
     @State private var dropTargetIndex: Int? = nil
+    @State private var showAllCompleted = false
 
     @Query private var tasks: [TaskItem]
 
@@ -165,6 +166,7 @@ struct KanbanColumnView: View {
                 if tasks.isEmpty {
                     emptyColumnState
                 } else {
+                    showOlderButton
                     tasksContent
                 }
             }
@@ -195,8 +197,39 @@ struct KanbanColumnView: View {
         .frame(maxWidth: .infinity)
     }
 
+    /// How many completed tasks stay on screen before the rest are folded away.
+    private static let completedPreviewCount = 8
+
+    /// The done column accumulates forever and ends up the longest column on the board, which is
+    /// backwards — finished work should take the least space. Only the most recent survive on
+    /// screen; the rest are one tap away.
+    private var hiddenCompletedCount: Int {
+        guard isDoneColumn, !showAllCompleted else { return 0 }
+        return max(0, tasks.count - Self.completedPreviewCount)
+    }
+
+    private var visibleTasks: [TaskItem] {
+        hiddenCompletedCount > 0 ? Array(tasks.suffix(Self.completedPreviewCount)) : tasks
+    }
+
+    @ViewBuilder
+    private var showOlderButton: some View {
+        if hiddenCompletedCount > 0 {
+            Button {
+                withAnimation(.snappy) { showAllCompleted = true }
+            } label: {
+                Text("show_older_completed \(hiddenCompletedCount)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
     private var tasksContent: some View {
-        ForEach(Array(tasks.enumerated()), id: \.element.id) { index, task in
+        ForEach(Array(visibleTasks.enumerated()), id: \.element.id) { index, task in
             TaskCardEnhanced(
                 task: task,
                 columnColor: columnColor,
@@ -363,14 +396,20 @@ struct TaskCardEnhanced: View {
 
             Spacer(minLength: 0)
 
-            // Botón para mover rápidamente a otra columna
-            Button(action: onMove) {
-                Image(systemName: "arrow.right.circle.fill")
-                    .font(.title3)
-                    .foregroundStyle(.secondary)
-                    .symbolRenderingMode(.hierarchical)
+            // Quick "move to another column" button. Phone only: there the columns are separate
+            // pages, so dragging between them is awkward and this is the practical way to move a
+            // task. On Mac the columns sit side by side and drag-and-drop works, so the button is
+            // just noise on every card — the context menu still offers the same action.
+            if !isMacIdiom {
+                Button(action: onMove) {
+                    Image(systemName: "arrow.right.circle.fill")
+                        .font(.title3)
+                        .foregroundStyle(.secondary)
+                        .symbolRenderingMode(.hierarchical)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("move_task")
             }
-            .buttonStyle(.plain)
         }
         .padding(12)
         .background(

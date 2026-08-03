@@ -353,3 +353,18 @@
 "icloud_sync_problem_title" = "La sincronización con iCloud no funciona";
 "icloud_sync_problem_footer" = "Tus datos se guardan en este dispositivo, pero no están llegando a los demás. Suele resolverse solo; si sigue, comprueba que has iniciado sesión en iCloud.";
 "task_pending_sync" = "Todavía no publicada en GitHub";
+
+/* Resumen de hoy */
+"today_title" = "Hoy";
+"today_all_clear_title" = "Nada pendiente";
+"today_all_clear_subtitle" = "No hay feedback sin leer ni nada fallando al sincronizar.";
+"today_warnings_section" = "Requiere atención";
+"today_feedback_section" = "Feedback sin leer";
+"today_unpublished_section" = "Sin publicar en GitHub";
+"today_unpublished_footer" = "Estas tareas están guardadas en este dispositivo pero nunca llegaron a GitHub. Se reintentan solas.";
+"today_sync_disabled" = "La sincronización de tareas se desactivó";
+"today_summary_feedback %lld" = "%lld sin leer";
+"today_summary_unpublished %lld" = "%lld sin publicar";
+"today_summary_warning" = "requiere atención";
+"show_older_completed %lld" = "Ver %lld anteriores";
+"more_options" = "Más";
