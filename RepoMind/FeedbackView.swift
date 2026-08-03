@@ -17,8 +17,7 @@ struct FeedbackView: View {
 
     init(repo: ProjectRepo) {
         self.repo = repo
-        let owner = URL(string: repo.htmlURL)?.pathComponents.filter { $0 != "/" }.first ?? ""
-        let fullName = owner.isEmpty ? repo.name : "\(owner)/\(repo.name)"
+        let fullName = repo.fullName
         self.repoFullName = fullName
         let predicate = #Predicate<FeedbackIssue> { $0.repoFullName == fullName }
         _scopedIssues = Query(filter: predicate, sort: \FeedbackIssue.createdAt, order: .reverse)
@@ -224,9 +223,7 @@ private extension FeedbackSeverity {
 extension ProjectRepo {
     /// Compute unread feedback count from a pre-fetched array (avoids fetching from inside a view).
     func unreadFeedbackCount(in issues: [FeedbackIssue]) -> Int {
-        guard let url = URL(string: htmlURL) else { return 0 }
-        let owner = url.pathComponents.filter { $0 != "/" }.first ?? ""
-        let fullName = "\(owner)/\(name)"
-        return issues.filter { $0.repoFullName == fullName && !$0.isRead }.count
+        let target = fullName
+        return issues.filter { $0.repoFullName == target && !$0.isRead }.count
     }
 }

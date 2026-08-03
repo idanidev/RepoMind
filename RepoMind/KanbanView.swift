@@ -237,11 +237,7 @@ struct RepoSettingsSheet: View {
         !repo.isLocal && repo.account != nil && !isDemoMode
     }
 
-    private var repoFullName: String {
-        guard let url = URL(string: repo.htmlURL) else { return repo.name }
-        let owner = url.pathComponents.filter { $0 != "/" }.first ?? ""
-        return owner.isEmpty ? repo.name : "\(owner)/\(repo.name)"
-    }
+    private var repoFullName: String { repo.fullName }
 
     private var syncToggleBinding: Binding<Bool> {
         Binding(

@@ -86,6 +86,19 @@ final class ProjectRepo {
     }
 }
 
+extension ProjectRepo {
+    /// `owner/name`, the way GitHub identifies a repository.
+    ///
+    /// Computed, not stored — the CloudKit schema is unaffected. This parsing existed in six
+    /// places in two incompatible variants; the copy behind the unread-feedback badge omitted the
+    /// fallback below, so a repo with no `htmlURL` produced a name that matched nothing and the
+    /// badge silently read zero.
+    var fullName: String {
+        let owner = URL(string: htmlURL)?.pathComponents.first { $0 != "/" } ?? ""
+        return owner.isEmpty ? name : "\(owner)/\(name)"
+    }
+}
+
 // MARK: - Kanban Column
 
 @Model
