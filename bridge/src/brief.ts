@@ -8,12 +8,13 @@
 import { GitHubClient } from "./github.js";
 import { resolveRepo } from "./repo.js";
 import { LABEL_TASK, issueToTask } from "./task.js";
+import { resolveToken } from "./token.js";
 
 const PRIORITY_ORDER: Record<string, number> = { now: 0, next: 1, someday: 2 };
 const MAX_LISTED = 5;
 
 async function main(): Promise<void> {
-  const token = process.env.GITHUB_TOKEN;
+  const token = resolveToken();
   if (!token) return;
 
   const repo = resolveRepo();

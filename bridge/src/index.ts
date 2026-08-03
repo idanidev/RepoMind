@@ -4,6 +4,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { GitHubClient } from "./github.js";
 import { resolveRepo } from "./repo.js";
+import { requireToken } from "./token.js";
 import {
   AGENT_MARKER,
   LABEL_BLOCKED,
@@ -16,7 +17,7 @@ import {
   type TaskStatus,
 } from "./task.js";
 
-const github = new GitHubClient(process.env.GITHUB_TOKEN ?? "");
+const github = new GitHubClient(requireToken());
 const server = new McpServer({ name: "repomind-bridge", version: "0.1.0" });
 
 const ok = (payload: unknown) => ({
