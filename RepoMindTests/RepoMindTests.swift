@@ -499,3 +499,139 @@ final class MultiAccountIsolationTests: XCTestCase {
         XCTAssertTrue(account2Repos.allSatisfy { $0.name.contains("Dev2") })
     }
 }
+
+// MARK: - Repo Identity
+
+@MainActor
+final class RepoFullNameTests: XCTestCase {
+    func testDerivesOwnerFromHTMLURL() {
+        let repo = ProjectRepo(repoID: 1, name: "RepoMind", htmlURL: "https://github.com/idanidev/RepoMind")
+        XCTAssertEqual(repo.fullName, "idanidev/RepoMind")
+    }
+
+    /// The bug this guards: the copy of this parsing behind the unread badge omitted the
+    /// fallback, produced "/RepoMind", matched nothing, and the badge always read zero.
+    func testFallsBackToBareNameWhenURLMissing() {
+        XCTAssertEqual(ProjectRepo(repoID: 1, name: "RepoMind", htmlURL: "").fullName, "RepoMind")
+        XCTAssertEqual(ProjectRepo(repoID: 2, name: "Local", htmlURL: "not a url").fullName, "Local")
+    }
+}
+
+// MARK: - Task ↔ Issue Sync
+
+@MainActor
+final class TaskIssueSyncLabelTests: XCTestCase {
+    private func label(_ name: String) -> String {
+        TaskIssueSyncService.columnLabel(for: KanbanColumn(name: name, orderIndex: 0))
+    }
+
+    func testSlugIsLowercasedAndHyphenated() {
+        XCTAssertEqual(label("In Progress"), "col:in-progress")
+    }
+
+    func testStripsDiacritics() {
+        XCTAssertEqual(label("En progreso"), "col:en-progreso")
+        XCTAssertEqual(label("Hecho"), "col:hecho")
+    }
+
+    func testTrimsSurroundingWhitespace() {
+        XCTAssertEqual(label("  Pendiente  "), "col:pendiente")
+    }
+}
+
+// MARK: - Feedback Severity
+
+@MainActor
+final class FeedbackSeverityTests: XCTestCase {
+    func testMapsLabelsToSeverity() {
+        XCTAssertEqual(FeedbackSeverity.from(labels: ["user-feedback", "bug:critical"]), .critical)
+        XCTAssertEqual(FeedbackSeverity.from(labels: ["user-feedback", "bug:minor"]), .minor)
+        XCTAssertEqual(FeedbackSeverity.from(labels: ["user-feedback", "enhancement"]), .enhancement)
+        XCTAssertEqual(FeedbackSeverity.from(labels: ["user-feedback"]), .general)
+    }
+
+    func testCriticalWinsOverOtherLabels() {
+        XCTAssertEqual(
+            FeedbackSeverity.from(labels: ["enhancement", "bug:minor", "bug:critical"]), .critical)
+    }
+
+    func testIsCaseInsensitive() {
+        XCTAssertEqual(FeedbackSeverity.from(labels: ["Bug:Critical"]), .critical)
+    }
+}
+
+// MARK: - Deep Links
+
+@MainActor
+final class DeepLinkHandlerTests: XCTestCase {
+    var container: ModelContainer!
+    var context: ModelContext!
+
+    override func setUp() async throws {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none)
+        container = try ModelContainer(
+            for: ProjectRepo.self, TaskItem.self, KanbanColumn.self, GitHubAccount.self,
+            configurations: config)
+        context = container.mainContext
+    }
+
+    override func tearDown() {
+        context = nil
+        container = nil
+    }
+
+    @discardableResult
+    private func makeRepo(_ name: String) -> ProjectRepo {
+        let repo = ProjectRepo(repoID: abs(name.hashValue), name: name)
+        context.insert(repo)
+        let column = KanbanColumn(name: "Pendiente", orderIndex: 0, project: repo)
+        context.insert(column)
+        return repo
+    }
+
+    private func tasks(in repo: ProjectRepo) -> [TaskItem] { repo.tasks ?? [] }
+
+    func testCreatesTaskInNamedRepo() {
+        let target = makeRepo("RepoMind")
+        makeRepo("Clarity")
+
+        DeepLinkHandler.handle(URL(string: "repomind://add-task?content=Hola&repo=RepoMind")!, in: context)
+
+        XCTAssertEqual(tasks(in: target).count, 1)
+        XCTAssertEqual(tasks(in: target).first?.content, "Hola")
+    }
+
+    /// A substring match sent `repo=api` to "api-legacy", filing the task against the wrong repo.
+    func testPrefersExactRepoMatchOverSubstring() {
+        let exact = makeRepo("api")
+        let similar = makeRepo("api-legacy")
+
+        DeepLinkHandler.handle(URL(string: "repomind://add-task?content=Test&repo=api")!, in: context)
+
+        XCTAssertEqual(tasks(in: exact).count, 1)
+        XCTAssertEqual(tasks(in: similar).count, 0)
+    }
+
+    func testIgnoresLinkWithoutContent() {
+        let repo = makeRepo("RepoMind")
+        DeepLinkHandler.handle(URL(string: "repomind://add-task?repo=RepoMind")!, in: context)
+        XCTAssertEqual(tasks(in: repo).count, 0)
+    }
+
+    func testIgnoresForeignScheme() {
+        let repo = makeRepo("RepoMind")
+        DeepLinkHandler.handle(URL(string: "otherapp://add-task?content=Nope&repo=RepoMind")!, in: context)
+        XCTAssertEqual(tasks(in: repo).count, 0)
+    }
+
+    func testAppendsToTheEndOfTheColumn() {
+        let repo = makeRepo("RepoMind")
+        for i in 1...3 {
+            DeepLinkHandler.handle(
+                URL(string: "repomind://add-task?content=Task\(i)&repo=RepoMind")!, in: context)
+        }
+        let ordered = tasks(in: repo).sorted { $0.orderIndex < $1.orderIndex }
+        XCTAssertEqual(ordered.map(\.content), ["Task1", "Task2", "Task3"])
+        XCTAssertEqual(ordered.map(\.orderIndex), [0, 1, 2])
+    }
+}
