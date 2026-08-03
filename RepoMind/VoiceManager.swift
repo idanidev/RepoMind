@@ -58,7 +58,9 @@ final class VoiceManager {
     private var secondaryIsFinal = false
 
     // Silence Detection
-    private var silenceTimer: Timer?
+    /// Read from `deinit`, which is not guaranteed to run on the main actor. Marked unsafe
+    /// deliberately: it is only ever mutated from main-actor code.
+    nonisolated(unsafe) private var silenceTimer: Timer?
     private var silenceThreshold: Float = 0.05       // Updated dynamically after calibration
     private let silenceDuration: TimeInterval = 1.5
     private var lastAudioDetectedTime: Date = .now
@@ -71,8 +73,9 @@ final class VoiceManager {
     // Contextual strings for domain-specific vocabulary (column names, commands)
     var contextualStrings: [String] = []
 
-    // Track smart routing task for cancellation
-    private var smartRoutingTask: Task<Void, Never>?
+    // Track smart routing task for cancellation.
+    /// Read from `deinit` — see `silenceTimer` for why this is `nonisolated(unsafe)`.
+    nonisolated(unsafe) private var smartRoutingTask: Task<Void, Never>?
 
     // MARK: - Initialization
 
@@ -150,11 +153,16 @@ final class VoiceManager {
     // ✅ FIX: Explicit cleanup before deallocation to prevent
     // TaskLocal/malloc crash when smartRoutingTask outlives the object.
     deinit {
-        // VoiceManager es @MainActor, por lo que siempre se destruye en el main actor.
-        // MainActor.assumeIsolated permite acceder a propiedades aisladas desde deinit (Swift 6).
-        MainActor.assumeIsolated {
-            silenceTimer?.invalidate()
-            smartRoutingTask?.cancel()
+        // NOT `MainActor.assumeIsolated`. A deinit is not guaranteed to run on the main actor —
+        // SwiftUI releases objects while tearing down the view graph, wherever that happens — and
+        // assumeIsolated crashes outright when the assumption is wrong. That is the same failure
+        // that took down `BiometricAuthManager`. Hand the teardown to the main actor instead of
+        // asserting we are already on it.
+        let timer = silenceTimer
+        let routing = smartRoutingTask
+        Task { @MainActor in
+            timer?.invalidate()
+            routing?.cancel()
         }
     }
 
