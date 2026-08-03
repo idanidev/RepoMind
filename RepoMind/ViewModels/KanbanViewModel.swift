@@ -53,12 +53,15 @@ final class KanbanViewModel {
         return try? await KeychainManager.shared.retrieveToken(for: account.tokenKey)
     }
 
-    /// The column with the highest `orderIndex` — the "final" column for sync purposes,
-    /// independent of the separately-configurable checkbox done-column.
+    /// The column that means "done", and therefore closes the linked GitHub issue.
+    ///
+    /// Deliberately the *same* column the checkbox moves tasks to. These used to be two separate
+    /// notions — the checkbox used the configured column while issue sync used whichever column
+    /// happened to sit last — so on a board where they differed, dragging a card closed a real
+    /// GitHub issue the user never marked as done.
     private func isFinalColumn(_ column: KanbanColumn?) -> Bool {
         guard let column else { return false }
-        let lastID = (project.columns ?? []).max(by: { $0.orderIndex < $1.orderIndex })?.id
-        return column.id == lastID
+        return doneColumn(from: project.columns ?? [])?.id == column.id
     }
 
     /// Runs a GitHub sync operation without ever blocking or failing the local mutation.
