@@ -94,8 +94,12 @@ extension ProjectRepo {
     /// fallback below, so a repo with no `htmlURL` produced a name that matched nothing and the
     /// badge silently read zero.
     var fullName: String {
-        let owner = URL(string: htmlURL)?.pathComponents.first { $0 != "/" } ?? ""
-        return owner.isEmpty ? name : "\(owner)/\(name)"
+        // The host check matters: URL(string:) accepts scheme-less junk, so without it a malformed
+        // `htmlURL` would be parsed as a path and its first segment used as the owner.
+        guard let url = URL(string: htmlURL), url.host != nil,
+              let owner = url.pathComponents.first(where: { $0 != "/" }), !owner.isEmpty
+        else { return name }
+        return "\(owner)/\(name)"
     }
 }
 

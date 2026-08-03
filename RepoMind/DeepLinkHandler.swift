@@ -54,7 +54,10 @@ enum DeepLinkHandler {
         let repo: ProjectRepo?
         if let repoName {
             let allRepos = (try? context.fetch(FetchDescriptor<ProjectRepo>())) ?? []
-            repo = allRepos.first { $0.name.localizedStandardContains(repoName) }
+            // Exact match wins. Matching on substring alone sent `repo=api` to "api-legacy",
+            // silently filing the task against the wrong project.
+            repo = allRepos.first { $0.name.localizedCompare(repoName) == .orderedSame }
+                ?? allRepos.first { $0.name.localizedStandardContains(repoName) }
         } else {
             repo = try? context.fetch(
                 FetchDescriptor<ProjectRepo>(sortBy: [SortDescriptor(\.updatedAt, order: .reverse)])
