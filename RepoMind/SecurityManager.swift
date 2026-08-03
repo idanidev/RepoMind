@@ -133,20 +133,29 @@ enum KeychainError: LocalizedError {
 
 // MARK: - Biometric Authentication
 
-@MainActor
+/// Deliberately `nonisolated` instead of `@MainActor`.
+///
+/// A main-actor isolated class gets a main-actor isolated `deinit`, so Swift emits a hop onto the
+/// main executor just to deallocate it. SwiftUI releases `@State`-held objects while tearing down
+/// the view graph, and that is not guaranteed to happen on the main thread — the hop crashed the
+/// app inside `BiometricAuthManager.__deallocating_deinit` (heap corruption in the task-local
+/// teardown). Nothing here needs isolation: `LAContext` is created per call, and the properties
+/// are only ever touched from the view.
 @Observable
-final class BiometricAuthManager {
+nonisolated final class BiometricAuthManager {
     var isAuthenticated = false
     var biometricType: LABiometryType = .none
     var errorMessage: String?
-
-    private let context = LAContext()
 
     init() {
         checkBiometricAvailability()
     }
 
     func checkBiometricAvailability() {
+        // Created locally rather than stored: a long-lived LAContext keeps a connection to the
+        // authentication daemon alive and must be invalidated on dealloc, which is what put
+        // LocalAuthentication teardown on the crashing path.
+        let context = LAContext()
         var error: NSError?
         if context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error) {
             biometricType = context.biometryType
