@@ -67,6 +67,7 @@ struct SettingsView: View {
     @State private var isImporting = false
 
     private let subscription = SubscriptionManager.shared
+    private let syncMonitor = CloudKitSyncMonitor.shared
 
     private var appVersion: String {
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
@@ -136,6 +137,32 @@ struct SettingsView: View {
                         }
                     }
                     .disabled(subscription.isRestoring)
+                }
+
+                // MARK: - iCloud sync health
+
+                // Only rendered when something is actually wrong. A silent sync failure used to be
+                // completely invisible, which is how one went unnoticed for months.
+                if syncMonitor.hasSyncProblem {
+                    Section {
+                        HStack(alignment: .top, spacing: 12) {
+                            Image(systemName: "exclamationmark.icloud")
+                                .foregroundStyle(.orange)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("icloud_sync_problem_title")
+                                    .font(.subheadline.weight(.semibold))
+                                if let message = syncMonitor.lastErrorMessage {
+                                    Text(message)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                    } header: {
+                        Text("icloud_sync_section")
+                    } footer: {
+                        Text("icloud_sync_problem_footer")
+                    }
                 }
 
                 // MARK: - Backup

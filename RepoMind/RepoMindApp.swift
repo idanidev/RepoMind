@@ -80,6 +80,8 @@ struct RepoMindApp: App {
         }
 
         FeedbackNotificationManager.shared.registerBackgroundTask(container: container)
+        // Started before the store syncs, otherwise the first events are missed.
+        CloudKitSyncMonitor.shared.start()
     }
 
     var body: some Scene {
