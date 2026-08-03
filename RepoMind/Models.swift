@@ -103,6 +103,33 @@ extension ProjectRepo {
     }
 }
 
+extension ProjectRepo {
+    /// The column that means "done" for this repo.
+    ///
+    /// The single definition, deliberately: this used to be decided in two places under different
+    /// rules — the checkbox honoured the user's choice while issue sync used whichever column sat
+    /// last — and on a board where the two disagreed, moving a card closed a GitHub issue the user
+    /// never marked as done.
+    func doneColumn(from columns: [KanbanColumn]) -> KanbanColumn? {
+        let ordered = columns.sorted { $0.orderIndex < $1.orderIndex }
+        guard !ordered.isEmpty else { return nil }
+
+        let key = "checkboxDoneColumnID_\(repoID)"
+        if let stored = UserDefaults.standard.string(forKey: key),
+           let uuid = UUID(uuidString: stored),
+           let chosen = ordered.first(where: { $0.id == uuid }) {
+            return chosen
+        }
+
+        let doneWords = ["done", "hecho", "completado", "finished", "complete", "cerrado", "closed"]
+        return ordered.first { column in
+            doneWords.contains { column.name.localizedStandardContains($0) }
+        } ?? ordered.last
+    }
+
+    var doneColumn: KanbanColumn? { doneColumn(from: columns ?? []) }
+}
+
 // MARK: - Kanban Column
 
 @Model

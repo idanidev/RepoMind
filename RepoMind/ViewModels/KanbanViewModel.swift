@@ -334,18 +334,10 @@ final class KanbanViewModel {
         }
     }
 
+    /// Delegates to the model so there is exactly one definition of "done" — the split between
+    /// this and the issue-sync notion of a final column is what let a drag close a real issue.
     func doneColumn(from columns: [KanbanColumn]) -> KanbanColumn? {
-        let key = "checkboxDoneColumnID_\(project.repoID)"
-        if let uuidString = UserDefaults.standard.string(forKey: key),
-           let uuid = UUID(uuidString: uuidString),
-           let saved = columns.first(where: { $0.id == uuid }) {
-            return saved
-        }
-        // Auto-detect: última columna cuyo nombre sugiera "done"
-        let doneKeywords = ["done", "hecho", "completado", "finished", "complete", "cerrado", "closed"]
-        return columns.first { col in
-            doneKeywords.contains(where: { col.name.localizedStandardContains($0) })
-        } ?? columns.last
+        project.doneColumn(from: columns)
     }
 
     func moveTask(_ task: TaskItem, to column: KanbanColumn, atIndex index: Int?) {

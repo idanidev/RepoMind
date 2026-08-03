@@ -219,6 +219,12 @@ final class TaskIssueSyncService {
             do {
                 if task.issueNumber == nil {
                     try await createIssue(for: task, repo: repo, token: token)
+                    // A task already finished when sync was switched on would otherwise be
+                    // published as an open issue and stay open forever: closing only happens when
+                    // a task is *moved* into the done column, and this one never moves.
+                    if let done = repo.doneColumn, task.column?.id == done.id {
+                        try await closeIssue(for: task, repo: repo, reason: "completed", token: token)
+                    }
                 } else {
                     try await updateIssueColumn(for: task, repo: repo, token: token)
                 }
