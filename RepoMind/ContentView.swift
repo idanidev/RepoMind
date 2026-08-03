@@ -1,5 +1,5 @@
-import CloudKit
 import Combine
+import CloudKit
 import PhotosUI
 import SwiftData
 import SwiftUI
@@ -309,7 +309,9 @@ struct RepoListView: View {
         }
 
         // Free-tier: show only up to the limit, prioritising favourites.
-        if !subscription.isPro && activeFilter == .all {
+        // Applies to every filter — gating only the "all" list let a free user see an unlimited
+        // number of repos just by switching to Favourites or Archived.
+        if !subscription.isPro {
             let limit = subscription.maxFreeRepos
             if sorted.count > limit {
                 let favorites = Array(sorted.filter { $0.isFavorite }.prefix(limit))
@@ -671,6 +673,10 @@ struct RepoListView: View {
 
     private func syncRepos(silent: Bool = false) async {
         guard !isDemoMode else { return }
+        // Reentrancy guard: pull-to-refresh, the Cmd+R shortcut and .onAppear can all fire this
+        // independently. Two overlapping runs each fetch the repo list before either has saved,
+        // both see the same remote repo as new, and each inserts its own duplicate.
+        guard !isLoading else { return }
         isLoading = true
         defer { isLoading = false }
 
@@ -710,6 +716,11 @@ struct RepoListView: View {
                 SubscriptionManager.shared.isDemoMode = false
             } else {
                 try? context.delete(model: GitHubAccount.self)
+                // Repos must go with the account. `GitHubAccount.repos` is `.nullify`, so deleting
+                // only the account left repos behind with `account == nil`; the per-account filter
+                // never matches those, so they stayed visible under "All accounts" to whoever
+                // signed in next.
+                try? context.delete(model: ProjectRepo.self)
                 try? await KeychainManager.shared.deleteToken()
             }
             SubscriptionManager.shared.isMockPro = false
@@ -1838,6 +1849,10 @@ struct AdaptiveRepoListView: View {
 
     private func syncRepos(silent: Bool = false) async {
         guard !isDemoMode else { return }
+        // Reentrancy guard: pull-to-refresh, the Cmd+R shortcut and .onAppear can all fire this
+        // independently. Two overlapping runs each fetch the repo list before either has saved,
+        // both see the same remote repo as new, and each inserts its own duplicate.
+        guard !isLoading else { return }
         isLoading = true
         defer { isLoading = false }
         guard !accounts.isEmpty else { return }
@@ -1868,6 +1883,11 @@ struct AdaptiveRepoListView: View {
                 SubscriptionManager.shared.isDemoMode = false
             } else {
                 try? context.delete(model: GitHubAccount.self)
+                // Repos must go with the account. `GitHubAccount.repos` is `.nullify`, so deleting
+                // only the account left repos behind with `account == nil`; the per-account filter
+                // never matches those, so they stayed visible under "All accounts" to whoever
+                // signed in next.
+                try? context.delete(model: ProjectRepo.self)
                 try? await KeychainManager.shared.deleteToken()
             }
             SubscriptionManager.shared.isMockPro = false
