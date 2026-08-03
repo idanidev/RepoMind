@@ -6,7 +6,6 @@
 "collapse_column" = "Colapsar columna";
 "delete_column" = "Eliminar Columna";
 "rename_column" = "Renombrar";
-"column_empty" = "Vacío";
 "drag_tasks_here" = "Arrastra tareas aquí";
 "new_column_title" = "Nueva Columna";
 "rename_column_title" = "Renombrar Columna";
@@ -20,7 +19,6 @@
 "edit_task" = "Editar";
 "delete_task" = "Eliminar";
 "move_task" = "Mover a...";
-"voice_note_content" = "Nota de voz";
 
 /* Task Sheets */
 "content" = "Contenido";
@@ -40,25 +38,9 @@
 
 /* Configurar Icono del Repo */
 "icon_configure_button" = "Icono";
-"icon_configure_title" = "Configurar icono";
 "icon_current_header" = "Icono actual";
-"icon_no_icon" = "Sin icono";
-"icon_path_placeholder" = "Ruta del icono en el repo";
-"icon_path_example" = "Ejemplo: MiApp/Assets.xcassets/AppIcon.appiconset";
-"icon_path_header" = "Ruta personalizada";
-"icon_path_footer" = "Introduce la ruta dentro del repositorio donde se encuentra el icono de tu app.";
-"icon_search_button" = "Buscar icono automáticamente";
-"icon_searching" = "Buscando...";
-"icon_search_footer" = "Busca automáticamente el icono en Assets.xcassets del repositorio.";
 "icon_remove_button" = "Quitar icono personalizado";
 "icon_configured_toast" = "Icono configurado";
-"icon_found_toast" = "¡Icono encontrado!";
-"icon_not_found_error" = "No se encontró el archivo en ninguna rama (main, master, develop). Verifica que la ruta sea correcta.";
-"icon_not_found_search_error" = "No se encontró ningún icono en Assets.xcassets.";
-"icon_owner_error" = "No se pudo determinar el propietario del repositorio.";
-"icon_no_account_error" = "No hay cuenta asociada al repositorio.";
-"icon_token_error" = "No se pudo obtener el token de acceso.";
-"icon_search_error" = "Error al buscar: %@";
 
 /* ContentView */
 "icloud_syncing_message" = "Sincronizando con iCloud...";
@@ -69,12 +51,6 @@
 "github_sync_error" = "Error al sincronizar con GitHub";
 
 /* Settings - Iconos de Repos */
-"search_app_icons_button" = "Buscar iconos de apps";
-"search_icons_footer" = "Busca automáticamente los iconos de tus apps iOS en GitHub.";
-"no_ios_repos_icon_toast" = "No hay repos iOS sin icono";
-"searching_icons_progress" = "Buscando iconos en %d repos...";
-"icons_found_toast" = "%d iconos encontrados";
-"no_icons_found_toast" = "No se encontraron iconos";
 
 /* Permisos de Voz */
 "permission_denied_settings" = "Permiso denegado. Actívalo en Ajustes.";
@@ -94,9 +70,6 @@
 /* Settings */
 "settings_title" = "Ajustes";
 "about_header" = "Acerca de";
-"pro_coming_soon_header" = "RepoMind Pro";
-"pro_coming_soon_title" = "Próximamente";
-"pro_coming_soon_description" = "Sincronización entre dispositivos, temas personalizados y más. Pago único, sin suscripciones.";
 "version_label" = "Versión";
 "privacy_policy" = "Política de Privacidad";
 "terms_of_use" = "Términos de Uso";
@@ -147,7 +120,6 @@
 /* Kanban List */
 "no_tasks" = "Sin tareas";
 "photo_badge" = "Foto";
-"audio_badge" = "Audio";
 "share_image" = "Compartir";
 "copy_image" = "Copiar imagen";
 "image_copied_toast" = "Imagen copiada";
@@ -195,7 +167,6 @@
 "welcome_message" = "Bienvenido, %@!";
 "validate_connect_button" = "Validar y Conectar";
 "back_button" = "Volver";
-"account_limit_error" = "Límite de cuentas alcanzado (Gratis: 1). Pásate a Pro.";
 
 /* Subscription / Paywall */
 "subscription_header" = "Suscripción";
@@ -217,7 +188,6 @@
 "feature_kanban_columns" = "Columnas Kanban";
 "feature_voice" = "Transcripción de Voz";
 "feature_sync" = "Sincronización Multi-Dispositivo";
-"feature_unlimited" = "Ilimitado";
 "feature_limited" = "Limitado";
 "feature_coming_soon" = "Próximamente";
 "free_tier_label" = "Gratis";
@@ -233,7 +203,6 @@
 "purchase_pending_toast" = "Compra pendiente de aprobación. Te avisaremos cuando esté aprobada.";
 "restore_success_toast" = "¡Compras restauradas! Bienvenido a Pro.";
 "restore_no_purchases_toast" = "No se encontraron suscripciones activas.";
-"restore_empty_toast" = "No se encontraron compras anteriores.";
 "paywall_legal_disclaimer" = "Pago único. Puedes restaurar tus compras desde los Ajustes de la app en otros dispositivos con la misma cuenta de Apple.";
 "products_not_available" = "Los productos no están disponibles en este momento.";
 "products_unavailable_title" = "Planes no disponibles aún";
@@ -243,8 +212,6 @@
 "debug_activate_pro_hint" = "Solo visible en builds de desarrollo.";
 
 /* Upgrade Prompts */
-"account_limit_upgrade" = "Necesitas Pro para añadir más cuentas.";
-"column_limit_upgrade" = "Necesitas Pro para añadir más columnas.";
 "repo_limit_upgrade" = "Necesitas Pro para añadir más repositorios.";
 "repo_limit_banner_title" = "Límite de repositorios alcanzado";
 "repo_limit_banner_subtitle" = "Tienes %d repos ocultos. Desbloquéalos con Pro.";
@@ -260,8 +227,6 @@
 "browser_folders_header" = "Carpetas";
 "browser_images_header" = "Imágenes";
 "browser_empty_folder" = "No hay imágenes en esta carpeta";
-"browser_local_repo_title" = "Proyecto local";
-"browser_local_repo_message" = "Los proyectos locales no están conectados a GitHub, así que no hay repositorio que explorar.";
 "local_project_icon_header" = "Icono";
 "local_icon_pick_photo" = "Elegir de la Fototeca";
 "local_icon_saving" = "Guardando...";
@@ -320,11 +285,6 @@
 "copy_url" = "Copiar URL";
 "open_in_github" = "Abrir en GitHub";
 "toggle_sidebar" = "Alternar barra lateral";
-"new_window_size_compact" = "Ventana compacta";
-"new_window_size_default" = "Ventana por defecto";
-"new_window_size_wide" = "Ventana ancha";
-"menu_view" = "Vista";
-"menu_window_size" = "Tamaño de ventana";
 "mark_done" = "Marcar como hecha";
 "mark_pending" = "Marcar como pendiente";
 "close" = "Cerrar";
@@ -382,3 +342,13 @@
 "quick_add_no_repos_title" = "Todavía no hay repositorios";
 "quick_add_no_repos_subtitle" = "Añade un repo primero para poder crear tareas en él.";
 "quick_add_task_created %@" = "Añadida a %@";
+
+/* Comandos de la barra de menús de macOS */
+"new_task_command" = "Nueva tarea";
+"sync_repos_command" = "Sincronizar repositorios";
+"toggle_view_command" = "Alternar tablero / lista";
+"settings_command" = "Ajustes…";
+"task_save_failed" = "No se pudo guardar la tarea. Inténtalo de nuevo.";
+"icloud_sync_section" = "iCloud";
+"icloud_sync_problem_title" = "La sincronización con iCloud no funciona";
+"icloud_sync_problem_footer" = "Tus datos se guardan en este dispositivo, pero no están llegando a los demás. Suele resolverse solo; si sigue, comprueba que has iniciado sesión en iCloud.";

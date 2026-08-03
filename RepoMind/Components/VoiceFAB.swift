@@ -1,4 +1,3 @@
-import SwiftData
 import SwiftUI
 
 struct VoiceFAB: View {

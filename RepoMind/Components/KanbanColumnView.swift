@@ -349,18 +349,6 @@ struct TaskCardEnhanced: View {
                         .buttonStyle(.plain)
                     }
 
-                    if task.audioPath != nil {
-                        HStack(spacing: 4) {
-                            Image(systemName: "waveform")
-                                .font(.caption)
-                            Text("audio_badge")
-                                .font(.caption2)
-                        }
-                        .foregroundStyle(.purple)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(.purple.opacity(0.1), in: Capsule())
-                    }
                 }
             }
 
@@ -459,11 +447,6 @@ struct TaskCardDragPreview: View {
                         Image(systemName: "photo.fill")
                             .font(.caption2)
                             .foregroundStyle(.blue)
-                    }
-                    if task.audioPath != nil {
-                        Image(systemName: "waveform")
-                            .font(.caption2)
-                            .foregroundStyle(.purple)
                     }
                 }
             }

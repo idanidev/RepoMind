@@ -127,9 +127,13 @@ final class TaskItem {
     var id: UUID = UUID()
     var content: String = ""
     var createdAt: Date = Date.now
+    /// Unused: nothing ever writes this, so the voice-note badge it drove could never appear.
+    /// Kept only because CloudKit does not allow removing a field once deployed to Production.
     var audioPath: String?
     var imagePath: String?
     @Attribute(.externalStorage) var imageData: Data?
+    /// Redundant with `column`, and drifts out of sync with it — only the backup round-trip still
+    /// reads it. Kept for the same CloudKit reason as `audioPath`; use `column` everywhere else.
     var status: String = "todo"
     var orderIndex: Int = 0
     /// GitHub issue number if this task is mirrored as an issue. Nil = not synced.

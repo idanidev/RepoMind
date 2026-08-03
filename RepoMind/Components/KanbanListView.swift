@@ -1,6 +1,5 @@
 import SwiftData
 import SwiftUI
-import UIKit
 
 struct KanbanListView: View {
     @Bindable var viewModel: KanbanViewModel
@@ -198,16 +197,6 @@ struct ListTaskCard: View {
                             .foregroundStyle(.blue)
                         }
                         .buttonStyle(.plain)
-                    }
-
-                    if task.audioPath != nil {
-                        HStack(spacing: 4) {
-                            Image(systemName: "waveform")
-                                .font(.caption2)
-                            Text("audio_badge")
-                                .font(.caption2)
-                        }
-                        .foregroundStyle(.purple)
                     }
 
                     Spacer()

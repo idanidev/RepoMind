@@ -76,7 +76,10 @@ final class VoiceManager {
 
     // MARK: - Initialization
 
-    init(locale: Locale = .current) {
+    /// No `locale` parameter on purpose: recognition languages always come from the user's system
+    /// preferences. The previous initialiser accepted one and silently ignored it, so a test could
+    /// pass a locale and assert on behaviour the code never had.
+    init() {
         // Automatically detect languages from user's system preferences
         let (primary, secondary) = Self.resolveSystemLanguages()
         self.speechLocale = primary

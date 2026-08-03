@@ -313,7 +313,10 @@ struct AddTaskSheet: View {
             }
             .onAppear {
                 selectedColumn = preselectedColumn ?? columns.first
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                Task {
+                    // Let the sheet finish presenting before taking focus, otherwise the
+                    // keyboard doesn't come up.
+                    try? await Task.sleep(for: .milliseconds(100))
                     isContentFocused = true
                 }
             }

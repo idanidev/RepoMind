@@ -6,7 +6,6 @@
 "collapse_column" = "Collapse column";
 "delete_column" = "Delete Column";
 "rename_column" = "Rename";
-"column_empty" = "Empty";
 "drag_tasks_here" = "Drag tasks here";
 "new_column_title" = "New Column";
 "rename_column_title" = "Rename Column";
@@ -20,7 +19,6 @@
 "edit_task" = "Edit";
 "delete_task" = "Delete";
 "move_task" = "Move to...";
-"voice_note_content" = "Voice note";
 
 /* Task Sheets */
 "content" = "Content";
@@ -43,25 +41,9 @@
 
 /* Repo Icon Configuration */
 "icon_configure_button" = "Icon";
-"icon_configure_title" = "Configure Icon";
 "icon_current_header" = "Current Icon";
-"icon_no_icon" = "No Icon";
-"icon_path_placeholder" = "Icon path in the repo";
-"icon_path_example" = "Example: MyApp/Assets.xcassets/AppIcon.appiconset";
-"icon_path_header" = "Custom Path";
-"icon_path_footer" = "Enter the path inside the repository where your app icon is located.";
-"icon_search_button" = "Search Icon Automatically";
-"icon_searching" = "Searching...";
-"icon_search_footer" = "Automatically searches for the icon in Assets.xcassets.";
 "icon_remove_button" = "Remove Custom Icon";
 "icon_configured_toast" = "Icon configured";
-"icon_found_toast" = "Icon found!";
-"icon_not_found_error" = "File not found on any branch (main, master, develop). Check the path is correct.";
-"icon_not_found_search_error" = "No icon found in Assets.xcassets.";
-"icon_owner_error" = "Could not determine the repository owner.";
-"icon_no_account_error" = "No account associated with this repository.";
-"icon_token_error" = "Could not retrieve access token.";
-"icon_search_error" = "Search error: %@";
 
 /* ContentView */
 "icloud_syncing_message" = "Syncing with iCloud...";
@@ -72,12 +54,6 @@
 "github_sync_error" = "Error syncing with GitHub";
 
 /* Settings - Repo Icons */
-"search_app_icons_button" = "Search App Icons";
-"search_icons_footer" = "Automatically finds icons for your iOS apps on GitHub.";
-"no_ios_repos_icon_toast" = "No iOS repos without an icon";
-"searching_icons_progress" = "Searching icons in %d repos...";
-"icons_found_toast" = "%d icons found";
-"no_icons_found_toast" = "No icons found";
 
 /* Voice Permissions */
 "permission_denied_settings" = "Permission denied. Enable it in Settings.";
@@ -97,9 +73,6 @@
 /* Settings */
 "settings_title" = "Settings";
 "about_header" = "About";
-"pro_coming_soon_header" = "RepoMind Pro";
-"pro_coming_soon_title" = "Coming Soon";
-"pro_coming_soon_description" = "Cross-device sync, custom themes, and more. One-time purchase, no subscriptions.";
 "version_label" = "Version";
 "privacy_policy" = "Privacy Policy";
 "terms_of_use" = "Terms of Use";
@@ -150,7 +123,6 @@
 /* Kanban List */
 "no_tasks" = "No tasks";
 "photo_badge" = "Photo";
-"audio_badge" = "Audio";
 "share_image" = "Share";
 "copy_image" = "Copy Image";
 "image_copied_toast" = "Image copied";
@@ -198,7 +170,6 @@
 "welcome_message" = "Welcome, %@!";
 "validate_connect_button" = "Validate and Connect";
 "back_button" = "Back";
-"account_limit_error" = "Account limit reached (Free: 1). Upgrade to Pro.";
 
 /* Subscription / Paywall */
 "subscription_header" = "Subscription";
@@ -220,15 +191,12 @@
 "feature_kanban_columns" = "Kanban Columns";
 "feature_voice" = "Voice Transcription";
 "feature_sync" = "Multi-Device Sync";
-"feature_unlimited" = "Unlimited";
 "feature_limited" = "Limited";
 "feature_coming_soon" = "Coming Soon";
 "free_tier_label" = "Free";
 "pro_tier_label" = "Pro";
 
 /* Pricing */
-"buy_once_button" = "Unlock Pro";
-"one_time_payment_label" = "One-time payment. Lifetime access.";
 "purchase_error" = "Error processing purchase. Please try again.";
 "purchase_success_toast" = "Welcome to RepoMind Pro!";
 "paywall_already_pro_title" = "You already have Pro!";
@@ -236,7 +204,6 @@
 "purchase_pending_toast" = "Purchase pending approval. You'll get notified when it's approved.";
 "restore_success_toast" = "Purchases restored! Welcome to Pro.";
 "restore_no_purchases_toast" = "No active subscriptions found.";
-"restore_empty_toast" = "No previous purchases found.";
 "paywall_legal_disclaimer" = "One-time payment. You can restore your purchases from the app settings on other devices using the same Apple account.";
 "products_not_available" = "Products are not available at this time.";
 "products_unavailable_title" = "Plans not available yet";
@@ -246,8 +213,6 @@
 "debug_activate_pro_hint" = "Only visible in development builds.";
 
 /* Upgrade Prompts */
-"account_limit_upgrade" = "You need Pro to add more accounts.";
-"column_limit_upgrade" = "You need Pro to add more columns.";
 "repo_limit_upgrade" = "You need Pro to add more repositories.";
 "repo_limit_banner_title" = "Repository limit reached";
 "repo_limit_banner_subtitle" = "You have %d hidden repos. Unlock them with Pro.";
@@ -263,8 +228,6 @@
 "browser_folders_header" = "Folders";
 "browser_images_header" = "Images";
 "browser_empty_folder" = "No images in this folder";
-"browser_local_repo_title" = "Local Project";
-"browser_local_repo_message" = "Local projects aren't linked to GitHub, so there's no repository to browse.";
 "local_project_icon_header" = "Icon";
 "local_icon_pick_photo" = "Choose from Photo Library";
 "local_icon_saving" = "Saving...";
@@ -323,11 +286,6 @@
 "copy_url" = "Copy URL";
 "open_in_github" = "Open on GitHub";
 "toggle_sidebar" = "Toggle Sidebar";
-"new_window_size_compact" = "Compact Window";
-"new_window_size_default" = "Default Window";
-"new_window_size_wide" = "Wide Window";
-"menu_view" = "View";
-"menu_window_size" = "Window Size";
 "mark_done" = "Mark as done";
 "mark_pending" = "Mark as pending";
 "close" = "Close";
@@ -385,3 +343,13 @@
 "quick_add_no_repos_title" = "No repositories yet";
 "quick_add_no_repos_subtitle" = "Add a repo first to create tasks in it.";
 "quick_add_task_created %@" = "Added to %@";
+
+/* macOS menu bar commands */
+"new_task_command" = "New Task";
+"sync_repos_command" = "Sync Repositories";
+"toggle_view_command" = "Toggle Board / List";
+"settings_command" = "Settings…";
+"task_save_failed" = "Couldn't save the task. Try again.";
+"icloud_sync_section" = "iCloud";
+"icloud_sync_problem_title" = "iCloud sync isn't working";
+"icloud_sync_problem_footer" = "Your data is saved on this device, but it isn't reaching your other devices. It usually resolves on its own; if it persists, check that you're signed in to iCloud.";
