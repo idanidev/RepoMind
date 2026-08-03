@@ -501,6 +501,9 @@ struct RepoListView: View {
 
     private var repoList: some View {
         List {
+            // Renders nothing when there is nothing waiting.
+            TodayEntryRow()
+
             ForEach(filteredRepos) { repo in
                 NavigationLink(value: repo) {
                     RepoRow(repo: repo)
@@ -1661,6 +1664,8 @@ struct AdaptiveRepoListView: View {
     private var sidebar: some View {
         List(selection: $selectedRepo) {
             sidebarAccountSection
+            // Renders nothing when there is nothing waiting.
+            TodayEntryRow()
             sidebarFilterSection
             Section("repositories_title") {
                 ForEach(filteredRepos) { repo in
