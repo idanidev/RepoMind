@@ -64,10 +64,21 @@ final class KanbanViewModel {
     /// Runs a GitHub sync operation without ever blocking or failing the local mutation.
     /// On success clears `needsIssueSync`; on permission/existence errors disables the toggle;
     /// on any other failure marks the task for retry via `reconcile`.
+    /// One in-flight chain per task id, so operations on the same task stay ordered.
+    private var syncChains: [UUID: Task<Void, Never>] = [:]
+
     private func runSync(_ task: TaskItem, _ operation: @escaping (String) async throws -> Void) {
         guard project.syncTasksToGitHub, !isDemoMode else { return }
         let repo = project
-        Task {
+        let taskID = task.id
+        let previous = syncChains[taskID]
+
+        syncChains[taskID] = Task {
+            // Serialise per task. Moving a card twice quickly fires close() then reopen() as
+            // independent requests; when they raced, the slower one won and left the issue closed
+            // while the task sat in another column — a state reconcile() never repairs.
+            await previous?.value
+
             guard let token = await self.resolveToken() else {
                 task.needsIssueSync = true
                 try? self.modelContext.save()
