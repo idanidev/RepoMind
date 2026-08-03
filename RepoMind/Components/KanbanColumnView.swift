@@ -331,6 +331,15 @@ struct TaskCardEnhanced: View {
                     .multilineTextAlignment(.leading)
 
                 HStack(spacing: 8) {
+                    // Without this, a task that never reached GitHub looked identical to one
+                    // that did.
+                    if task.needsIssueSync {
+                        Image(systemName: "arrow.trianglehead.2.clockwise.rotate.90.icloud")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                            .accessibilityLabel("task_pending_sync")
+                    }
+
                     if task.imagePath != nil || task.imageData != nil {
                         Button {
                             showFullPhoto = true

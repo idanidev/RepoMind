@@ -227,7 +227,11 @@ final class TaskIssueSyncService {
                 repo.syncTasksDisabledReason = String(localized: "sync_tasks_disabled_no_permission")
                 break
             } catch {
-                // Leave needsIssueSync = true, try again next reconcile.
+                // Leave needsIssueSync = true so the next reconcile retries — but say so, rather
+                // than failing as silently as the CloudKit sync used to.
+                #if DEBUG
+                    print("[TaskIssueSync] task \(task.id) failed to sync: \(error)")
+                #endif
             }
         }
         try? context.save()

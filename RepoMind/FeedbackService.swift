@@ -157,8 +157,14 @@ final class FeedbackService {
         var collected: [FeedbackIssue] = []
         for repo in repos {
             if Task.isCancelled { break }
-            if let new = try? await sync(repo: repo, token: token, into: context) {
-                collected.append(contentsOf: new)
+            do {
+                collected.append(contentsOf: try await sync(repo: repo, token: token, into: context))
+            } catch {
+                // One repo failing shouldn't stop the rest, but swallowing it silently is how a
+                // broken poll goes unnoticed for weeks.
+                #if DEBUG
+                    print("[Feedback] \(repo.name) failed to sync: \(error)")
+                #endif
             }
         }
         return collected

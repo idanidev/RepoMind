@@ -352,3 +352,4 @@
 "icloud_sync_section" = "iCloud";
 "icloud_sync_problem_title" = "La sincronización con iCloud no funciona";
 "icloud_sync_problem_footer" = "Tus datos se guardan en este dispositivo, pero no están llegando a los demás. Suele resolverse solo; si sigue, comprueba que has iniciado sesión en iCloud.";
+"task_pending_sync" = "Todavía no publicada en GitHub";
