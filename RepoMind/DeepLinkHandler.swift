@@ -96,7 +96,13 @@ enum DeepLinkHandler {
             orderIndex: maxOrder + 1
         )
         context.insert(task)
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            // Never claim success for something that was not persisted.
+            ToastManager.shared.show(String(localized: "task_save_failed"), style: .error)
+            return
+        }
 
         ToastManager.shared.show(
             String(format: String(localized: "deeplink_task_created"), repo.name),
