@@ -253,7 +253,13 @@ actor GitHubService {
 
         // Single fetch — avoids N+1 queries (one per remote repo)
         let allLocal = try context.fetch(FetchDescriptor<ProjectRepo>())
-        let localByID = Dictionary(grouping: allLocal, by: \.repoID)
+        // Scoped to the account being synced. Grouping every repo by `repoID` alone treated the
+        // same repository connected under two GitHub accounts as a duplicate: one copy was deleted
+        // and the survivor reassigned to whichever account synced last.
+        // Orphans (account == nil, left over from older builds) are included so they get adopted
+        // here rather than duplicated.
+        let ownedLocal = allLocal.filter { $0.account?.id == account.id || $0.account == nil }
+        let localByID = Dictionary(grouping: ownedLocal, by: \.repoID)
 
         // Track whether anything actually changed to avoid unnecessary CloudKit writes
         var madeChanges = false
