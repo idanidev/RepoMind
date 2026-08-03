@@ -67,9 +67,15 @@ final class KanbanTests: XCTestCase {
         XCTAssertEqual(project.columns?.count ?? 0, 0)
     }
 
+    /// Default columns are created from localized names, so selecting them by an English literal
+    /// crashed on any machine not running in English. Order is the stable identity.
+    private func sortedColumns() -> [KanbanColumn] {
+        (project.columns ?? []).sorted { $0.orderIndex < $1.orderIndex }
+    }
+
     func testCreateTask() {
         viewModel.initializeDefaultColumnsIfNeeded()
-        let column = (project.columns ?? []).first(where: { $0.name == "To-Do" })!
+        let column = sortedColumns()[1]
         viewModel.createTask(content: "Test Task", column: column)
         XCTAssertEqual(column.tasks?.count, 1)
         XCTAssertEqual(column.tasks?.first?.content, "Test Task")
@@ -84,8 +90,9 @@ final class KanbanTests: XCTestCase {
 
     func testMoveTask() {
         viewModel.initializeDefaultColumnsIfNeeded()
-        let todoCol = (project.columns ?? []).first(where: { $0.name == "To-Do" })!
-        let doneCol = (project.columns ?? []).first(where: { $0.name == "Done" })!
+        let columns = sortedColumns()
+        let todoCol = columns[1]
+        let doneCol = columns[2]
         viewModel.createTask(content: "Moving Task", column: todoCol)
         let task = todoCol.tasks!.first!
         viewModel.moveTask(task, to: doneCol, atIndex: nil)
@@ -99,6 +106,10 @@ final class KanbanTests: XCTestCase {
         viewModel.createTask(content: "To Delete", column: column)
         let task = column.tasks!.first!
         viewModel.deleteTask(task)
+        // The cached inverse relationship still holds the object until pending changes are
+        // flushed. The app reads tasks through @Query, so its UI updates either way — the test
+        // has to ask for the flush explicitly.
+        modelContext.processPendingChanges()
         XCTAssertEqual(column.tasks?.count, 0)
     }
 }
@@ -153,11 +164,23 @@ final class SubscriptionManagerTests: XCTestCase {
         XCTAssertTrue(manager.canAddAccount(currentCount: 50))
     }
 
-    func testIsProDefaultsFalse() {
+    /// Previously had no assertions at all, so it passed unconditionally.
+    /// Asserts the gating logic rather than `isPro` itself, which can be seeded from the Keychain
+    /// cache in a test environment and is therefore not deterministic here.
+    func testFreeTierLimitsApplyWhenNotPro() {
         let manager = SubscriptionManager.shared
         manager.isMockPro = false
-        // Without StoreKit transactions and with empty purchasedProductIDs, isPro should be false
-        // Note: in test env purchasedProductIDs may have "cached" from UserDefaults
+        defer { manager.isMockPro = false }
+
+        XCTAssertTrue(manager.canAddRepo(currentCount: manager.maxFreeRepos - 1))
+        XCTAssertFalse(manager.canAddRepo(currentCount: manager.maxFreeRepos))
+        XCTAssertFalse(manager.canAddAccount(currentCount: manager.maxFreeAccounts))
+        XCTAssertFalse(manager.canAddKanbanColumn(currentCount: manager.maxFreeKanbanColumns))
+
+        manager.isMockPro = true
+        XCTAssertTrue(manager.canAddRepo(currentCount: 999))
+        XCTAssertTrue(manager.canAddAccount(currentCount: 999))
+        XCTAssertTrue(manager.canAddKanbanColumn(currentCount: 999))
     }
 }
 
@@ -197,9 +220,16 @@ final class VoiceManagerTests: XCTestCase {
         XCTAssertNil(vm!.errorMessage)
     }
 
-    func testCustomLocale() {
-        vm = VoiceManager(locale: Locale(identifier: "en-US"))
-        XCTAssertEqual(vm!.speechLocale.identifier, "en-US")
+    /// Replaces a test that passed a locale into an initialiser which ignored it, then asserted
+    /// the value came back — it only ever passed on English machines, by coincidence.
+    func testResolvesSpeechLocaleFromSystemPreferences() {
+        vm = VoiceManager()
+        let expected = Locale.preferredLanguages.first.flatMap {
+            Locale(identifier: $0).language.languageCode?.identifier
+        }
+        XCTAssertEqual(vm!.speechLocale.language.languageCode?.identifier, expected)
+        // Dual mode is only on when a second, different language is configured.
+        XCTAssertEqual(vm!.useDualLanguage, vm!.secondaryLocale != nil)
     }
 }
 
@@ -388,15 +418,21 @@ final class MultiAccountIsolationTests: XCTestCase {
         modelContext.delete(account)
         try modelContext.save()
 
-        // Verificar que el repo fue eliminado (cascade)
+        // `GitHubAccount.repos` is `.nullify`, NOT `.cascade`, so the repo survives with a nil
+        // account. This test used to assert cascade and failed; the model was never going to
+        // behave that way.
         let repoFetch = FetchDescriptor<ProjectRepo>(predicate: #Predicate { $0.repoID == repoID })
         let remainingRepos = try modelContext.fetch(repoFetch)
-        XCTAssertEqual(remainingRepos.count, 0, "Repo should be deleted when account is deleted")
+        XCTAssertEqual(remainingRepos.count, 1, "Deleting an account nullifies the link, it does not cascade")
+        XCTAssertNil(remainingRepos.first?.account, "The surviving repo is orphaned")
 
-        // Verificar que las tareas fueron eliminadas
         let taskFetch = FetchDescriptor<TaskItem>(predicate: #Predicate { $0.content == taskContent })
         let remainingTasks = try modelContext.fetch(taskFetch)
-        XCTAssertEqual(remainingTasks.count, 0, "Tasks should be deleted when account is deleted")
+        XCTAssertEqual(remainingTasks.count, 1, "Tasks belong to the repo, which still exists")
+
+        // This is exactly why sign-out has to delete repos itself: an orphaned repo has no
+        // account, so the per-account filter never excludes it and it stayed visible under
+        // "All accounts" to whoever signed in next.
     }
 
     // MARK: - Test: Same repo ID in different accounts stays separate
