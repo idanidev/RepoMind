@@ -197,9 +197,18 @@ struct KanbanView: View {
             }
         }
         .sheet(item: $viewModel.editingTask) { task in
-            TaskEditSheet(task: task, columns: columns) { editedTask, previousColumn in
-                viewModel.handleTaskEdited(editedTask, previousColumn: previousColumn)
-            }
+            TaskEditSheet(
+                task: task,
+                columns: columns,
+                onSave: { editedTask, previousColumn in
+                    viewModel.handleTaskEdited(editedTask, previousColumn: previousColumn)
+                },
+                onDelete: { deletedTask in
+                    // Routed through the view model so the row actually leaves the database and
+                    // the linked GitHub issue gets closed.
+                    viewModel.deleteTask(deletedTask)
+                }
+            )
         }
         .sheet(isPresented: $viewModel.showAddTaskSheet) {
             AddTaskSheet(

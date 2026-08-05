@@ -126,6 +126,10 @@ struct TaskEditSheet: View {
     /// Called after save with the task and its column *before* editing, so callers can
     /// detect a column change (e.g. to sync the move to GitHub Issues).
     var onSave: ((TaskItem, KanbanColumn?) -> Void)? = nil
+    /// Called when the user deletes from this sheet. Routed out rather than handled here: the
+    /// sheet used to only drop the task from its column's array, which left the row in the
+    /// database — it came back on relaunch — and never closed the linked GitHub issue.
+    var onDelete: ((TaskItem) -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
 
     @State private var editedContent: String = ""
@@ -250,7 +254,7 @@ struct TaskEditSheet: View {
         if let imagePath = task.imagePath {
             try? FileManager.default.removeItem(atPath: imagePath)
         }
-        task.column?.tasks?.removeAll { $0.id == task.id }
+        onDelete?(task)
         dismiss()
     }
 }
