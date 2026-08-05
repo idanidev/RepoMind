@@ -900,20 +900,9 @@ struct RepoRow: View {
         // Prioridad: 1. Logo del repo, 2. Avatar del owner, 3. Placeholder
         if let logoURL = repo.logoURL, let url = URL(string: logoURL) {
             // Logo del repositorio
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .success(let image):
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                case .failure, .empty:
-                    ownerAvatarOrPlaceholder
-                @unknown default:
-                    ownerAvatarOrPlaceholder
-                }
-            }
-            .frame(width: 44, height: 44)
-            .clipShape(RoundedRectangle(cornerRadius: 10))
+            CachedAsyncImage(url: url) { ownerAvatarOrPlaceholder }
+                .frame(width: 44, height: 44)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
         } else {
             ownerAvatarOrPlaceholder
         }
@@ -922,20 +911,9 @@ struct RepoRow: View {
     @ViewBuilder
     private var ownerAvatarOrPlaceholder: some View {
         if let avatarURL = repo.account?.avatarURL, let url = URL(string: avatarURL) {
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .success(let image):
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                case .failure, .empty:
-                    avatarPlaceholder
-                @unknown default:
-                    avatarPlaceholder
-                }
-            }
-            .frame(width: 44, height: 44)
-            .clipShape(RoundedRectangle(cornerRadius: 10))
+            CachedAsyncImage(url: url) { avatarPlaceholder }
+                .frame(width: 44, height: 44)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
         } else {
             avatarPlaceholder
         }
