@@ -135,9 +135,9 @@ struct FeedbackIssueDetailView: View {
         } message: { Text(actionError ?? "") }
         .sheet(isPresented: $showConvertSheet) { convertSheet }
         .sheet(isPresented: $showSnoozeSheet) { snoozeSheet }
-        .onAppear {
-            if !issue.isRead { issue.isRead = true; try? context.save() }
-        }
+        // Deliberately does NOT mark as read on appear. Opening something is not deciding anything
+        // about it, and auto-reading made items vanish from Today before the developer had done
+        // anything with them. It clears when they actually act on it — see `markHandled`.
     }
 
     // MARK: - Convert sheet
@@ -193,8 +193,16 @@ struct FeedbackIssueDetailView: View {
 
     // MARK: - Actions
 
+    /// Marks the item as dealt with. Called only from real decisions — converting it into a task,
+    /// closing it, or snoozing it — never from merely looking at it.
+    private func markHandled() {
+        guard !issue.isRead else { return }
+        issue.isRead = true
+    }
+
     private func snooze(days: Int) {
         issue.snoozedUntil = Calendar.current.date(byAdding: .day, value: days, to: .now)
+        markHandled()
         try? context.save()
     }
 
@@ -204,6 +212,7 @@ struct FeedbackIssueDetailView: View {
         let task = TaskItem(content: content, column: column, project: repo, orderIndex: nextOrder)
         context.insert(task)
         issue.convertedTaskColumnName = column.name
+        markHandled()
         try? context.save()
         lastFeedback = String(format: String(localized: "feedback_converted_in %@"), column.name)
     }
@@ -217,6 +226,8 @@ struct FeedbackIssueDetailView: View {
     private func close() async throws {
         let token = try await token()
         try await FeedbackService.shared.closeIssue(issue, token: token, in: context)
+        markHandled()
+        try? context.save()
         lastFeedback = String(localized: "feedback_close_done")
     }
 
