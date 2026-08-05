@@ -2,6 +2,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
+import { readTaskImage, storeIsAvailable, taskHasImage, taskUUIDFromBody } from "./attachments.js";
 import { GitHubClient } from "./github.js";
 import { resolveRepo } from "./repo.js";
 import { requireToken } from "./token.js";
@@ -37,10 +38,16 @@ async function guard<T>(fn: () => Promise<T>) {
   }
 }
 
-async function loadTask(repo: string, id: number, withThread: boolean): Promise<RepoMindTask> {
+async function loadTask(repo: string, id: number, withThread: boolean) {
   const issue = await github.getIssue(repo, id);
   const comments = withThread ? await github.listComments(repo, id) : [];
-  return issueToTask(issue, repo, comments);
+  const task: RepoMindTask = issueToTask(issue, repo, comments);
+
+  // Screenshots never leave the machine, so their existence has to be reported separately —
+  // there is nothing in the issue itself to reveal it.
+  const taskUUID = taskUUIDFromBody(issue.body);
+  const hasScreenshot = taskUUID ? taskHasImage(taskUUID) : false;
+  return { ...task, hasScreenshot };
 }
 
 const repoArg = z
@@ -215,6 +222,56 @@ server.registerTool(
       await github.updateIssue(target, number, { state: "closed", state_reason: "completed" });
 
       return ok({ completed: true, repo: target, id, prUrl });
+    })
+);
+
+server.registerTool(
+  "get_task_image",
+  {
+    title: "View the screenshot attached to a task",
+    description:
+      "Returns the screenshot the developer attached when they captured the task, as an image " +
+      "you can actually look at.\n\n" +
+      "`get_task` and `start_task` report `hasScreenshot` — whenever that is true, fetch the " +
+      "image before deciding what the bug is. A screenshot of the broken screen usually settles " +
+      "in one look what a written description leaves ambiguous.\n\n" +
+      "The image is read from the RepoMind app's local database on this machine; it is never " +
+      "uploaded to GitHub, so it is only available where the Mac app is installed and synced.",
+    inputSchema: { repo: repoArg, id: taskIdArg },
+  },
+  async ({ repo, id }) =>
+    guard(async () => {
+      const target = resolveRepo(repo);
+      const issue = await github.getIssue(target, Number(id));
+      const taskUUID = taskUUIDFromBody(issue.body);
+
+      if (!taskUUID) {
+        throw new Error(
+          `Issue #${id} carries no RepoMind task marker, so it has no attachment to look up. ` +
+            "Only issues created by the app do."
+        );
+      }
+      if (!storeIsAvailable()) {
+        throw new Error(
+          "The RepoMind local database is not on this machine, so attachments cannot be read here. " +
+            "Screenshots stay on device by design — run this from the Mac that has the app installed."
+        );
+      }
+
+      const image = readTaskImage(taskUUID);
+      if (!image) {
+        throw new Error(`Task ${taskUUID} has no screenshot attached.`);
+      }
+
+      return {
+        content: [
+          {
+            type: "image" as const,
+            data: image.base64,
+            mimeType: image.mimeType,
+          },
+        ],
+      };
     })
 );
 
