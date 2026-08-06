@@ -28,6 +28,31 @@ final class GitHubAccount {
     }
 }
 
+// MARK: - RepoFolder
+
+/// A user-made group of repositories.
+///
+/// Deleting a folder deliberately uses `.nullify`: the repos inside it go back to the top level
+/// rather than being deleted with it. Losing a project — and every task in it — because a folder
+/// was tidied away would be the worst possible reading of "delete folder".
+@Model
+final class RepoFolder {
+    var id: UUID = UUID()
+    var name: String = ""
+    var colorHex: String = "#5B6CFF"
+    var orderIndex: Int = 0
+
+    @Relationship(deleteRule: .nullify, inverse: \ProjectRepo.folder)
+    var repos: [ProjectRepo]?
+
+    init(name: String, colorHex: String = "#5B6CFF", orderIndex: Int = 0) {
+        self.id = UUID()
+        self.name = name
+        self.colorHex = colorHex
+        self.orderIndex = orderIndex
+    }
+}
+
 // MARK: - ProjectRepo
 
 @Model
@@ -50,6 +75,9 @@ final class ProjectRepo {
     var syncTasksDisabledReason: String?
 
     var account: GitHubAccount?
+
+    /// Optional grouping chosen by the user. `nil` means the repo sits at the top level.
+    var folder: RepoFolder?
 
     @Relationship(deleteRule: .cascade, inverse: \TaskItem.project)
     var tasks: [TaskItem]?
@@ -184,6 +212,11 @@ final class TaskItem {
     var issueNumber: Int?
     /// Set when a GitHub sync operation fails (offline, expired token) so reconciliation retries later.
     var needsIssueSync: Bool = false
+    /// Why the last publish attempt failed, in the user's language.
+    ///
+    /// Without this a stuck task showed up as "not published" with no way to find out why: the
+    /// failure was only ever printed, and only in DEBUG builds. Cleared on the next success.
+    var lastSyncError: String?
 
     var column: KanbanColumn?
     var project: ProjectRepo?

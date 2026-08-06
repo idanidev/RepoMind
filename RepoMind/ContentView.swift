@@ -13,8 +13,19 @@ struct ContentView: View {
     @AppStorage("isDemoMode") private var isDemoMode = false
     @Query private var accounts: [GitHubAccount]
 
+    @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding = false
+
     /// Waiting for CloudKit to deliver accounts on first launch of a new device
     @State private var isAwaitingCloudKit = true
+
+    /// Only on a genuinely new install. A device that already has an account signed in — or one
+    /// whose data is still arriving from CloudKit — has clearly been through this before.
+    private var showOnboarding: Binding<Bool> {
+        Binding(
+            get: { !hasSeenOnboarding && !shouldShowMain && !isAwaitingCloudKit },
+            set: { if !$0 { hasSeenOnboarding = true } }
+        )
+    }
 
     private var shouldShowMain: Bool {
         // Demo mode: show main only while demo is active
@@ -43,6 +54,11 @@ struct ContentView: View {
 
             ToastOverlay()
         }
+        // Covers the token screen on a first run: asking for a personal access token makes very
+        // little sense before the app has said what it does with it.
+        .fullScreenCover(isPresented: showOnboarding) {
+            OnboardingView()
+        }
         .task {
             #if DEBUG
             if isDemoMode {
@@ -60,6 +76,15 @@ struct ContentView: View {
             }
             await waitForCloudKitAccounts()
             #endif
+            // Again after the CloudKit wait: a repo whose columns had not arrived yet was skipped
+            // the first time. Repairing an already-repaired task is a no-op.
+            repairOrphanTasks()
+        }
+        // `initial: true` matters: on a device that is already signed in, `shouldShowMain` is
+        // true from the very first evaluation, so a plain onChange would never fire at all.
+        .onChange(of: shouldShowMain, initial: true) { _, showing in
+            guard showing else { return }
+            repairOrphanTasks()
         }
         .onChange(of: accounts.isEmpty) { _, isEmpty in
             // Accounts arrived via CloudKit — auto-login (ignore stale demo accounts)
@@ -69,6 +94,17 @@ struct ContentView: View {
                 isAwaitingCloudKit = false
             }
         }
+    }
+
+    /// Reattaches tasks that lost their column, and says so — silently fixing eight missing tasks
+    /// would leave the same "where did my task go?" question, just with a different answer.
+    private func repairOrphanTasks() {
+        let repaired = OrphanTaskRepair.run(context: context)
+        guard repaired > 0 else { return }
+        ToastManager.shared.show(
+            String(format: String(localized: "orphan_tasks_restored %lld"), repaired),
+            style: .info
+        )
     }
 
     // MARK: - CloudKit startup sync
@@ -269,6 +305,12 @@ struct RepoListView: View {
             }
             .sheet(item: $repoToConfigureIcon) { repo in
                 RepoIconConfigSheet(repo: repo)
+            }
+            .sheet(item: $expiredTokenAccount) { account in
+                ReauthSheet(account: account)
+            }
+            .sheet(item: $repoToFile) { repo in
+                FolderPickerSheet(repo: repo)
             }
             .sheet(isPresented: $showAddLocalProject) {
                 AddLocalProjectSheet()
@@ -504,17 +546,31 @@ struct RepoListView: View {
             // Renders nothing when there is nothing waiting.
             TodayEntryRow()
 
-            ForEach(filteredRepos) { repo in
-                NavigationLink(value: repo) {
-                    RepoRow(repo: repo)
-                }
-                .swipeActions(edge: .leading) {
-                    favoriteButton(for: repo)
-                    iconButton(for: repo)
-                }
-                .swipeActions(edge: .trailing) {
-                    deleteButton(for: repo)
-                    archiveButton(for: repo)
+            ForEach(repoSections) { section in
+                Section {
+                    ForEach(section.repos) { repo in
+                        NavigationLink(value: repo) {
+                            RepoRow(repo: repo)
+                        }
+                        .swipeActions(edge: .leading) {
+                            favoriteButton(for: repo)
+                            iconButton(for: repo)
+                            folderButton(for: repo)
+                        }
+                        .swipeActions(edge: .trailing) {
+                            deleteButton(for: repo)
+                            archiveButton(for: repo)
+                        }
+                    }
+                } header: {
+                    if let folder = section.folder {
+                        Label {
+                            Text(folder.name)
+                        } icon: {
+                            Image(systemName: "folder.fill")
+                                .foregroundStyle(Color(hex: folder.colorHex))
+                        }
+                    }
                 }
             }
 
@@ -563,7 +619,42 @@ struct RepoListView: View {
         }
     }
 
+    // MARK: - Folder grouping
+
+    private struct RepoSection: Identifiable {
+        let id: String
+        let folder: RepoFolder?
+        let repos: [ProjectRepo]
+    }
+
+    /// The repo list split into folders, folders first and loose repos last.
+    ///
+    /// Empty folders are left out on purpose: a folder can only be created while filing a repo into
+    /// it, so an empty one means every repo it held was deleted or moved away, and an empty header
+    /// is then just noise.
+    private var repoSections: [RepoSection] {
+        var sections = folders.compactMap { folder -> RepoSection? in
+            let inFolder = filteredRepos.filter { $0.folder?.id == folder.id }
+            guard !inFolder.isEmpty else { return nil }
+            return RepoSection(id: folder.id.uuidString, folder: folder, repos: inFolder)
+        }
+        let unfiled = filteredRepos.filter { $0.folder == nil }
+        if !unfiled.isEmpty {
+            sections.append(RepoSection(id: "unfiled", folder: nil, repos: unfiled))
+        }
+        return sections
+    }
+
     // MARK: - Swipe Action Buttons (Extracted for clarity)
+
+    private func folderButton(for repo: ProjectRepo) -> some View {
+        Button {
+            repoToFile = repo
+        } label: {
+            Label("move_to_folder", systemImage: "folder")
+        }
+        .tint(.indigo)
+    }
 
     private func favoriteButton(for repo: ProjectRepo) -> some View {
         Button {
@@ -629,6 +720,11 @@ struct RepoListView: View {
     }
 
     @State private var repoToConfigureIcon: ProjectRepo?
+    /// Set when a sync fails with an expired token, so the user can replace it without signing out.
+    @State private var expiredTokenAccount: GitHubAccount?
+    /// The repo whose folder the user is choosing.
+    @State private var repoToFile: ProjectRepo?
+    @Query(sort: \RepoFolder.orderIndex) private var folders: [RepoFolder]
 
     private func iconButton(for repo: ProjectRepo) -> some View {
         Button {
@@ -703,6 +799,12 @@ struct RepoListView: View {
                 ToastManager.shared.show(String(localized: "repos_synced_toast"), style: .success)
                 Self.syncSuccessFeedback.notificationOccurred(.success)
             }
+        } catch GitHubError.invalidToken {
+            // An expired token is not a transient failure: every later sync fails identically, and
+            // the only way to enter a new one was signing out — which deletes the local repos and
+            // their tasks. Offer to replace it in place instead. Shown even on a silent refresh,
+            // because otherwise a background sync would keep failing with nothing to see.
+            expiredTokenAccount = selectedAccount ?? accounts.first { $0.username != "demo-user" }
         } catch {
             if !silent {
                 ToastManager.shared.show(error.localizedDescription, style: .error)
@@ -1445,6 +1547,11 @@ struct AdaptiveRepoListView: View {
     @State private var showAddLocalProject = false
     @State private var subscription = SubscriptionManager.shared
     @State private var repoToConfigureIcon: ProjectRepo?
+    /// Set when a sync fails with an expired token, so the user can replace it without signing out.
+    @State private var expiredTokenAccount: GitHubAccount?
+    /// The repo whose folder the user is choosing.
+    @State private var repoToFile: ProjectRepo?
+    @Query(sort: \RepoFolder.orderIndex) private var folders: [RepoFolder]
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     private static let syncSuccessFeedback = UINotificationFeedbackGenerator()
     private static let deleteImpactFeedback = UIImpactFeedbackGenerator(style: .medium)
@@ -1501,6 +1608,12 @@ struct AdaptiveRepoListView: View {
         .sheet(item: $repoToConfigureIcon) { repo in
             RepoIconConfigSheet(repo: repo)
         }
+        .sheet(item: $expiredTokenAccount) { account in
+            ReauthSheet(account: account)
+        }
+        .sheet(item: $repoToFile) { repo in
+            FolderPickerSheet(repo: repo)
+        }
         .sheet(isPresented: $showAddLocalProject) {
             AddLocalProjectSheet()
                 .environment(\.modelContext, context)
@@ -1545,6 +1658,26 @@ struct AdaptiveRepoListView: View {
         }
     }
 
+    private struct RepoSection: Identifiable {
+        let id: String
+        let folder: RepoFolder?
+        let repos: [ProjectRepo]
+    }
+
+    /// Same grouping as the phone list: folders first, loose repos last, empty folders omitted.
+    private var repoSections: [RepoSection] {
+        var sections = folders.compactMap { folder -> RepoSection? in
+            let inFolder = filteredRepos.filter { $0.folder?.id == folder.id }
+            guard !inFolder.isEmpty else { return nil }
+            return RepoSection(id: folder.id.uuidString, folder: folder, repos: inFolder)
+        }
+        let unfiled = filteredRepos.filter { $0.folder == nil }
+        if !unfiled.isEmpty {
+            sections.append(RepoSection(id: "unfiled", folder: nil, repos: unfiled))
+        }
+        return sections
+    }
+
     private func sidebarRepoRow(_ repo: ProjectRepo) -> some View {
         NavigationLink(value: repo) {
             RepoRow(
@@ -1554,6 +1687,11 @@ struct AdaptiveRepoListView: View {
             )
         }
         .contextMenu {
+            Button {
+                repoToFile = repo
+            } label: {
+                Label("move_to_folder", systemImage: "folder")
+            }
             Button {
                 Task { await toggleFavorite(for: repo) }
             } label: {
@@ -1645,10 +1783,25 @@ struct AdaptiveRepoListView: View {
             // Renders nothing when there is nothing waiting.
             TodayEntryRow()
             sidebarFilterSection
-            Section("repositories_title") {
-                ForEach(filteredRepos) { repo in
-                    sidebarRepoRow(repo)
+            ForEach(repoSections) { section in
+                Section {
+                    ForEach(section.repos) { repo in
+                        sidebarRepoRow(repo)
+                    }
+                } header: {
+                    if let folder = section.folder {
+                        Label {
+                            Text(folder.name)
+                        } icon: {
+                            Image(systemName: "folder.fill")
+                                .foregroundStyle(Color(hex: folder.colorHex))
+                        }
+                    } else {
+                        Text("repositories_title")
+                    }
                 }
+            }
+            Section {
                 if !subscription.isPro && repos.count > subscription.maxFreeRepos {
                     Button { showPaywall = true } label: {
                         HStack(spacing: 12) {
@@ -1850,6 +2003,12 @@ struct AdaptiveRepoListView: View {
                 ToastManager.shared.show(String(localized: "repos_synced_toast"), style: .success)
                 Self.syncSuccessFeedback.notificationOccurred(.success)
             }
+        } catch GitHubError.invalidToken {
+            // An expired token is not a transient failure: every later sync fails identically, and
+            // the only way to enter a new one was signing out — which deletes the local repos and
+            // their tasks. Offer to replace it in place instead. Shown even on a silent refresh,
+            // because otherwise a background sync would keep failing with nothing to see.
+            expiredTokenAccount = selectedAccount ?? accounts.first { $0.username != "demo-user" }
         } catch {
             if !silent {
                 ToastManager.shared.show(error.localizedDescription, style: .error)

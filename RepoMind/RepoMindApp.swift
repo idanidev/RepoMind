@@ -56,6 +56,7 @@ struct RepoMindApp: App {
         let schema = Schema([
             GitHubAccount.self,
             ProjectRepo.self,
+            RepoFolder.self,
             KanbanColumn.self,
             TaskItem.self,
             FeedbackIssue.self,

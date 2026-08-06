@@ -138,6 +138,7 @@ struct TaskEditSheet: View {
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var taskImage: UIImage?
     @State private var showDeleteConfirmation = false
+    @State private var showDeleteTaskConfirmation = false
 
     var body: some View {
         NavigationStack {
@@ -169,7 +170,7 @@ struct TaskEditSheet: View {
 
                 Section {
                     Button(role: .destructive) {
-                        deleteTaskAndDismiss()
+                        showDeleteTaskConfirmation = true
                     } label: {
                         HStack {
                             Spacer()
@@ -182,6 +183,9 @@ struct TaskEditSheet: View {
             .navigationTitle("edit_task_title")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                // Two items, one per side, so the title sits centred. A third button here pushed
+                // it off-centre, and the taller detent below already makes delete visible without
+                // needing a duplicate up here.
                 ToolbarItem(placement: .cancellationAction) {
                     Button("cancel") { dismiss() }
                 }
@@ -213,8 +217,20 @@ struct TaskEditSheet: View {
                     task.imageData = nil
                 }
             }
+            // Deleting a task also deletes its GitHub issue, and neither comes back. That was
+            // happening on a single tap, with no confirmation at all.
+            .alert("delete_task_confirm_title", isPresented: $showDeleteTaskConfirmation) {
+                Button("cancel", role: .cancel) {}
+                Button("delete_task_button", role: .destructive) { deleteTaskAndDismiss() }
+            } message: {
+                Text(task.issueNumber == nil
+                    ? "delete_task_confirm_message"
+                    : "delete_task_confirm_message_issue")
+            }
         }
-        .presentationDetents([.medium, .large])
+        // Opens tall enough that the whole form — including the delete row at the bottom — is on
+        // screen without dragging. `.medium` cut it off exactly where the delete button was.
+        .presentationDetents([.fraction(0.85), .large])
         .frame(idealWidth: 480)
     }
 
@@ -315,10 +331,17 @@ struct AddTaskSheet: View {
                     .disabled(content.isEmpty || selectedColumn == nil)
                 }
             }
-            // Replaces a hand-rolled 100 ms sleep that waited for the sheet to finish presenting
-            // before grabbing focus — that pause was the "lag when the keyboard opens". This is
-            // the API meant for it: SwiftUI focuses the field as the sheet appears.
+            // `.defaultFocus` is the API meant for this: when it lands, the keyboard rises with
+            // the sheet and there is no visible pause. Inside a sheet it is unreliable though —
+            // SwiftUI often evaluates it before the field has joined the view hierarchy and then
+            // the keyboard never opens at all, which is worse than the lag it was fixing. So keep
+            // it for the good case and re-assert afterwards for the bad one; when it already
+            // worked, the check below does nothing.
             .defaultFocus($isContentFocused, true)
+            .task {
+                try? await Task.sleep(for: .milliseconds(250))
+                if !isContentFocused { isContentFocused = true }
+            }
             .onAppear {
                 selectedColumn = preselectedColumn ?? columns.first
             }

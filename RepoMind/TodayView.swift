@@ -7,8 +7,11 @@ import SwiftUI
 /// sync switched itself off — but each was buried inside its own repo, so answering "what should
 /// I do now?" meant opening every board in turn.
 struct TodayView: View {
+    @Environment(\.modelContext) private var context
     @Query private var allIssues: [FeedbackIssue]
     @Query(sort: \ProjectRepo.updatedAt, order: .reverse) private var repos: [ProjectRepo]
+
+    @State private var isRetrying = false
 
     private let syncMonitor = CloudKitSyncMonitor.shared
 
@@ -30,6 +33,24 @@ struct TodayView: View {
 
     private var unpublishedTasks: [TaskItem] {
         repos.flatMap { $0.tasks ?? [] }.filter(\.needsIssueSync)
+    }
+
+    /// Retries every repo that has something stuck, without making the user visit each board.
+    private func retryUnpublished() async {
+        isRetrying = true
+        defer { isRetrying = false }
+
+        // Reattach first: a task with no column cannot be published at all, so retrying the
+        // network call before fixing that would just reproduce the same error.
+        OrphanTaskRepair.run(context: context)
+
+        let affected = repos.filter { ($0.tasks ?? []).contains(where: \.needsIssueSync) }
+        for repo in affected {
+            guard let account = repo.account,
+                  let token = try? await KeychainManager.shared.retrieveToken(for: account.tokenKey)
+            else { continue }
+            await TaskIssueSyncService.shared.reconcile(repo: repo, context: context, token: token)
+        }
     }
 
     private var reposWithBrokenSync: [ProjectRepo] {
@@ -71,7 +92,11 @@ struct TodayView: View {
                     Label {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("icloud_sync_problem_title")
-                            if let message = syncMonitor.lastErrorMessage {
+                            // The detail first: the top-level message for a partial failure is
+                            // "the operation could not be completed", which says nothing.
+                            if let detail = syncMonitor.lastErrorDetail {
+                                Text(detail).font(.caption)
+                            } else if let message = syncMonitor.lastErrorMessage {
                                 Text(message).font(.caption).foregroundStyle(.secondary)
                             }
                         }
@@ -132,8 +157,24 @@ struct TodayView: View {
                         if let repoName = task.project?.name {
                             Text(repoName).font(.caption).foregroundStyle(.secondary)
                         }
+                        // The reason it is stuck. Without this the list said "not published" and
+                        // left you guessing between offline, expired token and no permission.
+                        if let reason = task.lastSyncError {
+                            Label(reason, systemImage: "exclamationmark.triangle")
+                                .font(.caption)
+                                .foregroundStyle(.orange)
+                        }
                     }
                 }
+
+                // Retrying used to require opening each affected board, since that was the only
+                // place `reconcile` ran.
+                Button {
+                    Task { await retryUnpublished() }
+                } label: {
+                    Label("today_unpublished_retry", systemImage: "arrow.clockwise")
+                }
+                .disabled(isRetrying)
             } header: {
                 Text("today_unpublished_section")
             } footer: {

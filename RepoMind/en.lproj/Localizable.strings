@@ -369,3 +369,87 @@
 "today_summary_warning" = "needs attention";
 "show_older_completed %lld" = "Show %lld older";
 "more_options" = "More";
+
+/* Re-authentication (expired GitHub token) */
+"reauth_title" = "Session Expired";
+"reauth_explanation %@" = "Your GitHub token for %@ no longer works. GitHub tokens can't be renewed automatically — create a new one and paste it here. Your projects and tasks stay where they are.";
+"reauth_create_token" = "Create a new token on GitHub";
+"reauth_wrong_account %@ %@" = "That token belongs to %@, not %@. Use a token from the same account.";
+"reauth_success" = "Session restored";
+
+/* Task sync settings (global) */
+"issue_sync_section_header" = "Task Sync";
+"issue_sync_settings_title" = "GitHub Issues Sync";
+"issue_sync_settings_footer" = "Tasks in the selected repositories are published as GitHub Issues. Turning sync off leaves the existing issues untouched.";
+"issue_sync_per_repo_section" = "Repositories";
+"issue_sync_enable_all" = "Turn on for all repositories";
+"issue_sync_disable_all" = "Turn off everywhere";
+"issue_sync_confirm_enable_all_title" = "Publish tasks as issues?";
+"issue_sync_confirm_enable_all %lld" = "This will create %lld issues on GitHub. Continue?";
+"issue_sync_confirm_enable_all_button" = "Create issues";
+"issue_sync_confirm_enable_title" = "Publish this repository?";
+"issue_sync_confirm_enable %lld %@" = "This will create %lld issues in %@. Continue?";
+"issue_sync_enabled_toast" = "Sync turned on";
+"issue_sync_disabled_toast" = "Sync turned off";
+"issue_sync_no_repos_title" = "No repositories to sync";
+"issue_sync_no_repos_message" = "Only GitHub repositories can publish their tasks as issues. Local projects can't.";
+
+/* Folders */
+"move_to_folder" = "Move to Folder";
+"folder_picker_title" = "Folder";
+"folder_picker_section" = "Move to";
+"folder_none" = "No folder";
+"folder_new_section" = "New Folder";
+"folder_new_placeholder" = "Folder name";
+"folder_create" = "Create";
+"folder_rename" = "Rename";
+"folder_delete_confirm_title" = "Delete this folder?";
+"folder_delete_confirm_message" = "The repositories inside it are kept — they go back to the top level.";
+
+/* Onboarding */
+"onboarding_voice_title" = "Capture it out loud";
+"onboarding_voice_body" = "You find a bug on your phone, away from your desk. Hold the mic, say it, done — no typing, no losing it.";
+"onboarding_board_title" = "One board per repository";
+"onboarding_board_body" = "Every project gets its own columns, so what's pending is never mixed with what's already shipped.";
+"onboarding_issues_title" = "Tasks become GitHub Issues";
+"onboarding_issues_body" = "Turn it on per repository and your tasks are published as issues. Moving a card to Done closes it.";
+"onboarding_agent_title" = "Your coding agent reads them";
+"onboarding_agent_body" = "Install RepoMind Bridge and Claude Code, Cursor or Codex will pick up what you dictated when you open the repo.";
+"onboarding_next" = "Next";
+"onboarding_start" = "Get started";
+"onboarding_skip" = "Skip";
+"sync_tasks_error_no_column" = "The task isn't in any column, so it can't be published.";
+"sync_tasks_error_no_token" = "No GitHub token available for this account.";
+"today_unpublished_retry" = "Retry now";
+"orphan_tasks_restored %lld" = "%lld tasks recovered and put back on their board";
+
+/* CloudKit error causes */
+"ck_error_quota" = "Your iCloud storage is full.";
+"ck_error_not_authenticated" = "Not signed in to iCloud on this device.";
+"ck_error_network" = "No connection to iCloud.";
+"ck_error_conflict" = "The same record was edited on two devices.";
+"ck_error_schema" = "A field is missing from the iCloud schema — deploy the schema changes to Production.";
+"ck_error_permission" = "This iCloud account is not allowed to write these records.";
+"ck_error_zone" = "The iCloud data zone no longer exists.";
+"ck_error_limit" = "Too much data in a single sync; it will retry in smaller batches.";
+"ck_error_other %lld" = "iCloud error code %lld.";
+"debug_replay_onboarding" = "View onboarding again";
+
+/* Onboarding illustrations */
+"onboarding_mock_recording" = "Recording";
+"onboarding_mock_transcript" = "the login screen jumps when the keyboard opens";
+"onboarding_mock_col_todo" = "To-Do";
+"onboarding_mock_col_done" = "Done";
+"onboarding_mock_task_1" = "Login screen jumps";
+"onboarding_mock_task_2" = "Review empty states";
+"onboarding_mock_task_3" = "Update the README";
+"onboarding_mock_issue_hint" = "Moving it to Done closes the issue";
+"onboarding_mock_agent_prompt" = "> list_tasks";
+"onboarding_mock_agent_reading" = "reading RepoMind tasks…";
+"onboarding_mock_agent_task" = "#142 Login screen jumps";
+"onboarding_mock_agent_done" = "Fixed and pushed";
+
+/* Delete task confirmation */
+"delete_task_confirm_title" = "Delete this task?";
+"delete_task_confirm_message" = "This can't be undone.";
+"delete_task_confirm_message_issue" = "Its GitHub issue will be deleted too. This can't be undone.";

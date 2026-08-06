@@ -65,6 +65,7 @@ struct SettingsView: View {
     @State private var showImporter = false
     @State private var backupDocument: BackupDocument?
     @State private var isImporting = false
+    @State private var showOnboardingPreview = false
 
     private let subscription = SubscriptionManager.shared
     private let syncMonitor = CloudKitSyncMonitor.shared
@@ -151,6 +152,9 @@ struct SettingsView: View {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text("icloud_sync_problem_title")
                                     .font(.subheadline.weight(.semibold))
+                                if let detail = syncMonitor.lastErrorDetail {
+                                    Text(detail).font(.caption)
+                                }
                                 if let message = syncMonitor.lastErrorMessage {
                                     Text(message)
                                         .font(.caption)
@@ -163,6 +167,27 @@ struct SettingsView: View {
                     } footer: {
                         Text("icloud_sync_problem_footer")
                     }
+                }
+
+                // MARK: - Task sync
+
+                Section {
+                    NavigationLink {
+                        IssueSyncSettingsView()
+                    } label: {
+                        HStack {
+                            Label(
+                                "issue_sync_settings_title",
+                                systemImage: "arrow.trianglehead.2.clockwise")
+                            Spacer()
+                            Text("\(repos.filter(\.syncTasksToGitHub).count)/\(repos.filter { !$0.isLocal }.count)")
+                                .font(.subheadline)
+                                .monospacedDigit()
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                } header: {
+                    Text("issue_sync_section_header")
                 }
 
                 // MARK: - Backup
@@ -213,6 +238,14 @@ struct SettingsView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+
+                    // Otherwise the only way to see the onboarding again is deleting the app,
+                    // which also throws away the local data you were testing with.
+                    Button {
+                        showOnboardingPreview = true
+                    } label: {
+                        Label("debug_replay_onboarding", systemImage: "sparkles.rectangle.stack")
+                    }
                 } header: {
                     Text("Debug")
                 } footer: {
@@ -248,6 +281,13 @@ struct SettingsView: View {
             .sheet(isPresented: $showPaywall) {
                 PaywallView()
             }
+            #if DEBUG
+                .fullScreenCover(isPresented: $showOnboardingPreview) {
+                    // Passing onFinish keeps `hasSeenOnboarding` untouched: this is a preview,
+                    // not a first run.
+                    OnboardingView { showOnboardingPreview = false }
+                }
+            #endif
             .manageSubscriptionsSheet(isPresented: $showManageSubscription)
             .fileExporter(
                 isPresented: $showExporter,

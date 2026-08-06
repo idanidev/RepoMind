@@ -635,3 +635,75 @@ final class DeepLinkHandlerTests: XCTestCase {
         XCTAssertEqual(ordered.map(\.orderIndex), [0, 1, 2])
     }
 }
+
+// MARK: - Orphan task repair
+
+@MainActor
+final class OrphanTaskRepairTests: XCTestCase {
+    var container: ModelContainer!
+    var context: ModelContext!
+    var repo: ProjectRepo!
+    var pendiente: KanbanColumn!
+    var hecho: KanbanColumn!
+
+    override func setUp() async throws {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none)
+        container = try ModelContainer(
+            for: ProjectRepo.self, TaskItem.self, KanbanColumn.self, GitHubAccount.self,
+            configurations: config)
+        context = container.mainContext
+
+        repo = ProjectRepo(repoID: 1, name: "Clarity")
+        context.insert(repo)
+        pendiente = KanbanColumn(name: "Pendiente", orderIndex: 0, project: repo)
+        hecho = KanbanColumn(name: "Hecho", orderIndex: 1, project: repo)
+        context.insert(pendiente)
+        context.insert(hecho)
+    }
+
+    private func orphan(_ content: String, status: String) -> TaskItem {
+        let task = TaskItem(content: content, status: status, column: nil, project: repo)
+        context.insert(task)
+        return task
+    }
+
+    func testReattachesToTheColumnNamedInStatus() {
+        let task = orphan("La Parte de El versus", status: "hecho")
+        XCTAssertEqual(OrphanTaskRepair.run(context: context), 1)
+        XCTAssertEqual(task.column?.name, "Hecho")
+    }
+
+    func testFallsBackToTheFirstColumnWhenStatusMatchesNothing() {
+        let task = orphan("Error", status: "inventada")
+        XCTAssertEqual(OrphanTaskRepair.run(context: context), 1)
+        XCTAssertEqual(task.column?.name, "Pendiente")
+    }
+
+    func testLeavesHealthyTasksAlone() {
+        let healthy = TaskItem(content: "ok", status: "hecho", column: pendiente, project: repo)
+        context.insert(healthy)
+        XCTAssertEqual(OrphanTaskRepair.run(context: context), 0)
+        // Its status disagrees with its column, and that is none of the repair's business.
+        XCTAssertEqual(healthy.column?.name, "Pendiente")
+    }
+
+    func testWaitsWhenTheProjectHasNoColumnsYet() {
+        let empty = ProjectRepo(repoID: 2, name: "Syncing")
+        context.insert(empty)
+        let task = TaskItem(content: "pending sync", status: "pendiente", column: nil, project: empty)
+        context.insert(task)
+
+        XCTAssertEqual(OrphanTaskRepair.run(context: context), 0)
+        XCTAssertNil(task.column)
+    }
+
+    func testAppendsAfterTheExistingTasksOfTheTargetColumn() {
+        let first = TaskItem(content: "a", status: "pendiente", column: pendiente, project: repo)
+        first.orderIndex = 7
+        context.insert(first)
+
+        let task = orphan("b", status: "pendiente")
+        XCTAssertEqual(OrphanTaskRepair.run(context: context), 1)
+        XCTAssertEqual(task.orderIndex, 8)
+    }
+}

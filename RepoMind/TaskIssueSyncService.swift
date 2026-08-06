@@ -22,6 +22,7 @@ final class TaskIssueSyncService {
 
     enum SyncError: LocalizedError {
         case noOwner
+        case noColumn
         case noPermission
         case notFound
         case http(Int, String)
@@ -29,6 +30,7 @@ final class TaskIssueSyncService {
         var errorDescription: String? {
             switch self {
             case .noOwner: return String(localized: "sync_tasks_error_no_owner")
+            case .noColumn: return String(localized: "sync_tasks_error_no_column")
             case .noPermission: return String(localized: "sync_tasks_disabled_no_permission")
             case .notFound: return String(localized: "sync_tasks_error_not_found")
             case .http(let code, _): return String(format: String(localized: "feedback_error_http %lld"), code)
@@ -96,7 +98,9 @@ final class TaskIssueSyncService {
 
     func createIssue(for task: TaskItem, repo: ProjectRepo, token: String) async throws {
         guard let (owner, name) = repoOwnerAndName(repo) else { throw SyncError.noOwner }
-        guard let column = task.column else { return }
+        // This used to `return`, which the caller read as success: `needsIssueSync` stayed set,
+        // nothing was retried, and the task sat under "not published" forever with no explanation.
+        guard let column = task.column else { throw SyncError.noColumn }
 
         let url = URL(string: "https://api.github.com/repos/\(owner)/\(name)/issues")!
         var req = URLRequest(url: url)
@@ -116,6 +120,7 @@ final class TaskIssueSyncService {
         let created = try JSONDecoder().decode(Created.self, from: data)
         task.issueNumber = created.number
         task.needsIssueSync = false
+        task.lastSyncError = nil
     }
 
     // MARK: - Update column label
@@ -123,7 +128,7 @@ final class TaskIssueSyncService {
     func updateIssueColumn(for task: TaskItem, repo: ProjectRepo, token: String) async throws {
         guard let issueNumber = task.issueNumber else { return try await createIssue(for: task, repo: repo, token: token) }
         guard let (owner, name) = repoOwnerAndName(repo) else { throw SyncError.noOwner }
-        guard let column = task.column else { return }
+        guard let column = task.column else { throw SyncError.noColumn }
 
         let url = URL(string: "https://api.github.com/repos/\(owner)/\(name)/issues/\(issueNumber)/labels")!
         var req = URLRequest(url: url)
@@ -134,6 +139,7 @@ final class TaskIssueSyncService {
         let (data, resp) = try await session.data(for: req)
         try throwIfNeeded(resp, data: data)
         task.needsIssueSync = false
+        task.lastSyncError = nil
     }
 
     // MARK: - Close / Reopen
@@ -200,6 +206,7 @@ final class TaskIssueSyncService {
         let (data, resp) = try await session.data(for: req)
         try throwIfNeeded(resp, data: data)
         task.needsIssueSync = false
+        task.lastSyncError = nil
     }
 
     // MARK: - Reconciliation
@@ -233,11 +240,10 @@ final class TaskIssueSyncService {
                 repo.syncTasksDisabledReason = String(localized: "sync_tasks_disabled_no_permission")
                 break
             } catch {
-                // Leave needsIssueSync = true so the next reconcile retries — but say so, rather
-                // than failing as silently as the CloudKit sync used to.
-                #if DEBUG
-                    print("[TaskIssueSync] task \(task.id) failed to sync: \(error)")
-                #endif
+                // Leave needsIssueSync = true so the next reconcile retries, and record why on the
+                // task itself. This used to be a DEBUG-only print, which meant a stuck task was
+                // reported as "not published" with the reason existing nowhere the user could see.
+                task.lastSyncError = error.localizedDescription
             }
         }
         try? context.save()
@@ -254,6 +260,7 @@ final class TaskIssueSyncService {
         Task {
             guard let token = try? await KeychainManager.shared.retrieveToken(for: account.tokenKey) else {
                 task.needsIssueSync = true
+                task.lastSyncError = String(localized: "sync_tasks_error_no_token")
                 try? context.save()
                 return
             }
@@ -264,6 +271,7 @@ final class TaskIssueSyncService {
                 repo.syncTasksDisabledReason = String(localized: "sync_tasks_disabled_no_permission")
             } catch {
                 task.needsIssueSync = true
+                task.lastSyncError = error.localizedDescription
             }
             try? context.save()
         }

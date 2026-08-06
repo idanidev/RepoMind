@@ -368,3 +368,87 @@
 "today_summary_warning" = "requiere atención";
 "show_older_completed %lld" = "Ver %lld anteriores";
 "more_options" = "Más";
+
+/* Reautenticación (token de GitHub caducado) */
+"reauth_title" = "Sesión caducada";
+"reauth_explanation %@" = "Tu token de GitHub para %@ ya no funciona. Los tokens de GitHub no se pueden renovar solos: crea uno nuevo y pégalo aquí. Tus proyectos y tareas se quedan como están.";
+"reauth_create_token" = "Crear un token nuevo en GitHub";
+"reauth_wrong_account %@ %@" = "Ese token es de %@, no de %@. Usa un token de la misma cuenta.";
+"reauth_success" = "Sesión restaurada";
+
+/* Ajustes globales de sincronización de tareas */
+"issue_sync_section_header" = "Sincronización de tareas";
+"issue_sync_settings_title" = "Sincronizar con Issues";
+"issue_sync_settings_footer" = "Las tareas de los repositorios seleccionados se publican como issues de GitHub. Desactivar la sincronización no toca los issues ya creados.";
+"issue_sync_per_repo_section" = "Repositorios";
+"issue_sync_enable_all" = "Activar en todos los repositorios";
+"issue_sync_disable_all" = "Desactivar en todos";
+"issue_sync_confirm_enable_all_title" = "¿Publicar las tareas como issues?";
+"issue_sync_confirm_enable_all %lld" = "Se crearán %lld issues en GitHub. ¿Continuar?";
+"issue_sync_confirm_enable_all_button" = "Crear issues";
+"issue_sync_confirm_enable_title" = "¿Publicar este repositorio?";
+"issue_sync_confirm_enable %lld %@" = "Se crearán %lld issues en %@. ¿Continuar?";
+"issue_sync_enabled_toast" = "Sincronización activada";
+"issue_sync_disabled_toast" = "Sincronización desactivada";
+"issue_sync_no_repos_title" = "No hay repositorios que sincronizar";
+"issue_sync_no_repos_message" = "Solo los repositorios de GitHub pueden publicar sus tareas como issues. Los proyectos locales no.";
+
+/* Carpetas */
+"move_to_folder" = "Mover a carpeta";
+"folder_picker_title" = "Carpeta";
+"folder_picker_section" = "Mover a";
+"folder_none" = "Sin carpeta";
+"folder_new_section" = "Nueva carpeta";
+"folder_new_placeholder" = "Nombre de la carpeta";
+"folder_create" = "Crear";
+"folder_rename" = "Renombrar";
+"folder_delete_confirm_title" = "¿Eliminar esta carpeta?";
+"folder_delete_confirm_message" = "Los repositorios que contiene se conservan — vuelven al nivel principal.";
+
+/* Onboarding */
+"onboarding_voice_title" = "Dilo en voz alta";
+"onboarding_voice_body" = "Encuentras un bug en el móvil, lejos del escritorio. Mantén pulsado el micro, dilo y listo — sin escribir y sin que se te olvide.";
+"onboarding_board_title" = "Un tablero por repositorio";
+"onboarding_board_body" = "Cada proyecto tiene sus propias columnas, así lo pendiente nunca se mezcla con lo que ya está hecho.";
+"onboarding_issues_title" = "Las tareas se vuelven issues";
+"onboarding_issues_body" = "Actívalo por repositorio y tus tareas se publican como issues. Mover una tarjeta a Hecho la cierra.";
+"onboarding_agent_title" = "Tu agente las lee";
+"onboarding_agent_body" = "Instala RepoMind Bridge y Claude Code, Cursor o Codex leerán lo que dictaste al abrir el repositorio.";
+"onboarding_next" = "Siguiente";
+"onboarding_start" = "Empezar";
+"onboarding_skip" = "Saltar";
+"sync_tasks_error_no_column" = "La tarea no está en ninguna columna, así que no se puede publicar.";
+"sync_tasks_error_no_token" = "No hay token de GitHub para esta cuenta.";
+"today_unpublished_retry" = "Reintentar ahora";
+"orphan_tasks_restored %lld" = "%lld tareas recuperadas y devueltas a su tablero";
+
+/* Causas de error de CloudKit */
+"ck_error_quota" = "Tu almacenamiento de iCloud está lleno.";
+"ck_error_not_authenticated" = "No has iniciado sesión en iCloud en este dispositivo.";
+"ck_error_network" = "Sin conexión con iCloud.";
+"ck_error_conflict" = "El mismo registro se editó en dos dispositivos.";
+"ck_error_schema" = "Falta un campo en el esquema de iCloud — despliega los cambios de esquema a Production.";
+"ck_error_permission" = "Esta cuenta de iCloud no puede escribir estos registros.";
+"ck_error_zone" = "La zona de datos de iCloud ya no existe.";
+"ck_error_limit" = "Demasiados datos en una sola sincronización; se reintentará por lotes.";
+"ck_error_other %lld" = "Error de iCloud, código %lld.";
+"debug_replay_onboarding" = "Ver el onboarding otra vez";
+
+/* Ilustraciones del onboarding */
+"onboarding_mock_recording" = "Grabando";
+"onboarding_mock_transcript" = "el login pega un salto cuando se abre el teclado";
+"onboarding_mock_col_todo" = "Por hacer";
+"onboarding_mock_col_done" = "Hecho";
+"onboarding_mock_task_1" = "El login pega un salto";
+"onboarding_mock_task_2" = "Revisar estados vacíos";
+"onboarding_mock_task_3" = "Actualizar el README";
+"onboarding_mock_issue_hint" = "Moverla a Hecho cierra el issue";
+"onboarding_mock_agent_prompt" = "> list_tasks";
+"onboarding_mock_agent_reading" = "leyendo tareas de RepoMind…";
+"onboarding_mock_agent_task" = "#142 El login pega un salto";
+"onboarding_mock_agent_done" = "Arreglado y subido";
+
+/* Confirmación de borrado de tarea */
+"delete_task_confirm_title" = "¿Eliminar esta tarea?";
+"delete_task_confirm_message" = "Esto no se puede deshacer.";
+"delete_task_confirm_message_issue" = "También se eliminará su issue de GitHub. Esto no se puede deshacer.";
