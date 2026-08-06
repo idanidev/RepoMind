@@ -58,6 +58,14 @@ function sniffMimeType(buffer: Buffer): string {
 
 const EXTERNAL_REF_UUID = /^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$/;
 
+/** Where the real image starts, skipping any Core Data marker byte in front of it. */
+function magicOffset(buffer: Buffer): number {
+  for (let i = 0; i < Math.min(4, buffer.length); i++) {
+    if (sniffMimeType(buffer.subarray(i)) !== "application/octet-stream") return i;
+  }
+  return 0;
+}
+
 /**
  * Returns the screenshot for a task, or null when it has none.
  *
@@ -86,7 +94,10 @@ export function readTaskImage(taskUUID: string): TaskImage | null {
     if (!existsSync(path)) return null;
     image = readFileSync(path);
   } else {
-    image = stored;
+    // Small blobs stay in the row, but Core Data still prefixes them with a one-byte marker
+    // (0x01) that is not part of the image. Passing that byte through produces a file every
+    // decoder rejects, so skip anything ahead of the actual magic number.
+    image = stored.subarray(magicOffset(stored));
   }
 
   if (image.length === 0) return null;
