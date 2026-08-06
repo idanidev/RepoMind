@@ -315,14 +315,12 @@ struct AddTaskSheet: View {
                     .disabled(content.isEmpty || selectedColumn == nil)
                 }
             }
+            // Replaces a hand-rolled 100 ms sleep that waited for the sheet to finish presenting
+            // before grabbing focus — that pause was the "lag when the keyboard opens". This is
+            // the API meant for it: SwiftUI focuses the field as the sheet appears.
+            .defaultFocus($isContentFocused, true)
             .onAppear {
                 selectedColumn = preselectedColumn ?? columns.first
-                Task {
-                    // Let the sheet finish presenting before taking focus, otherwise the
-                    // keyboard doesn't come up.
-                    try? await Task.sleep(for: .milliseconds(100))
-                    isContentFocused = true
-                }
             }
             .onChange(of: selectedPhoto) { _, newValue in
                 Task {
