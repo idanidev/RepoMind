@@ -1,13 +1,14 @@
 Novedades:
 
-• Nueva sección "Feedback" — recibe los issues de GitHub etiquetados como user-feedback de cada repo, agrupados por severidad (crítico, menor, mejora, general)
-• Notificaciones automáticas cuando llega un nuevo reporte de usuario
-• Acciones rápidas sobre cada issue: convertirlo en tarea Kanban, cerrarlo, comentar, cambiar severidad o posponerlo
-• Badge rojo en la lista de repos cuando hay feedback sin leer
+• Onboarding al abrir la app por primera vez, con una vista previa real de cada función
+• Carpetas para agrupar proyectos: crea, renombra y mueve repos entre ellas. Borrar una carpeta nunca borra los proyectos que contiene
+• Nuevo ajuste "Sincronizar con Issues" para elegir de un vistazo qué repositorios publican sus tareas en GitHub, de uno en uno o todos a la vez
 
-Mejoras en Mac:
-• Sidebar nativo con estilo macOS auténtico
-• Hover effects en repos y tarjetas
-• Menús contextuales (clic derecho) en repos y tareas
-• Pantalla de login rediseñada con panel lateral
-• Atajo ⌃⌘S para mostrar/ocultar barra lateral
+Correcciones:
+
+• Si tu token de GitHub caduca, ahora puedes introducir uno nuevo sin cerrar sesión ni perder proyectos ni tareas
+• Recuperadas las tareas que habían perdido su columna y no aparecían en ningún tablero
+• Las tareas que no llegan a publicarse en GitHub explican por qué, y se pueden reintentar desde "Hoy"
+• Los problemas de sincronización con iCloud indican la causa concreta en vez de un error genérico
+• El teclado vuelve a abrirse solo al crear una tarea
+• Al abrir una tarea se ve el botón de eliminar, y ahora pide confirmación antes de borrar

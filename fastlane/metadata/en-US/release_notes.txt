@@ -1,13 +1,14 @@
 What's new:
 
-• New "Feedback" section — surfaces GitHub issues labeled user-feedback from each repo, grouped by severity (critical, minor, enhancement, general)
-• Automatic notifications when a new user report arrives
-• Quick actions per issue: convert to Kanban task, close, comment, change severity, or snooze
-• Red badge on the repo list when there's unread feedback
+• An onboarding on first launch, showing a real preview of each feature
+• Folders to group your projects: create, rename and move repos between them. Deleting a folder never deletes the projects inside it
+• A new "GitHub Issues Sync" setting to see at a glance which repositories publish their tasks, and turn it on one by one or everywhere at once
 
-Mac improvements:
-• Native macOS sidebar style
-• Hover effects on repos and cards
-• Context menus (right-click) on repos and tasks
-• Redesigned login with side panel
-• ⌃⌘S shortcut to toggle sidebar
+Fixes:
+
+• When your GitHub token expires you can now enter a new one without signing out, keeping your projects and tasks
+• Recovered tasks that had lost their column and were showing on no board at all
+• Tasks that fail to reach GitHub now say why, and can be retried from "Today"
+• iCloud sync problems name the actual cause instead of a generic error
+• The keyboard opens on its own again when creating a task
+• Opening a task shows the delete button, and deleting now asks for confirmation
