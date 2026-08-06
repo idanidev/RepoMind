@@ -1,0 +1,14 @@
+---
+description: RepoMind task bridge
+alwaysApply: true
+---
+
+This repo is wired to RepoMind, where the developer captures tasks by voice from their phone.
+
+At the start of a session, call `list_tasks` from the `repomind` MCP server before asking what
+to work on — they have likely already dictated it. Use `start_task` when you begin (it marks the
+task as picked up on their phone), `add_note` for decisions worth knowing about, `ask_user` only
+when genuinely blocked, and `complete_task` when the work is finished and verified.
+
+`rawInput` holds the developer's original, unedited words and is the source of truth for intent.
+When it disagrees with the cleaned-up `title`, trust `rawInput`.

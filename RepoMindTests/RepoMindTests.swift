@@ -67,9 +67,15 @@ final class KanbanTests: XCTestCase {
         XCTAssertEqual(project.columns?.count ?? 0, 0)
     }
 
+    /// Default columns are created from localized names, so selecting them by an English literal
+    /// crashed on any machine not running in English. Order is the stable identity.
+    private func sortedColumns() -> [KanbanColumn] {
+        (project.columns ?? []).sorted { $0.orderIndex < $1.orderIndex }
+    }
+
     func testCreateTask() {
         viewModel.initializeDefaultColumnsIfNeeded()
-        let column = (project.columns ?? []).first(where: { $0.name == "To-Do" })!
+        let column = sortedColumns()[1]
         viewModel.createTask(content: "Test Task", column: column)
         XCTAssertEqual(column.tasks?.count, 1)
         XCTAssertEqual(column.tasks?.first?.content, "Test Task")
@@ -84,8 +90,9 @@ final class KanbanTests: XCTestCase {
 
     func testMoveTask() {
         viewModel.initializeDefaultColumnsIfNeeded()
-        let todoCol = (project.columns ?? []).first(where: { $0.name == "To-Do" })!
-        let doneCol = (project.columns ?? []).first(where: { $0.name == "Done" })!
+        let columns = sortedColumns()
+        let todoCol = columns[1]
+        let doneCol = columns[2]
         viewModel.createTask(content: "Moving Task", column: todoCol)
         let task = todoCol.tasks!.first!
         viewModel.moveTask(task, to: doneCol, atIndex: nil)
@@ -99,6 +106,10 @@ final class KanbanTests: XCTestCase {
         viewModel.createTask(content: "To Delete", column: column)
         let task = column.tasks!.first!
         viewModel.deleteTask(task)
+        // The cached inverse relationship still holds the object until pending changes are
+        // flushed. The app reads tasks through @Query, so its UI updates either way — the test
+        // has to ask for the flush explicitly.
+        modelContext.processPendingChanges()
         XCTAssertEqual(column.tasks?.count, 0)
     }
 }
@@ -153,11 +164,23 @@ final class SubscriptionManagerTests: XCTestCase {
         XCTAssertTrue(manager.canAddAccount(currentCount: 50))
     }
 
-    func testIsProDefaultsFalse() {
+    /// Previously had no assertions at all, so it passed unconditionally.
+    /// Asserts the gating logic rather than `isPro` itself, which can be seeded from the Keychain
+    /// cache in a test environment and is therefore not deterministic here.
+    func testFreeTierLimitsApplyWhenNotPro() {
         let manager = SubscriptionManager.shared
         manager.isMockPro = false
-        // Without StoreKit transactions and with empty purchasedProductIDs, isPro should be false
-        // Note: in test env purchasedProductIDs may have "cached" from UserDefaults
+        defer { manager.isMockPro = false }
+
+        XCTAssertTrue(manager.canAddRepo(currentCount: manager.maxFreeRepos - 1))
+        XCTAssertFalse(manager.canAddRepo(currentCount: manager.maxFreeRepos))
+        XCTAssertFalse(manager.canAddAccount(currentCount: manager.maxFreeAccounts))
+        XCTAssertFalse(manager.canAddKanbanColumn(currentCount: manager.maxFreeKanbanColumns))
+
+        manager.isMockPro = true
+        XCTAssertTrue(manager.canAddRepo(currentCount: 999))
+        XCTAssertTrue(manager.canAddAccount(currentCount: 999))
+        XCTAssertTrue(manager.canAddKanbanColumn(currentCount: 999))
     }
 }
 
@@ -197,9 +220,16 @@ final class VoiceManagerTests: XCTestCase {
         XCTAssertNil(vm!.errorMessage)
     }
 
-    func testCustomLocale() {
-        vm = VoiceManager(locale: Locale(identifier: "en-US"))
-        XCTAssertEqual(vm!.speechLocale.identifier, "en-US")
+    /// Replaces a test that passed a locale into an initialiser which ignored it, then asserted
+    /// the value came back — it only ever passed on English machines, by coincidence.
+    func testResolvesSpeechLocaleFromSystemPreferences() {
+        vm = VoiceManager()
+        let expected = Locale.preferredLanguages.first.flatMap {
+            Locale(identifier: $0).language.languageCode?.identifier
+        }
+        XCTAssertEqual(vm!.speechLocale.language.languageCode?.identifier, expected)
+        // Dual mode is only on when a second, different language is configured.
+        XCTAssertEqual(vm!.useDualLanguage, vm!.secondaryLocale != nil)
     }
 }
 
@@ -388,15 +418,21 @@ final class MultiAccountIsolationTests: XCTestCase {
         modelContext.delete(account)
         try modelContext.save()
 
-        // Verificar que el repo fue eliminado (cascade)
+        // `GitHubAccount.repos` is `.nullify`, NOT `.cascade`, so the repo survives with a nil
+        // account. This test used to assert cascade and failed; the model was never going to
+        // behave that way.
         let repoFetch = FetchDescriptor<ProjectRepo>(predicate: #Predicate { $0.repoID == repoID })
         let remainingRepos = try modelContext.fetch(repoFetch)
-        XCTAssertEqual(remainingRepos.count, 0, "Repo should be deleted when account is deleted")
+        XCTAssertEqual(remainingRepos.count, 1, "Deleting an account nullifies the link, it does not cascade")
+        XCTAssertNil(remainingRepos.first?.account, "The surviving repo is orphaned")
 
-        // Verificar que las tareas fueron eliminadas
         let taskFetch = FetchDescriptor<TaskItem>(predicate: #Predicate { $0.content == taskContent })
         let remainingTasks = try modelContext.fetch(taskFetch)
-        XCTAssertEqual(remainingTasks.count, 0, "Tasks should be deleted when account is deleted")
+        XCTAssertEqual(remainingTasks.count, 1, "Tasks belong to the repo, which still exists")
+
+        // This is exactly why sign-out has to delete repos itself: an orphaned repo has no
+        // account, so the per-account filter never excludes it and it stayed visible under
+        // "All accounts" to whoever signed in next.
     }
 
     // MARK: - Test: Same repo ID in different accounts stays separate
@@ -461,5 +497,213 @@ final class MultiAccountIsolationTests: XCTestCase {
         XCTAssertEqual(account2Repos.count, 2)
         XCTAssertTrue(account1Repos.allSatisfy { $0.name.contains("Dev1") })
         XCTAssertTrue(account2Repos.allSatisfy { $0.name.contains("Dev2") })
+    }
+}
+
+// MARK: - Repo Identity
+
+@MainActor
+final class RepoFullNameTests: XCTestCase {
+    func testDerivesOwnerFromHTMLURL() {
+        let repo = ProjectRepo(repoID: 1, name: "RepoMind", htmlURL: "https://github.com/idanidev/RepoMind")
+        XCTAssertEqual(repo.fullName, "idanidev/RepoMind")
+    }
+
+    /// The bug this guards: the copy of this parsing behind the unread badge omitted the
+    /// fallback, produced "/RepoMind", matched nothing, and the badge always read zero.
+    func testFallsBackToBareNameWhenURLMissing() {
+        XCTAssertEqual(ProjectRepo(repoID: 1, name: "RepoMind", htmlURL: "").fullName, "RepoMind")
+        XCTAssertEqual(ProjectRepo(repoID: 2, name: "Local", htmlURL: "not a url").fullName, "Local")
+    }
+}
+
+// MARK: - Task ↔ Issue Sync
+
+@MainActor
+final class TaskIssueSyncLabelTests: XCTestCase {
+    private func label(_ name: String) -> String {
+        TaskIssueSyncService.columnLabel(for: KanbanColumn(name: name, orderIndex: 0))
+    }
+
+    func testSlugIsLowercasedAndHyphenated() {
+        XCTAssertEqual(label("In Progress"), "col:in-progress")
+    }
+
+    func testStripsDiacritics() {
+        XCTAssertEqual(label("En progreso"), "col:en-progreso")
+        XCTAssertEqual(label("Hecho"), "col:hecho")
+    }
+
+    func testTrimsSurroundingWhitespace() {
+        XCTAssertEqual(label("  Pendiente  "), "col:pendiente")
+    }
+}
+
+// MARK: - Feedback Severity
+
+@MainActor
+final class FeedbackSeverityTests: XCTestCase {
+    func testMapsLabelsToSeverity() {
+        XCTAssertEqual(FeedbackSeverity.from(labels: ["user-feedback", "bug:critical"]), .critical)
+        XCTAssertEqual(FeedbackSeverity.from(labels: ["user-feedback", "bug:minor"]), .minor)
+        XCTAssertEqual(FeedbackSeverity.from(labels: ["user-feedback", "enhancement"]), .enhancement)
+        XCTAssertEqual(FeedbackSeverity.from(labels: ["user-feedback"]), .general)
+    }
+
+    func testCriticalWinsOverOtherLabels() {
+        XCTAssertEqual(
+            FeedbackSeverity.from(labels: ["enhancement", "bug:minor", "bug:critical"]), .critical)
+    }
+
+    func testIsCaseInsensitive() {
+        XCTAssertEqual(FeedbackSeverity.from(labels: ["Bug:Critical"]), .critical)
+    }
+}
+
+// MARK: - Deep Links
+
+@MainActor
+final class DeepLinkHandlerTests: XCTestCase {
+    var container: ModelContainer!
+    var context: ModelContext!
+
+    override func setUp() async throws {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none)
+        container = try ModelContainer(
+            for: ProjectRepo.self, TaskItem.self, KanbanColumn.self, GitHubAccount.self,
+            configurations: config)
+        context = container.mainContext
+    }
+
+    override func tearDown() {
+        context = nil
+        container = nil
+    }
+
+    @discardableResult
+    private func makeRepo(_ name: String) -> ProjectRepo {
+        let repo = ProjectRepo(repoID: abs(name.hashValue), name: name)
+        context.insert(repo)
+        let column = KanbanColumn(name: "Pendiente", orderIndex: 0, project: repo)
+        context.insert(column)
+        return repo
+    }
+
+    private func tasks(in repo: ProjectRepo) -> [TaskItem] { repo.tasks ?? [] }
+
+    func testCreatesTaskInNamedRepo() {
+        let target = makeRepo("RepoMind")
+        makeRepo("Clarity")
+
+        DeepLinkHandler.handle(URL(string: "repomind://add-task?content=Hola&repo=RepoMind")!, in: context)
+
+        XCTAssertEqual(tasks(in: target).count, 1)
+        XCTAssertEqual(tasks(in: target).first?.content, "Hola")
+    }
+
+    /// A substring match sent `repo=api` to "api-legacy", filing the task against the wrong repo.
+    func testPrefersExactRepoMatchOverSubstring() {
+        let exact = makeRepo("api")
+        let similar = makeRepo("api-legacy")
+
+        DeepLinkHandler.handle(URL(string: "repomind://add-task?content=Test&repo=api")!, in: context)
+
+        XCTAssertEqual(tasks(in: exact).count, 1)
+        XCTAssertEqual(tasks(in: similar).count, 0)
+    }
+
+    func testIgnoresLinkWithoutContent() {
+        let repo = makeRepo("RepoMind")
+        DeepLinkHandler.handle(URL(string: "repomind://add-task?repo=RepoMind")!, in: context)
+        XCTAssertEqual(tasks(in: repo).count, 0)
+    }
+
+    func testIgnoresForeignScheme() {
+        let repo = makeRepo("RepoMind")
+        DeepLinkHandler.handle(URL(string: "otherapp://add-task?content=Nope&repo=RepoMind")!, in: context)
+        XCTAssertEqual(tasks(in: repo).count, 0)
+    }
+
+    func testAppendsToTheEndOfTheColumn() {
+        let repo = makeRepo("RepoMind")
+        for i in 1...3 {
+            DeepLinkHandler.handle(
+                URL(string: "repomind://add-task?content=Task\(i)&repo=RepoMind")!, in: context)
+        }
+        let ordered = tasks(in: repo).sorted { $0.orderIndex < $1.orderIndex }
+        XCTAssertEqual(ordered.map(\.content), ["Task1", "Task2", "Task3"])
+        XCTAssertEqual(ordered.map(\.orderIndex), [0, 1, 2])
+    }
+}
+
+// MARK: - Orphan task repair
+
+@MainActor
+final class OrphanTaskRepairTests: XCTestCase {
+    var container: ModelContainer!
+    var context: ModelContext!
+    var repo: ProjectRepo!
+    var pendiente: KanbanColumn!
+    var hecho: KanbanColumn!
+
+    override func setUp() async throws {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none)
+        container = try ModelContainer(
+            for: ProjectRepo.self, TaskItem.self, KanbanColumn.self, GitHubAccount.self,
+            configurations: config)
+        context = container.mainContext
+
+        repo = ProjectRepo(repoID: 1, name: "Clarity")
+        context.insert(repo)
+        pendiente = KanbanColumn(name: "Pendiente", orderIndex: 0, project: repo)
+        hecho = KanbanColumn(name: "Hecho", orderIndex: 1, project: repo)
+        context.insert(pendiente)
+        context.insert(hecho)
+    }
+
+    private func orphan(_ content: String, status: String) -> TaskItem {
+        let task = TaskItem(content: content, status: status, column: nil, project: repo)
+        context.insert(task)
+        return task
+    }
+
+    func testReattachesToTheColumnNamedInStatus() {
+        let task = orphan("La Parte de El versus", status: "hecho")
+        XCTAssertEqual(OrphanTaskRepair.run(context: context), 1)
+        XCTAssertEqual(task.column?.name, "Hecho")
+    }
+
+    func testFallsBackToTheFirstColumnWhenStatusMatchesNothing() {
+        let task = orphan("Error", status: "inventada")
+        XCTAssertEqual(OrphanTaskRepair.run(context: context), 1)
+        XCTAssertEqual(task.column?.name, "Pendiente")
+    }
+
+    func testLeavesHealthyTasksAlone() {
+        let healthy = TaskItem(content: "ok", status: "hecho", column: pendiente, project: repo)
+        context.insert(healthy)
+        XCTAssertEqual(OrphanTaskRepair.run(context: context), 0)
+        // Its status disagrees with its column, and that is none of the repair's business.
+        XCTAssertEqual(healthy.column?.name, "Pendiente")
+    }
+
+    func testWaitsWhenTheProjectHasNoColumnsYet() {
+        let empty = ProjectRepo(repoID: 2, name: "Syncing")
+        context.insert(empty)
+        let task = TaskItem(content: "pending sync", status: "pendiente", column: nil, project: empty)
+        context.insert(task)
+
+        XCTAssertEqual(OrphanTaskRepair.run(context: context), 0)
+        XCTAssertNil(task.column)
+    }
+
+    func testAppendsAfterTheExistingTasksOfTheTargetColumn() {
+        let first = TaskItem(content: "a", status: "pendiente", column: pendiente, project: repo)
+        first.orderIndex = 7
+        context.insert(first)
+
+        let task = orphan("b", status: "pendiente")
+        XCTAssertEqual(OrphanTaskRepair.run(context: context), 1)
+        XCTAssertEqual(task.orderIndex, 8)
     }
 }

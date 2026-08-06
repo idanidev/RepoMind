@@ -6,7 +6,6 @@
 "collapse_column" = "Collapse column";
 "delete_column" = "Delete Column";
 "rename_column" = "Rename";
-"column_empty" = "Empty";
 "drag_tasks_here" = "Drag tasks here";
 "new_column_title" = "New Column";
 "rename_column_title" = "Rename Column";
@@ -20,7 +19,6 @@
 "edit_task" = "Edit";
 "delete_task" = "Delete";
 "move_task" = "Move to...";
-"voice_note_content" = "Voice note";
 
 /* Task Sheets */
 "content" = "Content";
@@ -37,45 +35,25 @@
 "photo_delete_confirm_title" = "Delete Image?";
 "delete_task_button" = "Delete Task";
 
-/* Pricing (missing from es.lproj counterpart sync) */
+/* Pricing */
 "buy_once_button" = "Unlock Pro";
 "one_time_payment_label" = "One-time payment. Lifetime access.";
 
 /* Repo Icon Configuration */
 "icon_configure_button" = "Icon";
-"icon_configure_title" = "Configure Icon";
 "icon_current_header" = "Current Icon";
-"icon_no_icon" = "No Icon";
-"icon_path_placeholder" = "Icon path in the repo";
-"icon_path_example" = "Example: MyApp/Assets.xcassets/AppIcon.appiconset";
-"icon_path_header" = "Custom Path";
-"icon_path_footer" = "Enter the path inside the repository where your app icon is located.";
-"icon_search_button" = "Search Icon Automatically";
-"icon_searching" = "Searching...";
-"icon_search_footer" = "Automatically searches for the icon in Assets.xcassets.";
 "icon_remove_button" = "Remove Custom Icon";
 "icon_configured_toast" = "Icon configured";
-"icon_found_toast" = "Icon found!";
-"icon_not_found_error" = "File not found on any branch (main, master, develop). Check the path is correct.";
-"icon_not_found_search_error" = "No icon found in Assets.xcassets.";
-"icon_owner_error" = "Could not determine the repository owner.";
-"icon_no_account_error" = "No account associated with this repository.";
-"icon_token_error" = "Could not retrieve access token.";
-"icon_search_error" = "Search error: %@";
 
 /* ContentView */
+"icloud_syncing_message" = "Syncing with iCloud...";
+"icloud_sign_in_manually" = "Sign in manually";
 "connect_account_prompt" = "Connect an account to get started";
 "tasks_count" = "%d tasks";
 "stars_count" = "%d stars";
 "github_sync_error" = "Error syncing with GitHub";
 
 /* Settings - Repo Icons */
-"search_app_icons_button" = "Search App Icons";
-"search_icons_footer" = "Automatically finds icons for your iOS apps on GitHub.";
-"no_ios_repos_icon_toast" = "No iOS repos without an icon";
-"searching_icons_progress" = "Searching icons in %d repos...";
-"icons_found_toast" = "%d icons found";
-"no_icons_found_toast" = "No icons found";
 
 /* Voice Permissions */
 "permission_denied_settings" = "Permission denied. Enable it in Settings.";
@@ -95,9 +73,6 @@
 /* Settings */
 "settings_title" = "Settings";
 "about_header" = "About";
-"pro_coming_soon_header" = "RepoMind Pro";
-"pro_coming_soon_title" = "Coming Soon";
-"pro_coming_soon_description" = "Cross-device sync, custom themes, and more. One-time purchase, no subscriptions.";
 "version_label" = "Version";
 "privacy_policy" = "Privacy Policy";
 "terms_of_use" = "Terms of Use";
@@ -148,7 +123,6 @@
 /* Kanban List */
 "no_tasks" = "No tasks";
 "photo_badge" = "Photo";
-"audio_badge" = "Audio";
 "share_image" = "Share";
 "copy_image" = "Copy Image";
 "image_copied_toast" = "Image copied";
@@ -196,7 +170,6 @@
 "welcome_message" = "Welcome, %@!";
 "validate_connect_button" = "Validate and Connect";
 "back_button" = "Back";
-"account_limit_error" = "Account limit reached (Free: 1). Upgrade to Pro.";
 
 /* Subscription / Paywall */
 "subscription_header" = "Subscription";
@@ -218,15 +191,12 @@
 "feature_kanban_columns" = "Kanban Columns";
 "feature_voice" = "Voice Transcription";
 "feature_sync" = "Multi-Device Sync";
-"feature_unlimited" = "Unlimited";
 "feature_limited" = "Limited";
 "feature_coming_soon" = "Coming Soon";
 "free_tier_label" = "Free";
 "pro_tier_label" = "Pro";
 
 /* Pricing */
-"buy_once_button" = "Unlock Pro";
-"one_time_payment_label" = "One-time payment. Lifetime access.";
 "purchase_error" = "Error processing purchase. Please try again.";
 "purchase_success_toast" = "Welcome to RepoMind Pro!";
 "paywall_already_pro_title" = "You already have Pro!";
@@ -234,7 +204,6 @@
 "purchase_pending_toast" = "Purchase pending approval. You'll get notified when it's approved.";
 "restore_success_toast" = "Purchases restored! Welcome to Pro.";
 "restore_no_purchases_toast" = "No active subscriptions found.";
-"restore_empty_toast" = "No previous purchases found.";
 "paywall_legal_disclaimer" = "One-time payment. You can restore your purchases from the app settings on other devices using the same Apple account.";
 "products_not_available" = "Products are not available at this time.";
 "products_unavailable_title" = "Plans not available yet";
@@ -244,8 +213,6 @@
 "debug_activate_pro_hint" = "Only visible in development builds.";
 
 /* Upgrade Prompts */
-"account_limit_upgrade" = "You need Pro to add more accounts.";
-"column_limit_upgrade" = "You need Pro to add more columns.";
 "repo_limit_upgrade" = "You need Pro to add more repositories.";
 "repo_limit_banner_title" = "Repository limit reached";
 "repo_limit_banner_subtitle" = "You have %d hidden repos. Unlock them with Pro.";
@@ -261,8 +228,6 @@
 "browser_folders_header" = "Folders";
 "browser_images_header" = "Images";
 "browser_empty_folder" = "No images in this folder";
-"browser_local_repo_title" = "Local Project";
-"browser_local_repo_message" = "Local projects aren't linked to GitHub, so there's no repository to browse.";
 "local_project_icon_header" = "Icon";
 "local_icon_pick_photo" = "Choose from Photo Library";
 "local_icon_saving" = "Saving...";
@@ -278,3 +243,213 @@
 "local_project_footer" = "This project will only be stored locally on this device and won't sync with GitHub.";
 "local_project_created_toast" = "Local project created";
 "biometric_reason" = "Authenticate to access your RepoMind repositories.";
+
+/* Demo Mode */
+"demo_mode_button" = "Try Demo";
+"demo_mode_badge" = "DEMO";
+
+/* Repo Settings & Checkbox */
+"repo_settings" = "Settings";
+"checkbox_done_column_section" = "Checkbox Done Column";
+"checkbox_done_column_footer" = "When you tap the checkbox on a task, it moves to this column.";
+"checkbox_none" = "Disabled";
+"no_done_column_configured" = "Configure a done column in repo settings ⚙";
+
+/* Debug */
+"debug_simulate_pro_label" = "Simulate Pro";
+"debug_simulate_pro_hint" = "The app behaves as a Pro user.";
+"debug_only_visible_hint" = "Only visible in development builds. Has no effect in production.";
+
+/* Deep Links */
+"deeplink_no_repo_error" = "No repository found for the deep link.";
+"deeplink_no_column_error" = "No column found for the deep link.";
+"deeplink_task_created" = "Task added to %@";
+
+/* Feedback */
+"feedback_title" = "Feedback";
+"feedback_empty_title" = "No feedback yet";
+"feedback_empty_subtitle" = "User reports, reviews, and feature requests will appear here.";
+"feedback_sync_error_title" = "Sync error";
+"ok" = "OK";
+"feedback_severity_critical" = "Critical bugs";
+"feedback_severity_minor" = "Minor bugs";
+"feedback_severity_enhancement" = "Enhancements";
+"feedback_severity_general" = "General feedback";
+"feedback_notif_critical %@" = "🔴 [%@] Critical issue reported";
+"feedback_notif_minor %@" = "🟡 [%@] Minor bug reported";
+"feedback_notif_enhancement %@" = "🟢 [%@] New enhancement request";
+"feedback_notif_general %@" = "💬 [%@] New user feedback";
+"feedback_open_button" = "Feedback";
+"feedback_unread_badge %lld" = "%lld unread";
+
+/* Mac UI */
+"copy_url" = "Copy URL";
+"open_in_github" = "Open on GitHub";
+"toggle_sidebar" = "Toggle Sidebar";
+"mark_done" = "Mark as done";
+"mark_pending" = "Mark as pending";
+"close" = "Close";
+
+/* Feedback actions */
+"feedback_actions_section" = "Actions";
+"feedback_severity_section" = "Severity";
+"feedback_severity_picker" = "Severity";
+"feedback_comment_section" = "Comment on GitHub";
+"feedback_comment_placeholder" = "Reply to user...";
+"feedback_send_comment" = "Post comment";
+"feedback_open_in_github" = "Open on GitHub";
+"feedback_mark_read" = "Mark as read";
+"feedback_mark_unread" = "Mark as unread";
+"feedback_convert_to_task" = "Convert to Kanban task";
+"feedback_convert_pick_column" = "Pick destination column";
+"feedback_converted_in %@" = "Saved in column: %@";
+"feedback_close_issue" = "Close issue";
+"feedback_reopen_issue" = "Reopen issue";
+"feedback_close_confirm_title" = "Close this issue?";
+"feedback_close_confirm_message" = "It will be marked as resolved on GitHub.";
+"feedback_close_done" = "Issue closed.";
+"feedback_reopen_done" = "Issue reopened.";
+"feedback_comment_done" = "Comment posted.";
+"feedback_severity_done" = "Severity updated.";
+"feedback_snooze" = "Snooze";
+"feedback_snooze_1d" = "1 day";
+"feedback_snooze_3d" = "3 days";
+"feedback_snooze_7d" = "1 week";
+"feedback_snooze_30d" = "1 month";
+"feedback_snooze_clear" = "Cancel snooze";
+"feedback_issue_number %lld" = "Issue #%lld";
+"feedback_error_no_owner" = "Could not determine repository owner.";
+"feedback_error_http %lld" = "Network error (HTTP %lld). Try again.";
+"kanban_add_task_to %@" = "Add task to %@";
+
+/* Task ↔ GitHub Issues Sync */
+"sync_tasks_github_toggle" = "Sync tasks to GitHub Issues";
+"sync_tasks_github_section" = "GitHub Issues";
+"sync_tasks_github_footer %@" = "Each task will be published as an issue in %@. Completing it closes the issue.";
+"sync_tasks_disabled_no_permission" = "Sync was turned off — RepoMind no longer has permission to write issues on this repo.";
+"sync_tasks_disabled_alert_title" = "Task sync disabled";
+"sync_tasks_confirm_bulk_title" = "Sync existing tasks?";
+"sync_tasks_confirm_bulk %lld" = "This will create %lld issues on GitHub. Continue?";
+"sync_tasks_confirm_bulk_button" = "Create issues";
+"sync_tasks_error_no_owner" = "Could not determine the repository owner.";
+"sync_tasks_error_not_found" = "The issue no longer exists on GitHub.";
+
+/* Home Screen Quick Action — Quick Add Task */
+"quick_action_new_task_title" = "New Task";
+"quick_action_new_task_subtitle" = "Add a task to any repo";
+"quick_add_task_title" = "Quick Task";
+"quick_add_repo_section" = "Repository";
+"quick_add_repo_picker" = "Repository";
+"quick_add_no_repos_title" = "No repositories yet";
+"quick_add_no_repos_subtitle" = "Add a repo first to create tasks in it.";
+"quick_add_task_created %@" = "Added to %@";
+
+/* macOS menu bar commands */
+"new_task_command" = "New Task";
+"sync_repos_command" = "Sync Repositories";
+"toggle_view_command" = "Toggle Board / List";
+"settings_command" = "Settings…";
+"task_save_failed" = "Couldn't save the task. Try again.";
+"icloud_sync_section" = "iCloud";
+"icloud_sync_problem_title" = "iCloud sync isn't working";
+"icloud_sync_problem_footer" = "Your data is saved on this device, but it isn't reaching your other devices. It usually resolves on its own; if it persists, check that you're signed in to iCloud.";
+"task_pending_sync" = "Not yet published to GitHub";
+
+/* Today overview */
+"today_title" = "Today";
+"today_all_clear_title" = "Nothing waiting";
+"today_all_clear_subtitle" = "No unread feedback and nothing failing to sync.";
+"today_warnings_section" = "Needs attention";
+"today_feedback_section" = "Unread feedback";
+"today_unpublished_section" = "Not published to GitHub";
+"today_unpublished_footer" = "These tasks are saved on this device but never reached GitHub. They retry automatically.";
+"today_sync_disabled" = "Task sync turned itself off";
+"today_summary_feedback %lld" = "%lld unread";
+"today_summary_unpublished %lld" = "%lld not published";
+"today_summary_warning" = "needs attention";
+"show_older_completed %lld" = "Show %lld older";
+"more_options" = "More";
+
+/* Re-authentication (expired GitHub token) */
+"reauth_title" = "Session Expired";
+"reauth_explanation %@" = "Your GitHub token for %@ no longer works. GitHub tokens can't be renewed automatically — create a new one and paste it here. Your projects and tasks stay where they are.";
+"reauth_create_token" = "Create a new token on GitHub";
+"reauth_wrong_account %@ %@" = "That token belongs to %@, not %@. Use a token from the same account.";
+"reauth_success" = "Session restored";
+
+/* Task sync settings (global) */
+"issue_sync_section_header" = "Task Sync";
+"issue_sync_settings_title" = "GitHub Issues Sync";
+"issue_sync_settings_footer" = "Tasks in the selected repositories are published as GitHub Issues. Turning sync off leaves the existing issues untouched.";
+"issue_sync_per_repo_section" = "Repositories";
+"issue_sync_enable_all" = "Turn on for all repositories";
+"issue_sync_disable_all" = "Turn off everywhere";
+"issue_sync_confirm_enable_all_title" = "Publish tasks as issues?";
+"issue_sync_confirm_enable_all %lld" = "This will create %lld issues on GitHub. Continue?";
+"issue_sync_confirm_enable_all_button" = "Create issues";
+"issue_sync_confirm_enable_title" = "Publish this repository?";
+"issue_sync_confirm_enable %lld %@" = "This will create %lld issues in %@. Continue?";
+"issue_sync_enabled_toast" = "Sync turned on";
+"issue_sync_disabled_toast" = "Sync turned off";
+"issue_sync_no_repos_title" = "No repositories to sync";
+"issue_sync_no_repos_message" = "Only GitHub repositories can publish their tasks as issues. Local projects can't.";
+
+/* Folders */
+"move_to_folder" = "Move to Folder";
+"folder_picker_title" = "Folder";
+"folder_picker_section" = "Move to";
+"folder_none" = "No folder";
+"folder_new_section" = "New Folder";
+"folder_new_placeholder" = "Folder name";
+"folder_create" = "Create";
+"folder_rename" = "Rename";
+"folder_delete_confirm_title" = "Delete this folder?";
+"folder_delete_confirm_message" = "The repositories inside it are kept — they go back to the top level.";
+
+/* Onboarding */
+"onboarding_voice_title" = "Capture it out loud";
+"onboarding_voice_body" = "You find a bug on your phone, away from your desk. Hold the mic, say it, done — no typing, no losing it.";
+"onboarding_board_title" = "One board per repository";
+"onboarding_board_body" = "Every project gets its own columns, so what's pending is never mixed with what's already shipped.";
+"onboarding_issues_title" = "Tasks become GitHub Issues";
+"onboarding_issues_body" = "Turn it on per repository and your tasks are published as issues. Moving a card to Done closes it.";
+"onboarding_agent_title" = "Your coding agent reads them";
+"onboarding_agent_body" = "Install RepoMind Bridge and Claude Code, Cursor or Codex will pick up what you dictated when you open the repo.";
+"onboarding_next" = "Next";
+"onboarding_start" = "Get started";
+"onboarding_skip" = "Skip";
+"sync_tasks_error_no_column" = "The task isn't in any column, so it can't be published.";
+"sync_tasks_error_no_token" = "No GitHub token available for this account.";
+"today_unpublished_retry" = "Retry now";
+"orphan_tasks_restored %lld" = "%lld tasks recovered and put back on their board";
+
+/* CloudKit error causes */
+"ck_error_quota" = "Your iCloud storage is full.";
+"ck_error_not_authenticated" = "Not signed in to iCloud on this device.";
+"ck_error_network" = "No connection to iCloud.";
+"ck_error_conflict" = "The same record was edited on two devices.";
+"ck_error_schema" = "A field is missing from the iCloud schema — deploy the schema changes to Production.";
+"ck_error_permission" = "This iCloud account is not allowed to write these records.";
+"ck_error_zone" = "The iCloud data zone no longer exists.";
+"ck_error_limit" = "Too much data in a single sync; it will retry in smaller batches.";
+"ck_error_other %lld" = "iCloud error code %lld.";
+"debug_replay_onboarding" = "View onboarding again";
+
+/* Onboarding illustrations */
+"onboarding_mock_recording" = "Recording";
+"onboarding_mock_transcript" = "the login screen jumps when the keyboard opens";
+"onboarding_mock_col_todo" = "To-Do";
+"onboarding_mock_col_done" = "Done";
+"onboarding_mock_task_1" = "Login screen jumps";
+"onboarding_mock_task_2" = "Review empty states";
+"onboarding_mock_task_3" = "Update the README";
+"onboarding_mock_issue_hint" = "Moving it to Done closes the issue";
+"onboarding_mock_agent_prompt" = "> list_tasks";
+"onboarding_mock_agent_reading" = "reading RepoMind tasks…";
+"onboarding_mock_agent_task" = "#142 Login screen jumps";
+"onboarding_mock_agent_done" = "Fixed and pushed";
+
+/* Delete task confirmation */
+"delete_task_confirm_title" = "Delete this task?";
+"delete_task_confirm_message" = "This can't be undone.";
+"delete_task_confirm_message_issue" = "Its GitHub issue will be deleted too. This can't be undone.";

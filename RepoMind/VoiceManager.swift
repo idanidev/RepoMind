@@ -48,18 +48,41 @@ final class VoiceManager {
 
     private var isStopping = false
 
+    // Dual-mode per-recognizer buffers — keeps the two languages separate so a
+    // wrong-language recognizer can't overwrite good text mid-stream.
+    private var primaryTranscript = ""
+    private var secondaryTranscript = ""
+    private var primaryConfidence: Float = 0
+    private var secondaryConfidence: Float = 0
+    private var primaryIsFinal = false
+    private var secondaryIsFinal = false
+
     // Silence Detection
-    private var silenceTimer: Timer?
-    private let silenceThreshold: Float = 0.06  // Por encima del ruido de fondo típico
-    private let silenceDuration: TimeInterval = 1.5  // Más ágil que 2.0
+    /// Read from `deinit`, which is not guaranteed to run on the main actor. Marked unsafe
+    /// deliberately: it is only ever mutated from main-actor code.
+    nonisolated(unsafe) private var silenceTimer: Timer?
+    private var silenceThreshold: Float = 0.05       // Updated dynamically after calibration
+    private let silenceDuration: TimeInterval = 1.5
     private var lastAudioDetectedTime: Date = .now
 
-    // Track smart routing task for cancellation
-    private var smartRoutingTask: Task<Void, Never>?
+    // Noise floor calibration
+    private var isCalibrating = false
+    private var calibrationSamples: [Float] = []
+    private let calibrationDuration: TimeInterval = 0.4
+
+    // Contextual strings for domain-specific vocabulary (column names, commands)
+    var contextualStrings: [String] = []
+
+    // Track smart routing task for cancellation.
+    /// Read from `deinit` — see `silenceTimer` for why this is `nonisolated(unsafe)`.
+    nonisolated(unsafe) private var smartRoutingTask: Task<Void, Never>?
 
     // MARK: - Initialization
 
-    init(locale: Locale = .current) {
+    /// No `locale` parameter on purpose: recognition languages always come from the user's system
+    /// preferences. The previous initialiser accepted one and silently ignored it, so a test could
+    /// pass a locale and assert on behaviour the code never had.
+    init() {
         // Automatically detect languages from user's system preferences
         let (primary, secondary) = Self.resolveSystemLanguages()
         self.speechLocale = primary
@@ -130,11 +153,16 @@ final class VoiceManager {
     // ✅ FIX: Explicit cleanup before deallocation to prevent
     // TaskLocal/malloc crash when smartRoutingTask outlives the object.
     deinit {
-        // VoiceManager es @MainActor, por lo que siempre se destruye en el main actor.
-        // MainActor.assumeIsolated permite acceder a propiedades aisladas desde deinit (Swift 6).
-        MainActor.assumeIsolated {
-            silenceTimer?.invalidate()
-            smartRoutingTask?.cancel()
+        // NOT `MainActor.assumeIsolated`. A deinit is not guaranteed to run on the main actor —
+        // SwiftUI releases objects while tearing down the view graph, wherever that happens — and
+        // assumeIsolated crashes outright when the assumption is wrong. That is the same failure
+        // that took down `BiometricAuthManager`. Hand the teardown to the main actor instead of
+        // asserting we are already on it.
+        let timer = silenceTimer
+        let routing = smartRoutingTask
+        Task { @MainActor in
+            timer?.invalidate()
+            routing?.cancel()
         }
     }
 
@@ -254,11 +282,31 @@ final class VoiceManager {
         isStopping = false
         detectedColumnName = nil
         lastAudioDetectedTime = .now
+        isCalibrating = true
+        calibrationSamples = []
+        primaryTranscript = ""
+        secondaryTranscript = ""
+        primaryConfidence = 0
+        secondaryConfidence = 0
+        primaryIsFinal = false
+        secondaryIsFinal = false
 
         #if !os(macOS)
             let audioSession = AVAudioSession.sharedInstance()
             do {
-                try audioSession.setCategory(.record, mode: .measurement, options: .duckOthers)
+                // Ensure clean state — previous session may still be active.
+                try? audioSession.setActive(false, options: .notifyOthersOnDeactivation)
+
+                // Try preferred config first; fall back to simpler variants on -50 (paramErr).
+                do {
+                    try audioSession.setCategory(.playAndRecord, mode: .spokenAudio, options: [.duckOthers, .defaultToSpeaker, .allowBluetooth])
+                } catch {
+                    do {
+                        try audioSession.setCategory(.record, mode: .measurement)
+                    } catch {
+                        try audioSession.setCategory(.record)
+                    }
+                }
                 try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
             } catch {
                 errorMessage = String(format: String(localized: "audio_error"), error.localizedDescription)
@@ -282,17 +330,16 @@ final class VoiceManager {
             // Create SEPARATE requests for each language
             let requestPrimary = SFSpeechAudioBufferRecognitionRequest()
             requestPrimary.shouldReportPartialResults = true
+            requestPrimary.addsPunctuation = true
+            if !contextualStrings.isEmpty {
+                requestPrimary.contextualStrings = contextualStrings
+            }
 
             let requestSecondary = SFSpeechAudioBufferRecognitionRequest()
             requestSecondary.shouldReportPartialResults = true
-
-            if #available(iOS 17, *) {
-                if recPrimary.supportsOnDeviceRecognition {
-                    requestPrimary.requiresOnDeviceRecognition = true
-                }
-                if recSecondary.supportsOnDeviceRecognition {
-                    requestSecondary.requiresOnDeviceRecognition = true
-                }
+            requestSecondary.addsPunctuation = true
+            if !contextualStrings.isEmpty {
+                requestSecondary.contextualStrings = contextualStrings
             }
 
             self.recognitionRequestPrimary = requestPrimary
@@ -301,13 +348,13 @@ final class VoiceManager {
             // Task Primary
             recognitionTaskPrimary = recPrimary.recognitionTask(with: requestPrimary) {
                 [weak self] result, error in
-                self?.handleRecognitionResult(result, error: error)
+                self?.handleRecognitionResult(result, error: error, isPrimary: true)
             }
 
             // Task Secondary
             recognitionTaskSecondary = recSecondary.recognitionTask(with: requestSecondary) {
                 [weak self] result, error in
-                self?.handleRecognitionResult(result, error: error)
+                self?.handleRecognitionResult(result, error: error, isPrimary: false)
             }
 
         } else {
@@ -320,16 +367,15 @@ final class VoiceManager {
             let request = SFSpeechAudioBufferRecognitionRequest()
             request.shouldReportPartialResults = true
             request.addsPunctuation = true
-
-            if #available(iOS 17, *), speechRecognizer.supportsOnDeviceRecognition {
-                request.requiresOnDeviceRecognition = true
+            if !contextualStrings.isEmpty {
+                request.contextualStrings = contextualStrings
             }
 
             self.recognitionRequest = request
 
             recognitionTask = speechRecognizer.recognitionTask(with: request) {
                 [weak self] result, error in
-                self?.handleRecognitionResult(result, error: error)
+                self?.handleRecognitionResult(result, error: error, isPrimary: true)
             }
         }
 
@@ -355,22 +401,48 @@ final class VoiceManager {
             engine.prepare()
             try engine.start()
             isRecording = true
-            startSilenceTimer()
+            // Silence timer starts after noise-floor calibration completes
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(self.calibrationDuration))
+                self.isCalibrating = false
+                self.startSilenceTimer()
+            }
         } catch {
             errorMessage = String(format: String(localized: "audio_engine_error"), error.localizedDescription)
             cleanupAudioResources()
         }
     }
 
-    private func handleRecognitionResult(_ result: SFSpeechRecognitionResult?, error: Error?) {
+    private func handleRecognitionResult(
+        _ result: SFSpeechRecognitionResult?, error: Error?, isPrimary: Bool
+    ) {
         Task { @MainActor in
             guard !self.isStopping else { return }
 
             if let result {
                 let text = result.bestTranscription.formattedString
-                // Update text from whichever recognizer triggers first/most recently
-                self.transcribedText = text
-                self.processSmartRouting(text: text)
+                guard !text.isEmpty else { return }
+
+                if self.useDualLanguage {
+                    // Keep each recognizer's stream separate and let `chooseDualTranscript`
+                    // decide which to surface — the secondary language can no longer overwrite
+                    // good primary text just because it emitted more (hallucinated) words.
+                    let confidence = result.bestTranscription.segments
+                        .map(\.confidence).reduce(0, +) / Float(max(result.bestTranscription.segments.count, 1))
+                    if isPrimary {
+                        self.primaryTranscript = text
+                        self.primaryIsFinal = result.isFinal
+                        if result.isFinal { self.primaryConfidence = confidence }
+                    } else {
+                        self.secondaryTranscript = text
+                        self.secondaryIsFinal = result.isFinal
+                        if result.isFinal { self.secondaryConfidence = confidence }
+                    }
+                    self.chooseDualTranscript()
+                } else {
+                    self.transcribedText = text
+                    self.processSmartRouting(text: text)
+                }
 
                 // Si ya llevamos suficiente silencio cuando llega el texto, parar de inmediato
                 let silentSinceLastAudio = Date.now.timeIntervalSince(self.lastAudioDetectedTime)
@@ -389,12 +461,33 @@ final class VoiceManager {
                     return
                 }
 
-                // In dual mode, one might fail while other works.
-                // However, for simplicity, we report and stop on error.
+                // In dual mode, one recognizer failing is acceptable — the other may still work.
+                if self.useDualLanguage && !isPrimary {
+                    return
+                }
+
                 self.errorMessage = error.localizedDescription
                 self.stopRecording()
             }
         }
+    }
+
+    /// Decides which of the two recognizers' transcripts to display.
+    /// While streaming, the primary language is authoritative (most utterances are in it),
+    /// so the secondary can only fill in when the primary has produced nothing yet.
+    /// Once both recognizers finalize, the higher-confidence transcript wins.
+    private func chooseDualTranscript() {
+        let chosen: String
+        if primaryIsFinal && secondaryIsFinal {
+            chosen = primaryConfidence >= secondaryConfidence ? primaryTranscript : secondaryTranscript
+        } else if !primaryTranscript.isEmpty {
+            chosen = primaryTranscript
+        } else {
+            chosen = secondaryTranscript
+        }
+        guard !chosen.isEmpty else { return }
+        transcribedText = chosen
+        processSmartRouting(text: chosen)
     }
 
     func stopRecording() {
@@ -470,19 +563,40 @@ final class VoiceManager {
 
     private func measureAudioLevel(buffer: AVAudioPCMBuffer) {
         guard let channelData = buffer.floatChannelData?[0] else { return }
-        let frames = buffer.frameLength
+        let frames = Int(buffer.frameLength)
+        guard frames > 0 else { return }
 
-        var sum: Float = 0
-        for i in 0..<Int(frames) {
-            sum += abs(channelData[i])
+        // RMS (Root Mean Square) — more perceptually accurate than mean absolute
+        var sumSquares: Float = 0
+        for i in 0..<frames {
+            let sample = channelData[i]
+            sumSquares += sample * sample
         }
-        let average = sum / Float(frames)
+        let rms = sqrt(sumSquares / Float(frames))
 
         Task { @MainActor in
-            self.audioLevel = min(average * 10, 1.0)
+            if self.isCalibrating {
+                // Collect noise floor samples during calibration window
+                self.calibrationSamples.append(rms)
+                self.audioLevel = 0
+            } else {
+                if self.calibrationSamples.isEmpty == false {
+                    // Set threshold = noise floor median + 40% margin
+                    let sorted = self.calibrationSamples.sorted()
+                    let median = sorted[sorted.count / 2]
+                    self.silenceThreshold = max(median * 1.4, 0.01)
+                    self.calibrationSamples = []
 
-            if self.audioLevel > self.silenceThreshold {
-                self.lastAudioDetectedTime = .now
+                    #if DEBUG
+                    print("🎙️ [VoiceManager] Noise floor: \(median), threshold set to: \(self.silenceThreshold)")
+                    #endif
+                }
+
+                self.audioLevel = min(rms * 15, 1.0)
+
+                if self.audioLevel > self.silenceThreshold {
+                    self.lastAudioDetectedTime = .now
+                }
             }
         }
     }

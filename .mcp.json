@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "repomind": {
+      "command": "node",
+      "args": ["bridge/dist/index.js"],
+      "env": {
+        "GITHUB_TOKEN": "${GITHUB_TOKEN}"
+      }
+    }
+  }
+}

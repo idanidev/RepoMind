@@ -253,10 +253,17 @@ actor GitHubService {
 
         // Single fetch — avoids N+1 queries (one per remote repo)
         let allLocal = try context.fetch(FetchDescriptor<ProjectRepo>())
-        let localByID = Dictionary(grouping: allLocal, by: \.repoID)
+        // Scoped to the account being synced. Grouping every repo by `repoID` alone treated the
+        // same repository connected under two GitHub accounts as a duplicate: one copy was deleted
+        // and the survivor reassigned to whichever account synced last.
+        // Orphans (account == nil, left over from older builds) are included so they get adopted
+        // here rather than duplicated.
+        let ownedLocal = allLocal.filter { $0.account?.id == account.id || $0.account == nil }
+        let localByID = Dictionary(grouping: ownedLocal, by: \.repoID)
 
         // Track whether anything actually changed to avoid unnecessary CloudKit writes
         var madeChanges = false
+        var newReposForLogoFetch: [(ProjectRepo, String, String, String?)] = []
 
         for remote in remoteRepos {
             let existing = localByID[remote.id] ?? []
@@ -316,29 +323,53 @@ actor GitHubService {
                 context.insert(repo)
                 madeChanges = true
 
-                // Buscar logo en background para todos los repos nuevos
+                // Collect new repos for batched logo fetching below
                 let ownerName: String
                 if let url = URL(string: remote.htmlUrl), url.pathComponents.count >= 2 {
                     ownerName = url.pathComponents[1]
                 } else {
                     ownerName = account.username
                 }
-
-                Task.detached {
-                    if let logoURL = await self.fetchRepoLogoURL(
-                        owner: ownerName, repo: remote.name, token: token, language: remote.language)
-                    {
-                        await MainActor.run {
-                            repo.logoURL = logoURL
-                        }
-                    }
-                }
+                newReposForLogoFetch.append((repo, ownerName, remote.name, remote.language))
             }
         }
 
         // Only write to CloudKit when something actually changed
         if madeChanges {
             try context.save()
+        }
+
+        // Fetch logos with limited concurrency (max 5 simultaneous) to avoid GitHub rate limits
+        if !newReposForLogoFetch.isEmpty {
+            let repoData = newReposForLogoFetch
+            Task.detached {
+                await withTaskGroup(of: (Int, String?).self) { group in
+                    var running = 0
+                    for (index, item) in repoData.enumerated() {
+                        if running >= 5 {
+                            if let result = await group.next() {
+                                if let logoURL = result.1 {
+                                    let idx = result.0
+                                    await MainActor.run { repoData[idx].0.logoURL = logoURL }
+                                }
+                            }
+                            running -= 1
+                        }
+                        group.addTask {
+                            let url = await self.fetchRepoLogoURL(
+                                owner: item.1, repo: item.2, token: token, language: item.3)
+                            return (index, url)
+                        }
+                        running += 1
+                    }
+                    for await result in group {
+                        if let logoURL = result.1 {
+                            let idx = result.0
+                            await MainActor.run { repoData[idx].0.logoURL = logoURL }
+                        }
+                    }
+                }
+            }
         }
     }
 

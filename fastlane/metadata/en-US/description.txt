@@ -1,0 +1,30 @@
+RepoMind keeps all your GitHub repositories organized in one place — with Kanban boards, voice tasks, and iCloud sync between iPhone and Mac.
+
+MANAGE YOUR REPOS
+Sync all your GitHub repositories automatically. Filter by language, stars, or status. Search across all your projects instantly. Archive repos to keep your workspace clean.
+
+VISUAL TASK MANAGEMENT
+Create Kanban boards for every repository. Move tasks through To-Do, In Progress, and Done with drag & drop. See at a glance what needs attention across all your projects.
+
+ADD TASKS WITH YOUR VOICE
+Just tap the microphone and speak — RepoMind writes the task down for you. Perfect for capturing ideas without breaking your flow.
+
+ICLOUD SYNC
+Your repositories and tasks sync automatically between your iPhone and Mac. Start on one device, continue on another.
+
+MULTIPLE GITHUB ACCOUNTS
+Connect your personal, work, and open-source accounts in one app. Switch between them instantly.
+
+GO PRO
+Unlock unlimited repositories and multiple GitHub accounts with a one-time Pro upgrade.
+
+Features:
+• Automatic GitHub sync
+• Drag & drop Kanban boards
+• Voice task creation
+• iCloud sync across devices
+• Multiple GitHub accounts (Pro)
+• Unlimited repositories (Pro)
+• Smart filtering and search
+• Custom icons for each project
+• Archive to declutter your workspace

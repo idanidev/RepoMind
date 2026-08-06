@@ -45,3 +45,7 @@ fastlane/test_output
 build/
 *.ipa
 *.dSYM.zip
+
+# Fastlane credentials
+fastlane/.env
+fastlane/.env.*

@@ -17,29 +17,39 @@ struct LoginView: View {
 
     @State private var biometricAuth = BiometricAuthManager()
     @State private var showPaywall = false
+    @AppStorage("isDemoMode") private var isDemoMode = false
 
     private let tokenCreationURL = URL(
         string: "https://github.com/settings/tokens/new?scopes=repo,user")!
 
     var body: some View {
+        Group {
+            if isMacIdiom {
+                macSplitLayout
+            } else {
+                iOSLayout
+            }
+        }
+        .scrollDismissesKeyboard(.interactively)
+        .animation(.spring(duration: 0.45), value: showTokenInput)
+        .animation(.spring(duration: 0.3), value: validationSuccess)
+        .sheet(isPresented: $showPaywall) {
+            PaywallView()
+        }
+        .task {
+            await attemptBiometricLogin()
+        }
+    }
+
+    // MARK: - iOS / iPad Layout
+
+    private var iOSLayout: some View {
         Form {
             Section {
-                VStack(spacing: 24) {
-                    RepoMindLogo()
-                        .frame(height: 120)
-
-                    Text("app_name")
-                        .font(.largeTitle.weight(.bold))
-                        .foregroundStyle(Color.accentColor)
-
-                    Text("login_subtitle")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 20)
-                .listRowBackground(Color.clear)
+                heroContent(compact: false)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 20)
+                    .listRowBackground(Color.clear)
             }
 
             if showTokenInput {
@@ -50,14 +60,54 @@ struct LoginView: View {
         }
         .frame(maxWidth: horizontalSizeClass == .regular ? 600 : .infinity)
         .frame(maxWidth: .infinity)
-        .scrollDismissesKeyboard(.interactively)
-        .animation(.spring(duration: 0.45), value: showTokenInput)
-        .animation(.spring(duration: 0.3), value: validationSuccess)
-        .sheet(isPresented: $showPaywall) {
-            PaywallView()
+    }
+
+    // MARK: - Mac Split Layout
+
+    private var macSplitLayout: some View {
+        HStack(spacing: 0) {
+            macHero
+                .frame(minWidth: 360, idealWidth: 460, maxWidth: 520, maxHeight: .infinity)
+
+            Form {
+                if showTokenInput {
+                    tokenInputSection
+                } else {
+                    onboardingActions
+                }
+            }
+            .frame(maxWidth: 520)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .task {
-            await attemptBiometricLogin()
+    }
+
+    private var macHero: some View {
+        ZStack {
+            LinearGradient(
+                colors: [.purple, .indigo, Color.blue.opacity(0.6)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+            heroContent(compact: false, lightOnDark: true)
+                .padding(40)
+        }
+    }
+
+    @ViewBuilder
+    private func heroContent(compact: Bool, lightOnDark: Bool = false) -> some View {
+        VStack(spacing: 24) {
+            RepoMindLogo()
+                .frame(height: lightOnDark ? 160 : 120)
+
+            Text("app_name")
+                .font(lightOnDark ? .system(size: 42, weight: .bold) : .largeTitle.weight(.bold))
+                .foregroundStyle(lightOnDark ? Color.white : Color.accentColor)
+
+            Text("login_subtitle")
+                .font(lightOnDark ? .title3 : .subheadline)
+                .foregroundStyle(lightOnDark ? .white.opacity(0.85) : .secondary)
+                .multilineTextAlignment(.center)
         }
     }
 
@@ -93,6 +143,14 @@ struct LoginView: View {
                 withAnimation { showTokenInput = true }  // Changed to showTokenInput for consistency
             } label: {
                 Label("enter_token_manually", systemImage: "keyboard")
+                    .foregroundStyle(.secondary)
+            }
+
+            // Demo mode for reviewers / onboarding
+            Button {
+                loadDemoMode()
+            } label: {
+                Label("demo_mode_button", systemImage: "play.rectangle")
                     .foregroundStyle(.secondary)
             }
         }
@@ -209,13 +267,106 @@ struct LoginView: View {
         }
     }
 
-    // MARK: - Validate Token
+    // MARK: - Demo Mode
 
     @Environment(\.modelContext) private var context
+
+    /// Removes any persisted demo accounts and negative-ID repos (including those
+    /// that may have synced back via CloudKit from another device).
+    private func purgeDemoData() {
+        let accountDesc = FetchDescriptor<GitHubAccount>(
+            predicate: #Predicate { $0.username == "demo-user" }
+        )
+        if let existing = try? context.fetch(accountDesc) {
+            existing.forEach { context.delete($0) }
+        }
+        let repoDesc = FetchDescriptor<ProjectRepo>(
+            predicate: #Predicate { $0.repoID < 0 }
+        )
+        if let existing = try? context.fetch(repoDesc) {
+            existing.forEach { context.delete($0) }
+        }
+    }
+
+    private func loadDemoMode() {
+        isDemoMode = true
+        SubscriptionManager.shared.isDemoMode = true
+
+        // Remove any stale demo data before inserting fresh records
+        purgeDemoData()
+
+        let account = GitHubAccount(username: "demo-user", avatarURL: nil, tokenKey: "demo-token")
+        context.insert(account)
+
+        let demoRepos: [(name: String, desc: String, lang: String, stars: Int, fav: Bool)] = [
+            ("my-ios-app",     "SwiftUI app with CloudKit sync",      "Swift",      42,  true),
+            ("web-dashboard",  "React dashboard for analytics",        "JavaScript", 128, false),
+            ("api-backend",    "REST API with Node.js and PostgreSQL", "TypeScript", 84,  false),
+        ]
+
+        let columnDefs = [
+            ("To-Do", 0), ("In Progress", 1), ("Done", 2)
+        ]
+        let taskDefs: [[[String]]] = [
+            [["Fix login screen bug", "Write unit tests"],
+             ["Add dark mode support", "Implement push notifications"],
+             ["Setup CI/CD pipeline"]],
+            [["Add export feature", "Fix chart rendering"],
+             ["Implement authentication"],
+             ["Setup project structure"]],
+            [["Add rate limiting", "Write API docs"],
+             ["Database migration"],
+             ["Initial setup"]],
+        ]
+
+        for (i, r) in demoRepos.enumerated() {
+            let repo = ProjectRepo(
+                repoID: -(i + 1),
+                name: r.name,
+                repoDescription: r.desc,
+                updatedAt: Date().addingTimeInterval(Double(-i * 3600)),
+                isFavorite: r.fav,
+                language: r.lang,
+                stargazersCount: r.stars,
+                account: account
+            )
+            context.insert(repo)
+
+            var columns: [KanbanColumn] = []
+            for (colName, colIdx) in columnDefs {
+                let col = KanbanColumn(name: colName, orderIndex: colIdx, project: repo)
+                context.insert(col)
+                columns.append(col)
+            }
+
+            for (colIdx, tasks) in taskDefs[i].enumerated() {
+                for (taskIdx, content) in tasks.enumerated() {
+                    let task = TaskItem(
+                        content: content,
+                        column: columns[colIdx],
+                        project: repo,
+                        orderIndex: taskIdx
+                    )
+                    context.insert(task)
+                }
+            }
+        }
+
+        try? context.save()
+        withAnimation { isAuthenticated = true }
+    }
+
+    // MARK: - Validate Token
 
     private func validateAndSave() async {
         let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+
+        // Demo token: activates demo mode without calling the GitHub API
+        if trimmed.hasPrefix("mock-") || trimmed == "free-mock" {
+            loadDemoMode()
+            return
+        }
 
         isValidating = true
         errorMessage = nil
@@ -227,16 +378,18 @@ struct LoginView: View {
             let user = try await GitHubService.shared.validateToken(trimmed)
 
             // 2. Check Subscription Limits
+            // Purge any leftover demo data so it doesn't inflate the account count
+            // and doesn't block the subscription check with a stale isDemoMode flag.
+            purgeDemoData()
+            if isDemoMode {
+                isDemoMode = false
+                SubscriptionManager.shared.isDemoMode = false
+            }
+
             let descriptor = FetchDescriptor<GitHubAccount>()
             let existingCount = (try? context.fetchCount(descriptor)) ?? 0
 
-            #if DEBUG
-            let isMockToken = trimmed.hasPrefix("mock-")
-            #else
-            let isMockToken = false
-            #endif
-
-            if !isMockToken && !SubscriptionManager.shared.canAddAccount(currentCount: existingCount) {
+            if !SubscriptionManager.shared.canAddAccount(currentCount: existingCount) {
                 showPaywall = true
                 isValidating = false
                 return
@@ -334,14 +487,8 @@ struct LoginView: View {
 
     private static let feedbackGenerator = UINotificationFeedbackGenerator()
 
-    private func handleLoginSuccess() {
-        Self.feedbackGenerator.notificationOccurred(.success)
-        // isAuthenticated = true // This is handled by the withAnimation block in validateAndSave
-    }
-
     private func handleLoginError() {
         Self.feedbackGenerator.notificationOccurred(.error)
-        // Shake animation handled by view state change if needed
     }
 }
 

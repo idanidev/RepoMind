@@ -13,9 +13,12 @@ struct KanbanColumnView: View {
     let onDeleteColumn: () -> Void
     let onRenameColumn: () -> Void
     let onMoveTask: (TaskItem) -> Void  // Nuevo: para mover con botón
+    let onCheckboxTask: (TaskItem) -> Void  // Mover a columna "done"
+    let isDoneColumn: Bool  // Si esta columna es la columna "done"
 
     @State private var isTargeted = false
     @State private var dropTargetIndex: Int? = nil
+    @State private var showAllCompleted = false
 
     @Query private var tasks: [TaskItem]
 
@@ -28,7 +31,9 @@ struct KanbanColumnView: View {
         onDeleteTask: @escaping (TaskItem) -> Void,
         onDeleteColumn: @escaping () -> Void,
         onRenameColumn: @escaping () -> Void,
-        onMoveTask: @escaping (TaskItem) -> Void
+        onMoveTask: @escaping (TaskItem) -> Void,
+        onCheckboxTask: @escaping (TaskItem) -> Void,
+        isDoneColumn: Bool = false
     ) {
         self.column = column
         self._draggedTask = draggedTask
@@ -39,6 +44,8 @@ struct KanbanColumnView: View {
         self.onDeleteColumn = onDeleteColumn
         self.onRenameColumn = onRenameColumn
         self.onMoveTask = onMoveTask
+        self.onCheckboxTask = onCheckboxTask
+        self.isDoneColumn = isDoneColumn
 
         let columnID = column.persistentModelID
         let filter = #Predicate<TaskItem> { $0.column?.persistentModelID == columnID }
@@ -159,6 +166,7 @@ struct KanbanColumnView: View {
                 if tasks.isEmpty {
                     emptyColumnState
                 } else {
+                    showOlderButton
                     tasksContent
                 }
             }
@@ -189,15 +197,71 @@ struct KanbanColumnView: View {
         .frame(maxWidth: .infinity)
     }
 
+    /// How many completed tasks stay on screen before the rest are folded away.
+    private static let completedPreviewCount = 8
+
+    /// The done column accumulates forever and ends up the longest column on the board, which is
+    /// backwards — finished work should take the least space. Only the most recent survive on
+    /// screen; the rest are one tap away.
+    private var hiddenCompletedCount: Int {
+        guard isDoneColumn, !showAllCompleted else { return 0 }
+        return max(0, tasks.count - Self.completedPreviewCount)
+    }
+
+    private var visibleTasks: [TaskItem] {
+        hiddenCompletedCount > 0 ? Array(tasks.suffix(Self.completedPreviewCount)) : tasks
+    }
+
+    @ViewBuilder
+    private var showOlderButton: some View {
+        if hiddenCompletedCount > 0 {
+            Button {
+                withAnimation(.snappy) { showAllCompleted = true }
+            } label: {
+                Text("show_older_completed \(hiddenCompletedCount)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
     private var tasksContent: some View {
-        ForEach(Array(tasks.enumerated()), id: \.element.id) { index, task in
+        ForEach(Array(visibleTasks.enumerated()), id: \.element.id) { index, task in
             TaskCardEnhanced(
                 task: task,
                 columnColor: columnColor,
+                isCompleted: isDoneColumn,
                 onTap: { onEditTask(task) },
                 onMove: { onMoveTask(task) },
-                onDelete: { onDeleteTask(task) }
+                onDelete: { onDeleteTask(task) },
+                onCheckbox: { onCheckboxTask(task) }
             )
+            .contextMenu {
+                Button {
+                    onEditTask(task)
+                } label: {
+                    Label("edit_task", systemImage: "pencil")
+                }
+                Button {
+                    onMoveTask(task)
+                } label: {
+                    Label("move_task", systemImage: "arrow.right.square")
+                }
+                Button {
+                    onCheckboxTask(task)
+                } label: {
+                    Label(isDoneColumn ? "mark_pending" : "mark_done", systemImage: isDoneColumn ? "circle" : "checkmark.circle")
+                }
+                Divider()
+                Button(role: .destructive) {
+                    onDeleteTask(task)
+                } label: {
+                    Label("delete_task", systemImage: "trash")
+                }
+            }
             .draggable(task.id.uuidString) {
                 TaskCardDragPreview(task: task, color: columnColor)
                     .onAppear { draggedTask = task }
@@ -240,7 +304,7 @@ struct KanbanColumnView: View {
         }
         .buttonStyle(.plain)
         .clipShape(.rect(bottomLeadingRadius: 16, bottomTrailingRadius: 16))
-        .accessibilityLabel(String(format: String(localized: "Add task to %@"), column.name))
+        .accessibilityLabel(String(format: String(localized: "kanban_add_task_to %@"), column.name))
     }
 
     // MARK: - Drop Handling
@@ -266,131 +330,139 @@ struct KanbanColumnView: View {
 struct TaskCardEnhanced: View {
     let task: TaskItem
     let columnColor: Color
+    let isCompleted: Bool
     let onTap: () -> Void
     let onMove: () -> Void
     let onDelete: () -> Void
+    let onCheckbox: () -> Void
 
-    @State private var thumbnailImage: UIImage?
+    @State private var showFullPhoto = false
 
     var body: some View {
-        // Tap para editar directamente (sin context menu)
-        Button(action: onTap) {
-            VStack(alignment: .leading, spacing: 8) {
-                // Miniatura de imagen si existe
-                if let image = thumbnailImage {
-                    Image(uiImage: image)
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(height: 80)
-                        .frame(maxWidth: .infinity)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                        .onDrag { NSItemProvider(object: fullTaskImage ?? image) }
-                        .contextMenu {
-                            if let img = fullTaskImage {
-                                ShareLink(
-                                    item: TransferableImage(image: img),
-                                    preview: SharePreview(task.content, image: Image(uiImage: img))
-                                ) {
-                                    Label("share_image", systemImage: "square.and.arrow.up")
-                                }
-                                Button {
-                                    if let data = img.pngData() {
-                                        UIPasteboard.general.setData(data, forPasteboardType: "public.png")
-                                    }
-                                    ToastManager.shared.show(
-                                        String(localized: "image_copied_toast"), style: .success)
-                                } label: {
-                                    Label("copy_image", systemImage: "doc.on.doc")
-                                }
-                            }
-                        }
-                }
+        HStack(spacing: 10) {
+            // Checkbox
+            Button(action: isCompleted ? {} : onCheckbox) {
+                Image(systemName: isCompleted ? "checkmark.circle.fill" : "circle")
+                    .font(.title3)
+                    .foregroundStyle(isCompleted ? Color.green : Color.secondary)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(isCompleted)
 
-                HStack(spacing: 10) {
-                    // Indicador de color
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill(columnColor)
-                        .frame(width: 4)
+            // Indicador de color
+            RoundedRectangle(cornerRadius: 2)
+                .fill(columnColor)
+                .frame(width: 4)
 
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(task.content)
-                            .font(.subheadline)
-                            .foregroundStyle(.primary)
-                            .lineLimit(4)
-                            .multilineTextAlignment(.leading)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(task.content)
+                    .font(.subheadline)
+                    .foregroundStyle(.primary)
+                    .lineLimit(4)
+                    .multilineTextAlignment(.leading)
 
-                        // Indicadores de adjuntos
-                        HStack(spacing: 8) {
-                            if (task.imagePath != nil || task.imageData != nil)
-                                && thumbnailImage == nil
-                            {
-                                // Solo mostrar badge si no hay miniatura cargada
-                                HStack(spacing: 4) {
-                                    Image(systemName: "photo.fill")
-                                        .font(.caption)
-                                    Text("photo_badge")
-                                        .font(.caption2)
-                                }
-                                .foregroundStyle(.blue)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(.blue.opacity(0.1), in: Capsule())
-                            }
-
-                            if task.audioPath != nil {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "waveform")
-                                        .font(.caption)
-                                    Text("audio_badge")
-                                        .font(.caption2)
-                                }
-                                .foregroundStyle(.purple)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(.purple.opacity(0.1), in: Capsule())
-                            }
-                        }
+                HStack(spacing: 8) {
+                    // Without this, a task that never reached GitHub looked identical to one
+                    // that did.
+                    if task.needsIssueSync {
+                        Image(systemName: "arrow.trianglehead.2.clockwise.rotate.90.icloud")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                            .accessibilityLabel("task_pending_sync")
                     }
 
-                    Spacer(minLength: 0)
-
-                    // Botón para mover rápidamente a otra columna
-                    Button(action: onMove) {
-                        Image(systemName: "arrow.right.circle.fill")
-                            .font(.title3)
-                            .foregroundStyle(.secondary)
-                            .symbolRenderingMode(.hierarchical)
+                    if task.imagePath != nil || task.imageData != nil {
+                        Button {
+                            showFullPhoto = true
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "photo.fill")
+                                    .font(.caption)
+                                Text("photo_badge")
+                                    .font(.caption2)
+                            }
+                            .foregroundStyle(.blue)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(.blue.opacity(0.1), in: Capsule())
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
+
                 }
             }
-            .padding(12)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color(.systemBackground))
-                    .shadow(color: .black.opacity(0.06), radius: 4, y: 2)
-            )
+
+            Spacer(minLength: 0)
+
+            // Quick "move to another column" button. Phone only: there the columns are separate
+            // pages, so dragging between them is awkward and this is the practical way to move a
+            // task. On Mac the columns sit side by side and drag-and-drop works, so the button is
+            // just noise on every card — the context menu still offers the same action.
+            if !isMacIdiom {
+                Button(action: onMove) {
+                    Image(systemName: "arrow.right.circle.fill")
+                        .font(.title3)
+                        .foregroundStyle(.secondary)
+                        .symbolRenderingMode(.hierarchical)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("move_task")
+            }
         }
-        .buttonStyle(.plain)
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color(.systemBackground))
+                .shadow(color: .black.opacity(0.06), radius: 4, y: 2)
+        )
+        .contentShape(RoundedRectangle(cornerRadius: 12))
+        .onTapGesture { onTap() }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(task.content)
         .accessibilityHint("task_edit_hint")
-        .task {
-            await loadThumbnail()
-        }
-        .onChange(of: task.imageData) { _, _ in
-            thumbnailImage = nil
-            Task { await loadThumbnail() }
+        .sheet(isPresented: $showFullPhoto) {
+            if let image = TaskImageHelper.fullImage(from: task) {
+                FullPhotoView(image: image)
+            }
         }
     }
+}
 
-    private var fullTaskImage: UIImage? {
-        TaskImageHelper.fullImage(from: task)
-    }
+// MARK: - Full Photo View
 
-    private func loadThumbnail() async {
-        thumbnailImage = await TaskImageHelper.loadThumbnail(
-            from: task, size: CGSize(width: 400, height: 200))
+struct FullPhotoView: View {
+    let image: UIImage
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Image(uiImage: image)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.black.opacity(0.85))
+                .ignoresSafeArea()
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("done_button") { dismiss() }
+                    }
+                    ToolbarItem(placement: .topBarLeading) {
+                        ShareLink(
+                            item: TransferableImage(image: image),
+                            preview: SharePreview(
+                                String(localized: "photo_section_header"),
+                                image: Image(uiImage: image)
+                            )
+                        ) {
+                            Image(systemName: "square.and.arrow.up")
+                        }
+                    }
+                }
+        }
+        .presentationDetents([.large])
     }
 }
 
@@ -423,11 +495,6 @@ struct TaskCardDragPreview: View {
                         Image(systemName: "photo.fill")
                             .font(.caption2)
                             .foregroundStyle(.blue)
-                    }
-                    if task.audioPath != nil {
-                        Image(systemName: "waveform")
-                            .font(.caption2)
-                            .foregroundStyle(.purple)
                     }
                 }
             }

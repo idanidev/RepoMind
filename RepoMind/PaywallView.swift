@@ -73,6 +73,7 @@ struct PaywallView: View {
                 Text(purchaseError ?? "")
             }
         }
+        .frame(idealWidth: 600)
     }
 
     // MARK: - Header
@@ -389,13 +390,13 @@ struct PaywallView: View {
             HStack(spacing: 16) {
                 Link(
                     "privacy_policy",
-                    destination: URL(string: "https://idanidev.github.io/repomind/privacy")!
+                    destination: URL(string: "https://idanidev.github.io/RepoMind/privacy")!
                 )
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 Link(
                     "terms_of_use",
-                    destination: URL(string: "https://idanidev.github.io/repomind/terms")!
+                    destination: URL(string: "https://idanidev.github.io/RepoMind/terms")!
                 )
                 .font(.caption)
                 .foregroundStyle(.secondary)

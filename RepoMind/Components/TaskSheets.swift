@@ -123,13 +123,22 @@ private struct TaskPhotoSection: View {
 struct TaskEditSheet: View {
     @Bindable var task: TaskItem
     var columns: [KanbanColumn]
+    /// Called after save with the task and its column *before* editing, so callers can
+    /// detect a column change (e.g. to sync the move to GitHub Issues).
+    var onSave: ((TaskItem, KanbanColumn?) -> Void)? = nil
+    /// Called when the user deletes from this sheet. Routed out rather than handled here: the
+    /// sheet used to only drop the task from its column's array, which left the row in the
+    /// database — it came back on relaunch — and never closed the linked GitHub issue.
+    var onDelete: ((TaskItem) -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
 
     @State private var editedContent: String = ""
     @State private var selectedColumn: KanbanColumn?
+    @State private var originalColumn: KanbanColumn?
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var taskImage: UIImage?
     @State private var showDeleteConfirmation = false
+    @State private var showDeleteTaskConfirmation = false
 
     var body: some View {
         NavigationStack {
@@ -161,7 +170,7 @@ struct TaskEditSheet: View {
 
                 Section {
                     Button(role: .destructive) {
-                        deleteTaskAndDismiss()
+                        showDeleteTaskConfirmation = true
                     } label: {
                         HStack {
                             Spacer()
@@ -174,6 +183,9 @@ struct TaskEditSheet: View {
             .navigationTitle("edit_task_title")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                // Two items, one per side, so the title sits centred. A third button here pushed
+                // it off-centre, and the taller detent below already makes delete visible without
+                // needing a duplicate up here.
                 ToolbarItem(placement: .cancellationAction) {
                     Button("cancel") { dismiss() }
                 }
@@ -185,6 +197,7 @@ struct TaskEditSheet: View {
             .onAppear {
                 editedContent = task.content
                 selectedColumn = task.column
+                originalColumn = task.column
                 loadExistingImage()
             }
             .onChange(of: selectedPhoto) { _, newValue in
@@ -204,8 +217,21 @@ struct TaskEditSheet: View {
                     task.imageData = nil
                 }
             }
+            // Deleting a task also deletes its GitHub issue, and neither comes back. That was
+            // happening on a single tap, with no confirmation at all.
+            .alert("delete_task_confirm_title", isPresented: $showDeleteTaskConfirmation) {
+                Button("cancel", role: .cancel) {}
+                Button("delete_task_button", role: .destructive) { deleteTaskAndDismiss() }
+            } message: {
+                Text(task.issueNumber == nil
+                    ? "delete_task_confirm_message"
+                    : "delete_task_confirm_message_issue")
+            }
         }
-        .presentationDetents([.medium, .large])
+        // Opens tall enough that the whole form — including the delete row at the bottom — is on
+        // screen without dragging. `.medium` cut it off exactly where the delete button was.
+        .presentationDetents([.fraction(0.85), .large])
+        .frame(idealWidth: 480)
     }
 
     private func loadExistingImage() {
@@ -236,6 +262,7 @@ struct TaskEditSheet: View {
             task.imageData = nil
         }
 
+        onSave?(task, originalColumn)
         dismiss()
     }
 
@@ -243,7 +270,7 @@ struct TaskEditSheet: View {
         if let imagePath = task.imagePath {
             try? FileManager.default.removeItem(atPath: imagePath)
         }
-        task.column?.tasks?.removeAll { $0.id == task.id }
+        onDelete?(task)
         dismiss()
     }
 }
@@ -262,6 +289,7 @@ struct AddTaskSheet: View {
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var taskImage: UIImage?
     @State private var showDeleteConfirmation = false
+    @FocusState private var isContentFocused: Bool
 
     var body: some View {
         NavigationStack {
@@ -269,6 +297,7 @@ struct AddTaskSheet: View {
                 Section("task_section") {
                     TextField("task_placeholder", text: $content, axis: .vertical)
                         .lineLimit(2...5)
+                        .focused($isContentFocused)
                 }
 
                 TaskPhotoSection(
@@ -302,6 +331,17 @@ struct AddTaskSheet: View {
                     .disabled(content.isEmpty || selectedColumn == nil)
                 }
             }
+            // `.defaultFocus` is the API meant for this: when it lands, the keyboard rises with
+            // the sheet and there is no visible pause. Inside a sheet it is unreliable though —
+            // SwiftUI often evaluates it before the field has joined the view hierarchy and then
+            // the keyboard never opens at all, which is worse than the lag it was fixing. So keep
+            // it for the good case and re-assert afterwards for the bad one; when it already
+            // worked, the check below does nothing.
+            .defaultFocus($isContentFocused, true)
+            .task {
+                try? await Task.sleep(for: .milliseconds(250))
+                if !isContentFocused { isContentFocused = true }
+            }
             .onAppear {
                 selectedColumn = preselectedColumn ?? columns.first
             }
@@ -322,5 +362,6 @@ struct AddTaskSheet: View {
             }
         }
         .presentationDetents([.medium, .large])
+        .frame(idealWidth: 480)
     }
 }
