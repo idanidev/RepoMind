@@ -453,3 +453,4 @@
 "delete_task_confirm_title" = "Delete this task?";
 "delete_task_confirm_message" = "This can't be undone.";
 "delete_task_confirm_message_issue" = "Its GitHub issue will be deleted too. This can't be undone.";
+"tasks_completed_by_agent %lld" = "%lld tasks completed on GitHub";
