@@ -6,6 +6,7 @@ What's new:
 
 Fixes:
 
+• Tasks a coding agent closes on GitHub now move to your done column on their own when you open the project
 • When your GitHub token expires you can now enter a new one without signing out, keeping your projects and tasks
 • Recovered tasks that had lost their column and were showing on no board at all
 • Tasks that fail to reach GitHub now say why, and can be retried from "Today"

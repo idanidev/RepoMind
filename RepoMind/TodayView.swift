@@ -44,12 +44,25 @@ struct TodayView: View {
         // network call before fixing that would just reproduce the same error.
         OrphanTaskRepair.run(context: context)
 
-        let affected = repos.filter { ($0.tasks ?? []).contains(where: \.needsIssueSync) }
-        for repo in affected {
+        // Every synced repo, not only the ones with something stuck: an agent may have closed
+        // issues in a repo that had nothing pending, and those tasks are still sitting in To-Do.
+        var moved = 0
+        for repo in repos where repo.syncTasksToGitHub {
             guard let account = repo.account,
                   let token = try? await KeychainManager.shared.retrieveToken(for: account.tokenKey)
             else { continue }
-            await TaskIssueSyncService.shared.reconcile(repo: repo, context: context, token: token)
+
+            if (repo.tasks ?? []).contains(where: \.needsIssueSync) {
+                await TaskIssueSyncService.shared.reconcile(repo: repo, context: context, token: token)
+            }
+            moved += await TaskIssueSyncService.shared.importClosedIssues(
+                repo: repo, context: context, token: token)
+        }
+
+        if moved > 0 {
+            ToastManager.shared.show(
+                String(format: String(localized: "tasks_completed_by_agent %lld"), moved),
+                style: .success)
         }
     }
 

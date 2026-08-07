@@ -100,11 +100,20 @@ final class KanbanViewModel {
         }
     }
 
-    /// Called once when the board appears — retries any tasks that failed a previous sync attempt.
+    /// Called once when the board appears — retries any tasks that failed a previous sync attempt,
+    /// then pulls back whatever a coding agent closed on GitHub while you were away.
     func reconcileGitHubSyncIfNeeded() async {
         guard project.syncTasksToGitHub, project.syncTasksDisabledReason == nil, !isDemoMode else { return }
         guard let token = await resolveToken() else { return }
         await TaskIssueSyncService.shared.reconcile(repo: project, context: modelContext, token: token)
+
+        let moved = await TaskIssueSyncService.shared.importClosedIssues(
+            repo: project, context: modelContext, token: token)
+        if moved > 0 {
+            ToastManager.shared.show(
+                String(format: String(localized: "tasks_completed_by_agent %lld"), moved),
+                style: .success)
+        }
     }
 
     /// Called by `TaskEditSheet` after content and/or column were edited.

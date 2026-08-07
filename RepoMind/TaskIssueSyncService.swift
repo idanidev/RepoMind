@@ -209,6 +209,55 @@ final class TaskIssueSyncService {
         task.lastSyncError = nil
     }
 
+    // MARK: - Import (GitHub → app)
+
+    /// Brings issues that were closed on GitHub back into the board.
+    ///
+    /// Everything else in this file pushes: create, update, close, reopen, delete. `reconcile`
+    /// only retries *local* changes that failed. So when a coding agent finished a task through
+    /// the MCP bridge and called `complete_task`, the issue closed on GitHub and the app never
+    /// found out — nothing here read issue state at all. The task sat in To-Do forever.
+    ///
+    /// Deliberately one-directional: a closed issue moves its task to the done column, but an open
+    /// issue never moves a task *out* of done. Which column it should return to is recorded
+    /// nowhere, and guessing would rearrange the user's board behind their back.
+    @discardableResult
+    func importClosedIssues(repo: ProjectRepo, context: ModelContext, token: String) async -> Int {
+        guard repo.syncTasksToGitHub, repo.syncTasksDisabledReason == nil else { return 0 }
+        guard let (owner, name) = repoOwnerAndName(repo) else { return 0 }
+        guard let done = repo.doneColumn else { return 0 }
+
+        let url = URL(
+            string: "https://api.github.com/repos/\(owner)/\(name)/issues"
+                + "?labels=\(Self.taskLabel)&state=closed&per_page=100")!
+        var req = URLRequest(url: url)
+        applyHeaders(&req, token: token)
+
+        guard let (data, resp) = try? await session.data(for: req),
+              let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode)
+        else { return 0 }
+
+        struct GHIssue: Decodable { let number: Int }
+        guard let closed = try? JSONDecoder().decode([GHIssue].self, from: data) else { return 0 }
+        let closedNumbers = Set(closed.map(\.number))
+        guard !closedNumbers.isEmpty else { return 0 }
+
+        var moved = 0
+        for task in repo.tasks ?? [] {
+            guard let issueNumber = task.issueNumber,
+                  closedNumbers.contains(issueNumber),
+                  task.column?.id != done.id
+            else { continue }
+
+            task.column = done
+            task.orderIndex = ((done.tasks ?? []).map(\.orderIndex).max() ?? -1) + 1
+            moved += 1
+        }
+
+        if moved > 0 { try? context.save() }
+        return moved
+    }
+
     // MARK: - Reconciliation
 
     /// Retries tasks that failed a prior sync attempt (offline / expired token / etc).

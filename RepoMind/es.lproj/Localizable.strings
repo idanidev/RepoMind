@@ -452,3 +452,4 @@
 "delete_task_confirm_title" = "¿Eliminar esta tarea?";
 "delete_task_confirm_message" = "Esto no se puede deshacer.";
 "delete_task_confirm_message_issue" = "También se eliminará su issue de GitHub. Esto no se puede deshacer.";
+"tasks_completed_by_agent %lld" = "%lld tareas completadas en GitHub";
