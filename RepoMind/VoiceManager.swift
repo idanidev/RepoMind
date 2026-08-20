@@ -68,7 +68,17 @@ final class VoiceManager {
     // Noise floor calibration
     private var isCalibrating = false
     private var calibrationSamples: [Float] = []
-    private let calibrationDuration: TimeInterval = 0.4
+    private static let calibrationDuration: TimeInterval = 0.4
+    private var calibrationTask: Task<Void, Never>?
+
+    /// Apple's speech recognizer refuses audio past roughly a minute and then fails the whole
+    /// request, losing everything said. Stopping cleanly just before that keeps the transcript.
+    private static let maxRecordingDuration: TimeInterval = 55
+    private var maxDurationTask: Task<Void, Never>?
+
+    /// Set when recording is cut short by the system — a phone call, or headphones being pulled
+    /// out. Without this the engine died and the button simply stayed lit, recording nothing.
+    private var interruptionObservers: [NSObjectProtocol] = []
 
     // Contextual strings for domain-specific vocabulary (column names, commands)
     var contextualStrings: [String] = []
@@ -164,6 +174,22 @@ final class VoiceManager {
             timer?.invalidate()
             routing?.cancel()
         }
+    }
+
+    /// One place to build a request, so the single- and dual-language paths cannot drift apart.
+    ///
+    /// `taskHint = .dictation` is the part that matters: the default, `.unspecified`, makes the
+    /// recognizer hedge between short commands and free speech. These are dictated notes — often
+    /// long, unstructured sentences — and telling it so measurably reduces invented words.
+    private func makeRecognitionRequest() -> SFSpeechAudioBufferRecognitionRequest {
+        let request = SFSpeechAudioBufferRecognitionRequest()
+        request.shouldReportPartialResults = true
+        request.addsPunctuation = true
+        request.taskHint = .dictation
+        if !contextualStrings.isEmpty {
+            request.contextualStrings = contextualStrings
+        }
+        return request
     }
 
     private func configureRecognizers() {
@@ -297,15 +323,21 @@ final class VoiceManager {
                 // Ensure clean state — previous session may still be active.
                 try? audioSession.setActive(false, options: .notifyOthersOnDeactivation)
 
-                // Try preferred config first; fall back to simpler variants on -50 (paramErr).
+                // `.record` + `.measurement`, and deliberately WITHOUT `.allowBluetooth`.
+                //
+                // The previous config asked for `.playAndRecord` with `.allowBluetooth`. Bluetooth
+                // input on iOS means the HFP profile, which is 8–16 kHz mono built for phone calls:
+                // when AirPods are connected, the microphone silently drops to call quality and the
+                // recognizer starts inventing words. Leaving the option out keeps recording on the
+                // device mic even with headphones connected, which is what dictation wants.
+                //
+                // `.measurement` also disables the system's input processing (AGC, EQ), which is
+                // what Apple recommends for speech recognition — that processing is tuned for
+                // calls, not transcription.
                 do {
-                    try audioSession.setCategory(.playAndRecord, mode: .spokenAudio, options: [.duckOthers, .defaultToSpeaker, .allowBluetooth])
+                    try audioSession.setCategory(.record, mode: .measurement)
                 } catch {
-                    do {
-                        try audioSession.setCategory(.record, mode: .measurement)
-                    } catch {
-                        try audioSession.setCategory(.record)
-                    }
+                    try audioSession.setCategory(.record)
                 }
                 try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
             } catch {
@@ -328,19 +360,8 @@ final class VoiceManager {
             }
 
             // Create SEPARATE requests for each language
-            let requestPrimary = SFSpeechAudioBufferRecognitionRequest()
-            requestPrimary.shouldReportPartialResults = true
-            requestPrimary.addsPunctuation = true
-            if !contextualStrings.isEmpty {
-                requestPrimary.contextualStrings = contextualStrings
-            }
-
-            let requestSecondary = SFSpeechAudioBufferRecognitionRequest()
-            requestSecondary.shouldReportPartialResults = true
-            requestSecondary.addsPunctuation = true
-            if !contextualStrings.isEmpty {
-                requestSecondary.contextualStrings = contextualStrings
-            }
+            let requestPrimary = makeRecognitionRequest()
+            let requestSecondary = makeRecognitionRequest()
 
             self.recognitionRequestPrimary = requestPrimary
             self.recognitionRequestSecondary = requestSecondary
@@ -364,13 +385,7 @@ final class VoiceManager {
                 return
             }
 
-            let request = SFSpeechAudioBufferRecognitionRequest()
-            request.shouldReportPartialResults = true
-            request.addsPunctuation = true
-            if !contextualStrings.isEmpty {
-                request.contextualStrings = contextualStrings
-            }
-
+            let request = makeRecognitionRequest()
             self.recognitionRequest = request
 
             recognitionTask = speechRecognizer.recognitionTask(with: request) {
@@ -382,6 +397,15 @@ final class VoiceManager {
         let inputNode = engine.inputNode
         let recordingFormat = inputNode.outputFormat(forBus: 0)
         let isDual = useDualLanguage
+
+        // A hardware format of 0 Hz means the input route is not ready — it happens when the
+        // session was just activated, or when headphones are being swapped. `installTap` throws an
+        // uncatchable Objective-C exception on that, so the app died instead of showing an error.
+        guard recordingFormat.sampleRate > 0, recordingFormat.channelCount > 0 else {
+            errorMessage = String(localized: "audio_input_unavailable")
+            cleanupAudioResources()
+            return
+        }
 
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) {
             [weak self] buffer, _ in
@@ -401,12 +425,24 @@ final class VoiceManager {
             engine.prepare()
             try engine.start()
             isRecording = true
-            // Silence timer starts after noise-floor calibration completes
-            Task { @MainActor in
-                try? await Task.sleep(for: .seconds(self.calibrationDuration))
+            // Silence timer starts after noise-floor calibration completes. Held onto so stopping
+            // within the calibration window cancels it — otherwise it fired after the fact and
+            // started a repeating timer that `stopRecording` had already finished cleaning up,
+            // leaving it running for the rest of the app's life.
+            calibrationTask = Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .seconds(Self.calibrationDuration))
+                guard let self, !Task.isCancelled, self.isRecording else { return }
                 self.isCalibrating = false
                 self.startSilenceTimer()
             }
+
+            maxDurationTask = Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .seconds(Self.maxRecordingDuration))
+                guard let self, !Task.isCancelled, self.isRecording else { return }
+                self.stopRecording()
+            }
+
+            observeAudioInterruptions()
         } catch {
             errorMessage = String(format: String(localized: "audio_engine_error"), error.localizedDescription)
             cleanupAudioResources()
@@ -498,6 +534,11 @@ final class VoiceManager {
         // ✅ FIX: Cancel smart routing task
         smartRoutingTask?.cancel()
         smartRoutingTask = nil
+        calibrationTask?.cancel()
+        calibrationTask = nil
+        maxDurationTask?.cancel()
+        maxDurationTask = nil
+        removeInterruptionObservers()
 
         cleanupAudioResources()
 
@@ -508,6 +549,58 @@ final class VoiceManager {
             try? AVAudioSession.sharedInstance().setActive(
                 false, options: .notifyOthersOnDeactivation)
         #endif
+    }
+
+    // MARK: - Interruptions
+
+    /// Stops cleanly when the system takes the microphone away.
+    ///
+    /// A phone call, Siri, or unplugging headphones tears the audio engine down underneath us.
+    /// Nothing was listening for it, so `isRecording` stayed true: the button kept pulsing, the
+    /// waveform froze, and every further word was lost with no indication anything had happened.
+    private func observeAudioInterruptions() {
+        #if !os(macOS)
+            removeInterruptionObservers()
+            let center = NotificationCenter.default
+
+            let interruption = center.addObserver(
+                forName: AVAudioSession.interruptionNotification,
+                object: AVAudioSession.sharedInstance(), queue: .main
+            ) { [weak self] note in
+                guard
+                    let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
+                    AVAudioSession.InterruptionType(rawValue: raw) == .began
+                else { return }
+                MainActor.assumeIsolated {
+                    guard let self, self.isRecording else { return }
+                    self.errorMessage = String(localized: "voice_interrupted")
+                    self.stopRecording()
+                }
+            }
+
+            let route = center.addObserver(
+                forName: AVAudioSession.routeChangeNotification,
+                object: AVAudioSession.sharedInstance(), queue: .main
+            ) { [weak self] note in
+                guard
+                    let raw = note.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt,
+                    let reason = AVAudioSession.RouteChangeReason(rawValue: raw),
+                    reason == .oldDeviceUnavailable
+                else { return }
+                MainActor.assumeIsolated {
+                    guard let self, self.isRecording else { return }
+                    self.errorMessage = String(localized: "voice_input_changed")
+                    self.stopRecording()
+                }
+            }
+
+            interruptionObservers = [interruption, route]
+        #endif
+    }
+
+    private func removeInterruptionObservers() {
+        interruptionObservers.forEach(NotificationCenter.default.removeObserver)
+        interruptionObservers = []
     }
 
     // MARK: - Smart Routing
@@ -522,6 +615,11 @@ final class VoiceManager {
         } else {
             speechLocale = Locale(identifier: "es-ES")
         }
+
+        // Without this the button was decorative: it swapped the label and the stored locale, but
+        // `speechRecognizer` was still the object built for the previous language in `init`, so
+        // recognition carried on in the language you had just switched away from.
+        configureRecognizers()
     }
 
     private func processSmartRouting(text: String) {
@@ -592,9 +690,14 @@ final class VoiceManager {
                     #endif
                 }
 
+                // `audioLevel` is a display value for the pulsing button: raw RMS is tiny, so it is
+                // scaled ×15 to fill the 0–1 range. The threshold, though, is calibrated from *raw*
+                // RMS. Comparing the scaled value against it made the test roughly 15× too easy to
+                // pass, so almost any room noise counted as speech, `lastAudioDetectedTime` kept
+                // resetting, and the silence auto-stop effectively never fired.
                 self.audioLevel = min(rms * 15, 1.0)
 
-                if self.audioLevel > self.silenceThreshold {
+                if rms > self.silenceThreshold {
                     self.lastAudioDetectedTime = .now
                 }
             }
