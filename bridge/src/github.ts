@@ -1,3 +1,5 @@
+import { invalidateToken } from "./token.js";
+
 const API = "https://api.github.com";
 
 export class GitHubError extends Error {
@@ -47,8 +49,18 @@ export class GitHubClient {
   private static readonly MIN_INTERVAL_MS = 80;
   private lastRequestAt = 0;
 
-  constructor(private readonly token: string) {
-    if (!token) {
+  private readonly resolve: () => string | null;
+
+  /**
+   * Takes a token *provider*, not a token.
+   *
+   * It used to capture one string at startup and keep it for the life of the process. An MCP
+   * server runs for days, `gh` rotates its OAuth token underneath it, and from that moment every
+   * call 401'd with no way back short of restarting the server.
+   */
+  constructor(token: string | (() => string | null)) {
+    this.resolve = typeof token === "function" ? token : () => token;
+    if (!this.resolve()) {
       throw new Error(
         "Missing GitHub token. Set GITHUB_TOKEN in the MCP server config to a token with `repo` scope."
       );
@@ -63,12 +75,12 @@ export class GitHubClient {
   }
 
   private request<T>(method: string, path: string, body?: unknown): Promise<T> {
-    const run = async (): Promise<T> => {
+    const attempt = async (): Promise<Response> => {
       await this.throttle();
-      const res = await fetch(`${API}${path}`, {
+      return fetch(`${API}${path}`, {
         method,
         headers: {
-          Authorization: `Bearer ${this.token}`,
+          Authorization: `Bearer ${this.resolve() ?? ""}`,
           Accept: "application/vnd.github+json",
           "X-GitHub-Api-Version": "2022-11-28",
           "User-Agent": "repomind-bridge",
@@ -76,6 +88,17 @@ export class GitHubClient {
         },
         body: body ? JSON.stringify(body) : undefined,
       });
+    };
+
+    const run = async (): Promise<T> => {
+      let res = await attempt();
+
+      // One retry on 401 with a freshly resolved token. The stale-cache case is the common one,
+      // and it is indistinguishable from a genuinely revoked token until you try again.
+      if (res.status === 401) {
+        invalidateToken();
+        if (this.resolve()) res = await attempt();
+      }
 
       if (!res.ok) throw await this.toError(res, method, path);
       if (res.status === 204) return undefined as T;

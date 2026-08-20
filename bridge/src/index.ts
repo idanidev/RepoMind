@@ -5,7 +5,7 @@ import { z } from "zod";
 import { readTaskImage, storeIsAvailable, taskHasImage, taskUUIDFromBody } from "./attachments.js";
 import { GitHubClient } from "./github.js";
 import { resolveRepo } from "./repo.js";
-import { requireToken } from "./token.js";
+import { requireToken, resolveToken } from "./token.js";
 import {
   AGENT_MARKER,
   LABEL_BLOCKED,
@@ -18,7 +18,10 @@ import {
   type TaskStatus,
 } from "./task.js";
 
-const github = new GitHubClient(requireToken());
+// Fail fast at startup if there is no token at all, but hand the client a resolver rather
+// than a fixed string, so a token rotated while the server is running is picked up.
+requireToken();
+const github = new GitHubClient(resolveToken);
 const server = new McpServer({ name: "repomind-bridge", version: "0.1.0" });
 
 const ok = (payload: unknown) => ({

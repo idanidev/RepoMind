@@ -32,6 +32,17 @@ export function resolveToken(): string | null {
   return cached;
 }
 
+/**
+ * Forgets the cached token so the next call resolves it again.
+ *
+ * The cache lives for the whole process, and an MCP server stays up for days. `gh` rotates its
+ * OAuth token underneath us, so a server started last week holds one GitHub now rejects — and it
+ * kept handing out that dead token forever. Call this on a 401 and resolve again.
+ */
+export function invalidateToken(): void {
+  cached = undefined;
+}
+
 export function requireToken(): string {
   const token = resolveToken();
   if (!token) {
