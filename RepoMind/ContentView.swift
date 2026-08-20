@@ -258,6 +258,7 @@ struct RepoListView: View {
             .toolbar { toolbarContent }
             .refreshable {
                 await syncRepos()
+                await importAgentCompletedTasks(force: true)
             }
             .task {
                 updateFilteredRepos()
@@ -266,6 +267,15 @@ struct RepoListView: View {
                 } else if shouldAutoSync {
                     await syncRepos(silent: true)
                 }
+                await importAgentCompletedTasks()
+            }
+            // `.task` fires when the view is created, and coming back from the background does
+            // not create it again — the view was alive the whole time. So the only thing that
+            // refreshed anything was opening a project, which builds a board view and runs its own
+            // .task. That is exactly what "issues only update if you go into the project" was.
+            .onChange(of: scenePhase) { _, phase in
+                guard phase == .active else { return }
+                Task { await importAgentCompletedTasks() }
             }
             // Refresh when CloudKit delivers remote data
             .onReceive(
@@ -724,6 +734,40 @@ struct RepoListView: View {
     @State private var expiredTokenAccount: GitHubAccount?
     /// The repo whose folder the user is choosing.
     @State private var repoToFile: ProjectRepo?
+    @AppStorage("lastTaskImportTimestamp") private var lastTaskImport: Double = 0
+    @Environment(\.scenePhase) private var scenePhase
+
+    /// Pulls in tasks an agent closed on GitHub, without having to open each board.
+    ///
+    /// Kept separate from `syncRepos`, which fetches the repo list and is rate-limited enough that
+    /// it deliberately runs about once a week on iPhone — hanging this off it would leave the board
+    /// just as stale. Throttled to two minutes so moving in and out of the list does not fire a
+    /// request per repo every time; pull-to-refresh passes `force`.
+    private func importAgentCompletedTasks(force: Bool = false) async {
+        guard !isDemoMode else { return }
+        let now = Date().timeIntervalSince1970
+        guard force || now - lastTaskImport > 120 else { return }
+        lastTaskImport = now
+
+        let outcome = await TaskIssueSyncService.shared.syncIssuesEverywhere(
+            repos: repos, context: context)
+
+        // A pull-to-refresh always answers. Saying nothing when nothing moved is exactly what made
+        // this impossible to tell apart from the feature not working at all.
+        switch outcome {
+        case .changed(let result):
+            ToastManager.shared.show(
+                TaskIssueSyncService.summary(for: result), style: .success)
+        case .syncDisabled where force:
+            ToastManager.shared.show(String(localized: "task_import_sync_off"), style: .info)
+        case .upToDate where force:
+            ToastManager.shared.show(String(localized: "task_import_up_to_date"), style: .info)
+        case .requestFailed(let reason) where force:
+            ToastManager.shared.show(reason, style: .error)
+        default:
+            break
+        }
+    }
     @Query(sort: \RepoFolder.orderIndex) private var folders: [RepoFolder]
 
     private func iconButton(for repo: ProjectRepo) -> some View {
@@ -1551,6 +1595,40 @@ struct AdaptiveRepoListView: View {
     @State private var expiredTokenAccount: GitHubAccount?
     /// The repo whose folder the user is choosing.
     @State private var repoToFile: ProjectRepo?
+    @AppStorage("lastTaskImportTimestamp") private var lastTaskImport: Double = 0
+    @Environment(\.scenePhase) private var scenePhase
+
+    /// Pulls in tasks an agent closed on GitHub, without having to open each board.
+    ///
+    /// Kept separate from `syncRepos`, which fetches the repo list and is rate-limited enough that
+    /// it deliberately runs about once a week on iPhone — hanging this off it would leave the board
+    /// just as stale. Throttled to two minutes so moving in and out of the list does not fire a
+    /// request per repo every time; pull-to-refresh passes `force`.
+    private func importAgentCompletedTasks(force: Bool = false) async {
+        guard !isDemoMode else { return }
+        let now = Date().timeIntervalSince1970
+        guard force || now - lastTaskImport > 120 else { return }
+        lastTaskImport = now
+
+        let outcome = await TaskIssueSyncService.shared.syncIssuesEverywhere(
+            repos: repos, context: context)
+
+        // A pull-to-refresh always answers. Saying nothing when nothing moved is exactly what made
+        // this impossible to tell apart from the feature not working at all.
+        switch outcome {
+        case .changed(let result):
+            ToastManager.shared.show(
+                TaskIssueSyncService.summary(for: result), style: .success)
+        case .syncDisabled where force:
+            ToastManager.shared.show(String(localized: "task_import_sync_off"), style: .info)
+        case .upToDate where force:
+            ToastManager.shared.show(String(localized: "task_import_up_to_date"), style: .info)
+        case .requestFailed(let reason) where force:
+            ToastManager.shared.show(reason, style: .error)
+        default:
+            break
+        }
+    }
     @Query(sort: \RepoFolder.orderIndex) private var folders: [RepoFolder]
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     private static let syncSuccessFeedback = UINotificationFeedbackGenerator()
@@ -1574,6 +1652,7 @@ struct AdaptiveRepoListView: View {
         .searchable(text: $searchText, prompt: "search_placeholder")
         .refreshable {
             await syncRepos()
+            await importAgentCompletedTasks(force: true)
         }
         .task {
             updateFilteredRepos()
@@ -1582,6 +1661,11 @@ struct AdaptiveRepoListView: View {
             } else if shouldAutoSync {
                 await syncRepos(silent: true)
             }
+            await importAgentCompletedTasks()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            Task { await importAgentCompletedTasks() }
         }
         .onReceive(
             NotificationCenter.default.publisher(

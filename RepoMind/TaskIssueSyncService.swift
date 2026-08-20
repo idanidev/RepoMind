@@ -19,6 +19,9 @@ final class TaskIssueSyncService {
     private init() {}
 
     static let taskLabel = "repomind-task"
+    /// Matches `FeedbackService`: user reports have their own inbox and must not be
+    /// duplicated onto the board as tasks.
+    static let feedbackLabel = "user-feedback"
 
     enum SyncError: LocalizedError {
         case noOwner
@@ -221,41 +224,179 @@ final class TaskIssueSyncService {
     /// Deliberately one-directional: a closed issue moves its task to the done column, but an open
     /// issue never moves a task *out* of done. Which column it should return to is recorded
     /// nowhere, and guessing would rearrange the user's board behind their back.
+    /// What a sync round actually did, and when it did nothing, why.
+    ///
+    /// "Nothing happened" has several causes here and they need different fixes, so a bare count
+    /// made this impossible to debug from the outside: sync switched off looked exactly like
+    /// everything already being up to date.
+    struct ImportResult: Equatable {
+        var completed = 0   // tasks moved into the done column because their issue closed
+        var imported = 0    // issues opened outside the app, pulled in as tasks
+        var changed: Int { completed + imported }
+    }
+
+    enum ImportOutcome: Equatable {
+        case changed(ImportResult)
+        case syncDisabled
+        case upToDate
+        case requestFailed(String)
+
+        var result: ImportResult { if case .changed(let r) = self { return r } else { return .init() } }
+    }
+
+    /// One sentence for whatever the round did. Two separate things can happen in a single sync
+    /// and lumping them into one number hid which — "3 tasks" reads very differently from
+    /// "2 completed, 1 imported".
+    static func summary(for result: ImportResult) -> String {
+        if result.completed > 0 && result.imported > 0 {
+            return String(
+                format: String(localized: "sync_summary_both %lld %lld"),
+                result.completed, result.imported)
+        }
+        if result.imported > 0 {
+            return String(format: String(localized: "sync_summary_imported %lld"), result.imported)
+        }
+        return String(format: String(localized: "tasks_completed_by_agent %lld"), result.completed)
+    }
+
+    /// Reconciles a repo's board against its GitHub issues, in both directions.
+    ///
+    /// Everything else in this file pushes: create, update, close, reopen, delete. `reconcile`,
+    /// despite the name, only retries *local* changes that failed. Nothing read issue state back,
+    /// so two things were invisible to the app: a task an agent finished through the MCP bridge
+    /// (the issue closed on GitHub and the board never knew), and an issue opened straight on
+    /// GitHub, which never became a task at all.
+    ///
+    /// One request per repo covers both — `state=all` and sort it out locally.
+    ///
+    /// Moving to done is deliberately one-directional: a reopened issue does not pull its task
+    /// back *out* of done, because the column it came from is recorded nowhere and guessing would
+    /// rearrange the board behind the user's back.
     @discardableResult
-    func importClosedIssues(repo: ProjectRepo, context: ModelContext, token: String) async -> Int {
-        guard repo.syncTasksToGitHub, repo.syncTasksDisabledReason == nil else { return 0 }
-        guard let (owner, name) = repoOwnerAndName(repo) else { return 0 }
-        guard let done = repo.doneColumn else { return 0 }
+    func syncIssues(repo: ProjectRepo, context: ModelContext, token: String) async -> ImportOutcome {
+        guard repo.syncTasksToGitHub, repo.syncTasksDisabledReason == nil else { return .syncDisabled }
+        guard let (owner, name) = repoOwnerAndName(repo) else { return .syncDisabled }
+        let columns = (repo.columns ?? []).sorted { $0.orderIndex < $1.orderIndex }
+        guard let done = repo.doneColumn, let inbox = columns.first else { return .syncDisabled }
 
         let url = URL(
             string: "https://api.github.com/repos/\(owner)/\(name)/issues"
-                + "?labels=\(Self.taskLabel)&state=closed&per_page=100")!
+                + "?state=all&per_page=100&sort=updated&direction=desc")!
         var req = URLRequest(url: url)
         applyHeaders(&req, token: token)
 
-        guard let (data, resp) = try? await session.data(for: req),
-              let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode)
-        else { return 0 }
-
-        struct GHIssue: Decodable { let number: Int }
-        guard let closed = try? JSONDecoder().decode([GHIssue].self, from: data) else { return 0 }
-        let closedNumbers = Set(closed.map(\.number))
-        guard !closedNumbers.isEmpty else { return 0 }
-
-        var moved = 0
-        for task in repo.tasks ?? [] {
-            guard let issueNumber = task.issueNumber,
-                  closedNumbers.contains(issueNumber),
-                  task.column?.id != done.id
-            else { continue }
-
-            task.column = done
-            task.orderIndex = ((done.tasks ?? []).map(\.orderIndex).max() ?? -1) + 1
-            moved += 1
+        let data: Data
+        do {
+            let (payload, resp) = try await session.data(for: req)
+            let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
+            guard (200..<300).contains(code) else {
+                return .requestFailed(SyncError.http(code, "").localizedDescription ?? "")
+            }
+            data = payload
+        } catch {
+            return .requestFailed(error.localizedDescription)
         }
 
-        if moved > 0 { try? context.save() }
-        return moved
+        struct GHIssue: Decodable {
+            struct Label: Decodable { let name: String }
+            struct PullRequest: Decodable {}
+            let number: Int
+            let title: String
+            let state: String
+            let labels: [Label]
+            let pullRequest: PullRequest?
+
+            enum CodingKeys: String, CodingKey {
+                case number, title, state, labels
+                case pullRequest = "pull_request"
+            }
+        }
+        guard let issues = try? JSONDecoder().decode([GHIssue].self, from: data) else {
+            return .requestFailed(SyncError.http(0, "").localizedDescription ?? "")
+        }
+
+        var result = ImportResult()
+        let tasks = repo.tasks ?? []
+        let linked = Dictionary(
+            tasks.compactMap { task in task.issueNumber.map { ($0, task) } },
+            uniquingKeysWith: { first, _ in first })
+
+        for issue in issues {
+            // The issues endpoint returns pull requests too, and they are not tasks.
+            if issue.pullRequest != nil { continue }
+            let labels = Set(issue.labels.map(\.name))
+            // User reports have their own inbox; importing them here would duplicate them.
+            if labels.contains(Self.feedbackLabel) { continue }
+
+            if let task = linked[issue.number] {
+                if issue.state == "closed", task.column?.id != done.id {
+                    task.column = done
+                    task.orderIndex = ((done.tasks ?? []).map(\.orderIndex).max() ?? -1) + 1
+                    result.completed += 1
+                }
+            } else if issue.state == "open" {
+                // Opened straight on GitHub — by the developer, a teammate or an agent. Without
+                // this it never reached the board, which is what "my issues don't show up" meant.
+                let target = columns.first { labels.contains(Self.columnLabel(for: $0)) } ?? inbox
+                let task = TaskItem(
+                    content: issue.title,
+                    status: target.name.lowercased().replacingOccurrences(of: " ", with: "_"),
+                    column: target,
+                    project: repo,
+                    orderIndex: ((target.tasks ?? []).map(\.orderIndex).max() ?? -1) + 1
+                )
+                task.issueNumber = issue.number
+                context.insert(task)
+                result.imported += 1
+            }
+        }
+
+        if result.changed > 0 {
+            try? context.save()
+            return .changed(result)
+        }
+        return .upToDate
+    }
+
+    /// The same reconciliation across every synced repo, resolving each account's token itself.
+    ///
+    /// Opening a board was the only thing that pulled anything back, so a task an agent finished —
+    /// or an issue opened on GitHub — stayed invisible until you happened to visit that project.
+    /// One request per synced repo is cheap enough to run from the repo list, unlike the repo list
+    /// refresh itself, which is rate-limited and deliberately runs at most once a week on iPhone.
+    @discardableResult
+    func syncIssuesEverywhere(repos: [ProjectRepo], context: ModelContext) async -> ImportOutcome {
+        let eligible = repos.filter { $0.syncTasksToGitHub && $0.syncTasksDisabledReason == nil }
+        // Told apart on purpose: no repo publishes its tasks at all, versus they do and there was
+        // simply nothing new. Same empty screen, completely different fix.
+        guard !eligible.isEmpty else { return .syncDisabled }
+
+        var total = ImportResult()
+        var lastFailure: String?
+        var reachedAny = false
+
+        for repo in eligible {
+            guard let account = repo.account,
+                  let token = try? await KeychainManager.shared.retrieveToken(for: account.tokenKey)
+            else { continue }
+
+            switch await syncIssues(repo: repo, context: context, token: token) {
+            case .changed(let r):
+                total.completed += r.completed
+                total.imported += r.imported
+                reachedAny = true
+            case .upToDate:
+                reachedAny = true
+            case .requestFailed(let reason):
+                lastFailure = reason
+            case .syncDisabled:
+                break
+            }
+        }
+
+        if total.changed > 0 { return .changed(total) }
+        if let lastFailure { return .requestFailed(lastFailure) }
+        return reachedAny ? .upToDate : .syncDisabled
     }
 
     // MARK: - Reconciliation

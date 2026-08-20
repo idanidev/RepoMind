@@ -55,8 +55,9 @@ struct TodayView: View {
             if (repo.tasks ?? []).contains(where: \.needsIssueSync) {
                 await TaskIssueSyncService.shared.reconcile(repo: repo, context: context, token: token)
             }
-            moved += await TaskIssueSyncService.shared.importClosedIssues(
-                repo: repo, context: context, token: token)
+            moved += await TaskIssueSyncService.shared.syncIssues(
+                repo: repo, context: context, token: token
+            ).result.changed
         }
 
         if moved > 0 {

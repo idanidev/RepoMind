@@ -453,3 +453,13 @@
 "delete_task_confirm_message" = "Esto no se puede deshacer.";
 "delete_task_confirm_message_issue" = "También se eliminará su issue de GitHub. Esto no se puede deshacer.";
 "tasks_completed_by_agent %lld" = "%lld tareas completadas en GitHub";
+"task_import_sync_off" = "Ningún repositorio publica sus tareas como issues — actívalo en Ajustes.";
+"task_import_no_linked" = "Ninguna de tus tareas está enlazada todavía a un issue.";
+"task_import_up_to_date" = "Las tareas están al día";
+
+/* Captura de voz */
+"audio_input_unavailable" = "El micrófono no está listo. Inténtalo en un momento.";
+"voice_interrupted" = "Grabación detenida: otra app ha tomado el micrófono.";
+"voice_input_changed" = "Grabación detenida: ha cambiado el micrófono.";
+"sync_summary_imported %lld" = "%lld issues importados de GitHub";
+"sync_summary_both %lld %lld" = "%lld completadas, %lld importadas de GitHub";

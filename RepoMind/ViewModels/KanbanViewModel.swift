@@ -107,12 +107,11 @@ final class KanbanViewModel {
         guard let token = await resolveToken() else { return }
         await TaskIssueSyncService.shared.reconcile(repo: project, context: modelContext, token: token)
 
-        let moved = await TaskIssueSyncService.shared.importClosedIssues(
-            repo: project, context: modelContext, token: token)
-        if moved > 0 {
-            ToastManager.shared.show(
-                String(format: String(localized: "tasks_completed_by_agent %lld"), moved),
-                style: .success)
+        let result = await TaskIssueSyncService.shared.syncIssues(
+            repo: project, context: modelContext, token: token
+        ).result
+        if result.changed > 0 {
+            ToastManager.shared.show(TaskIssueSyncService.summary(for: result), style: .success)
         }
     }
 
