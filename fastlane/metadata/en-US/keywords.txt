@@ -1,1 +1,1 @@
-github,repos,kanban,tasks,developer,git,projects,productivity,code,tools
+issues,bug,tracker,voice,dictation,todo,board,sprint,agile,developer,code,tasks,project

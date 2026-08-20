@@ -1,1 +1,1 @@
-github,repositorios,kanban,tareas,desarrollador,git,proyectos,productividad,código
+issues,bug,tracker,voz,dictado,tareas,tablero,sprint,agil,desarrollador,codigo,proyecto
