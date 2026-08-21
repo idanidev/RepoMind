@@ -1,30 +1,19 @@
-RepoMind keeps all your GitHub repositories organized in one place — with Kanban boards, voice tasks, and iCloud sync between iPhone and Mac.
+The fix occurs to you away from the keyboard. You dictate it in ten seconds, and by the time you open the project your coding agent already knows what to do.
 
-MANAGE YOUR REPOS
-Sync all your GitHub repositories automatically. Filter by language, stars, or status. Search across all your projects instantly. Archive repos to keep your workspace clean.
+DICTATE, DON'T TYPE
+Hold the mic and talk. RepoMind transcribes it and files the task in whichever project you choose. It listens in two languages at once, so you never have to switch gears mid-sentence. Attach a screenshot and the context travels with the task.
 
-VISUAL TASK MANAGEMENT
-Create Kanban boards for every repository. Move tasks through To-Do, In Progress, and Done with drag & drop. See at a glance what needs attention across all your projects.
+YOUR CODING AGENT READS THEM
+This is the part no other app does. Install RepoMind Bridge and Claude Code, Cursor or Codex pick up your tasks when they open the repository — marking them in progress, asking you when something is ambiguous, closing them when the work is done. You dictate from the sofa; by the time you sit down, it has already started.
 
-ADD TASKS WITH YOUR VOICE
-Just tap the microphone and speak — RepoMind writes the task down for you. Perfect for capturing ideas without breaking your flow.
+YOUR TASKS ARE GITHUB ISSUES
+Every task is published as an issue in its repository, with its column as a label. Moving a card to Done closes the issue. And it works both ways: whatever gets closed on GitHub shows up as done on the board, and issues opened outside the app come in on their own.
+
+ONE BOARD PER PROJECT
+Each repository gets its own columns, with a separate one for ideas so a half-formed thought never ends up published as an issue. Folders to group projects. And a Today screen that gathers whatever needs attention across all of them.
 
 ICLOUD SYNC
-Your repositories and tasks sync automatically between your iPhone and Mac. Start on one device, continue on another.
+iPhone, iPad and Mac, always the same. No accounts and no servers of ours: your data travels through your own private iCloud. And when something fails, the app tells you exactly what, instead of going quiet.
 
-MULTIPLE GITHUB ACCOUNTS
-Connect your personal, work, and open-source accounts in one app. Switch between them instantly.
-
-GO PRO
-Unlock unlimited repositories and multiple GitHub accounts with a one-time Pro upgrade.
-
-Features:
-• Automatic GitHub sync
-• Drag & drop Kanban boards
-• Voice task creation
-• iCloud sync across devices
-• Multiple GitHub accounts (Pro)
-• Unlimited repositories (Pro)
-• Smart filtering and search
-• Custom icons for each project
-• Archive to declutter your workspace
+FREE AND PRO
+Free: 3 repositories, 1 GitHub account, 3 columns per board. Pro: everything unlimited, one single payment. No subscriptions.

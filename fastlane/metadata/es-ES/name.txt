@@ -1,1 +1,1 @@
-RepoMind: Kanban para GitHub
+RepoMind: Dicta y programa

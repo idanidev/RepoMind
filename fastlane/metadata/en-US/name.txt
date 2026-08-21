@@ -1,1 +1,1 @@
-RepoMind: Kanban for GitHub
+RepoMind: Dictate GitHub Tasks

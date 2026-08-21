@@ -1,30 +1,19 @@
-RepoMind mantiene todos tus repositorios de GitHub organizados en un solo lugar — con tableros Kanban, tareas por voz y sincronización iCloud entre iPhone y Mac.
+Se te ocurre el arreglo lejos del teclado. Lo dictas en diez segundos, y cuando abres el proyecto tu agente de código ya sabe qué hacer.
 
-GESTIONA TUS REPOS
-Sincroniza todos tus repositorios de GitHub automáticamente. Filtra por lenguaje, estrellas o estado. Busca entre todos tus proyectos al instante. Archiva repos para mantener tu espacio de trabajo limpio.
+DICTA, NO ESCRIBAS
+Mantén pulsado el micrófono y habla. RepoMind transcribe y crea la tarea en el proyecto que elijas. Reconoce dos idiomas a la vez, así que no tienes que cambiar de registro a mitad de frase. Adjunta una captura y el contexto viaja con la tarea.
 
-GESTIÓN VISUAL DE TAREAS
-Crea tableros Kanban para cada repositorio. Mueve tareas entre Pendiente, En Progreso y Hecho con arrastrar y soltar. Ve de un vistazo qué necesita atención en todos tus proyectos.
+TU AGENTE DE CÓDIGO LAS LEE
+Aquí está lo que no hace ninguna otra app. Instala RepoMind Bridge y Claude Code, Cursor o Codex leen tus tareas al abrir el repositorio, las marcan como en curso, te preguntan si dudan y las cierran al terminar. Dictas desde el sofá; cuando te sientas, el trabajo ya está en marcha.
 
-AÑADE TAREAS CON TU VOZ
-Solo toca el micrófono y habla — RepoMind escribe la tarea por ti. Perfecto para capturar ideas sin interrumpir tu flujo de trabajo.
+TUS TAREAS SON ISSUES DE GITHUB
+Cada tarea se publica como issue en su repositorio, con su columna como etiqueta. Mover una tarjeta a Hecho cierra el issue. Y funciona en los dos sentidos: lo que se cierra en GitHub aparece hecho en el tablero, y los issues que abras fuera de la app entran solos.
+
+UN TABLERO POR PROYECTO
+Columnas propias en cada repositorio, con la de ideas aparte para que un pensamiento a medias no acabe publicado como issue. Carpetas para agrupar proyectos. Y una pantalla de Hoy que reúne lo que necesita atención en todos ellos.
 
 SINCRONIZACIÓN ICLOUD
-Tus repositorios y tareas se sincronizan automáticamente entre tu iPhone y Mac. Empieza en un dispositivo, continúa en otro.
+iPhone, iPad y Mac, siempre igual. Sin cuentas y sin servidores nuestros: tus datos viajan por tu iCloud privado. Y si algo falla, la app te dice exactamente qué, en vez de callarse.
 
-MÚLTIPLES CUENTAS DE GITHUB
-Conecta tus cuentas personal, de trabajo y de código abierto en una sola app. Cambia entre ellas al instante.
-
-HAZTE PRO
-Desbloquea repositorios ilimitados y múltiples cuentas de GitHub con una actualización Pro de pago único.
-
-Funciones:
-• Sincronización automática con GitHub
-• Tableros Kanban con arrastrar y soltar
-• Creación de tareas por voz
-• Sincronización iCloud entre dispositivos
-• Múltiples cuentas de GitHub (Pro)
-• Repositorios ilimitados (Pro)
-• Filtros y búsqueda inteligente
-• Iconos personalizados por proyecto
-• Archivo para limpiar tu espacio de trabajo
+GRATIS Y PRO
+Gratis: 3 repositorios, 1 cuenta de GitHub, 3 columnas por tablero. Pro: todo sin límite con un pago único. Sin suscripciones.

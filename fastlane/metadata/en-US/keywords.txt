@@ -1,1 +1,1 @@
-issues,bug,tracker,voice,dictation,todo,board,sprint,agile,developer,code,tasks,project
+voice,dictation,agent,ai,mcp,bug,issues,kanban,board,tracker,repos,developer,code

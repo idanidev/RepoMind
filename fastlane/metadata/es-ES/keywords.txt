@@ -1,1 +1,1 @@
-issues,bug,tracker,voz,dictado,tareas,tablero,sprint,agil,desarrollador,codigo,proyecto
+voz,dictado,agente,ia,mcp,bug,issues,kanban,tablero,tareas,repos,desarrollador,codigo
