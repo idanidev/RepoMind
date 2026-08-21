@@ -91,7 +91,7 @@ los usuarios en silencio. Ya pasó una vez y estuvo meses sin detectarse.
 
 ## Historial de versiones
 
-- **1.5.0** — Onboarding, carpetas de proyectos, sincronización selectiva a issues, reautenticación
+- **1.5.0** *(enviada a revisión el 21/08/2026, build 202608211225)* — Onboarding, carpetas de proyectos, sincronización selectiva a issues, reautenticación
   sin cerrar sesión al caducar el token, reparación de tareas huérfanas y diagnóstico real de los
   errores de CloudKit. Modelos nuevos: `RepoFolder`, `TaskItem.lastSyncError`.
 - **1.4.2** — Correcciones de sincronización y caché de iconos.

@@ -290,7 +290,7 @@ final class TaskIssueSyncService {
             let (payload, resp) = try await session.data(for: req)
             let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
             guard (200..<300).contains(code) else {
-                return .requestFailed(SyncError.http(code, "").localizedDescription ?? "")
+                return .requestFailed(SyncError.http(code, "").localizedDescription)
             }
             data = payload
         } catch {
@@ -312,7 +312,7 @@ final class TaskIssueSyncService {
             }
         }
         guard let issues = try? JSONDecoder().decode([GHIssue].self, from: data) else {
-            return .requestFailed(SyncError.http(0, "").localizedDescription ?? "")
+            return .requestFailed(SyncError.http(0, "").localizedDescription)
         }
 
         var result = ImportResult()
