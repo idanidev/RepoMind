@@ -80,6 +80,11 @@ struct RepoMindApp: App {
             initError = error.localizedDescription
         }
 
+        #if DEBUG
+            CloudKitSchemaSeed.runIfRequested(container: container)
+            CloudKitSchemaSeed.cleanIfRequested(container: container)
+        #endif
+
         FeedbackNotificationManager.shared.registerBackgroundTask(container: container)
         // Started before the store syncs, otherwise the first events are missed.
         CloudKitSyncMonitor.shared.start()
