@@ -353,6 +353,13 @@ final class TaskIssueSyncService {
 
         if result.changed > 0 {
             try? context.save()
+            // Only the imported ones are worth a banner: tasks moving to done are the result of
+            // work the developer already knows about, but an issue opened elsewhere is news.
+            if result.imported > 0 {
+                let name = repo.name
+                let count = result.imported
+                Task { await FeedbackNotificationManager.shared.notifyImportedTasks(count, repoName: name) }
+            }
             return .changed(result)
         }
         return .upToDate
@@ -413,6 +420,12 @@ final class TaskIssueSyncService {
 
         for task in pending.prefix(20) {
             if Task.isCancelled { break }
+            // Same rule as runSync: ideas never reach GitHub, so they must not be retried either.
+            if repo.isIdea(task) {
+                task.needsIssueSync = false
+                task.lastSyncError = nil
+                continue
+            }
             do {
                 if task.issueNumber == nil {
                     try await createIssue(for: task, repo: repo, token: token)

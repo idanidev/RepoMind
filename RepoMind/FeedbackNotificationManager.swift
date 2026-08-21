@@ -60,6 +60,28 @@ final class FeedbackNotificationManager {
         }
     }
 
+    /// Announces issues that arrived from GitHub rather than from this app.
+    ///
+    /// The board imports them silently, so tasks a teammate — or a coding agent — opened simply
+    /// appeared one day with nothing to say they had. One grouped notification per repo, not one
+    /// per issue: a sweep can pull in several at once and a burst of banners is worse than none.
+    func notifyImportedTasks(_ count: Int, repoName: String) async {
+        guard count > 0, await requestAuthorizationIfNeeded() else { return }
+
+        let content = UNMutableNotificationContent()
+        content.title = repoName
+        content.body = String(format: String(localized: "notif_imported_tasks %lld"), count)
+        content.sound = .default
+        content.userInfo = ["importedRepo": repoName]
+
+        let request = UNNotificationRequest(
+            identifier: "imported-\(repoName)-\(Date.now.timeIntervalSince1970)",
+            content: content,
+            trigger: nil
+        )
+        try? await UNUserNotificationCenter.current().add(request)
+    }
+
     private func title(for severity: FeedbackSeverity, repo: String) -> String {
         switch severity {
         case .critical:

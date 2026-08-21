@@ -463,3 +463,10 @@
 "voice_input_changed" = "Grabación detenida: ha cambiado el micrófono.";
 "sync_summary_imported %lld" = "%lld issues importados de GitHub";
 "sync_summary_both %lld %lld" = "%lld completadas, %lld importadas de GitHub";
+"notif_imported_tasks %lld" = "%lld issues nuevos abiertos en GitHub";
+
+/* Columna de ideas */
+"idea_column_section" = "Ideas";
+"idea_column_picker" = "Columna de ideas";
+"idea_column_none" = "Ninguna";
+"idea_column_footer" = "Las tareas de esta columna se tratan como ideas: nunca se publican como issues de GitHub ni cuentan como pendientes.";

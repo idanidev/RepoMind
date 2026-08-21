@@ -32,7 +32,9 @@ struct TodayView: View {
     }
 
     private var unpublishedTasks: [TaskItem] {
-        repos.flatMap { $0.tasks ?? [] }.filter(\.needsIssueSync)
+        // Ideas are excluded: they are never meant to reach GitHub, so counting them as
+        // "not published" would be permanently accusing the board of a problem it does not have.
+        repos.flatMap { repo in (repo.tasks ?? []).filter { $0.needsIssueSync && !repo.isIdea($0) } }
     }
 
     /// Retries every repo that has something stuck, without making the user visit each board.

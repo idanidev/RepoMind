@@ -276,6 +276,23 @@ struct RepoSettingsSheet: View {
 
     private var repoFullName: String { repo.fullName }
 
+    /// Which column holds ideas rather than work. Stored in UserDefaults, like the done column —
+    /// deliberately not a `@Model` field, so choosing one does not require a CloudKit schema
+    /// deploy, and boards that never set it keep behaving exactly as they do today.
+    private var ideaColumnBinding: Binding<UUID?> {
+        Binding(
+            get: { repo.ideaColumn(from: columns)?.id },
+            set: { newValue in
+                let key = "ideaColumnID_\(repo.repoID)"
+                if let newValue {
+                    UserDefaults.standard.set(newValue.uuidString, forKey: key)
+                } else {
+                    UserDefaults.standard.removeObject(forKey: key)
+                }
+            }
+        )
+    }
+
     private var syncToggleBinding: Binding<Bool> {
         Binding(
             get: { repo.syncTasksToGitHub },
@@ -338,6 +355,19 @@ struct RepoSettingsSheet: View {
                     Text("checkbox_done_column_section")
                 } footer: {
                     Text("checkbox_done_column_footer")
+                }
+
+                Section {
+                    Picker("idea_column_picker", selection: ideaColumnBinding) {
+                        Text("idea_column_none").tag(nil as UUID?)
+                        ForEach(columns) { column in
+                            Text(column.name).tag(column.id as UUID?)
+                        }
+                    }
+                } header: {
+                    Text("idea_column_section")
+                } footer: {
+                    Text("idea_column_footer")
                 }
 
                 if canSyncTasks {

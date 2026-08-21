@@ -156,6 +156,29 @@ extension ProjectRepo {
     }
 
     var doneColumn: KanbanColumn? { doneColumn(from: columns ?? []) }
+
+    /// The column whose contents are ideas rather than work, if the user picked one.
+    ///
+    /// Ideas are not tasks: publishing a half-formed thought as a GitHub issue, and then counting
+    /// it as "not published" when it fails, is noise. Which column that is cannot be guessed from
+    /// its name — plenty of boards have no such column, and the ones that do do not agree on what
+    /// to call it — so it is an explicit choice, stored per repo like the done column.
+    ///
+    /// `nil` when unset, which is the default: existing boards behave exactly as before.
+    func ideaColumn(from columns: [KanbanColumn]) -> KanbanColumn? {
+        guard let stored = UserDefaults.standard.string(forKey: "ideaColumnID_\(repoID)"),
+              let uuid = UUID(uuidString: stored)
+        else { return nil }
+        return columns.first { $0.id == uuid }
+    }
+
+    var ideaColumn: KanbanColumn? { ideaColumn(from: columns ?? []) }
+
+    /// Whether this task is an idea, and therefore must never reach GitHub.
+    func isIdea(_ task: TaskItem) -> Bool {
+        guard let idea = ideaColumn, let column = task.column else { return false }
+        return column.id == idea.id
+    }
 }
 
 // MARK: - Kanban Column

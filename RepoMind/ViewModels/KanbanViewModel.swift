@@ -72,6 +72,9 @@ final class KanbanViewModel {
 
     private func runSync(_ task: TaskItem, _ operation: @escaping (String) async throws -> Void) {
         guard project.syncTasksToGitHub, !isDemoMode else { return }
+        // An idea is not a task. Publishing a half-formed thought as a GitHub issue — and then
+        // flagging it as "not published" when that fails — is noise the developer never asked for.
+        guard !project.isIdea(task) else { return }
         let repo = project
         let taskID = task.id
         let previous = syncChains[taskID]

@@ -464,3 +464,10 @@
 "voice_input_changed" = "Recording stopped: the microphone changed.";
 "sync_summary_imported %lld" = "%lld issues imported from GitHub";
 "sync_summary_both %lld %lld" = "%lld completed, %lld imported from GitHub";
+"notif_imported_tasks %lld" = "%lld new issues opened on GitHub";
+
+/* Idea column */
+"idea_column_section" = "Ideas";
+"idea_column_picker" = "Ideas column";
+"idea_column_none" = "None";
+"idea_column_footer" = "Tasks in this column are treated as ideas: they are never published as GitHub issues and never counted as pending.";
