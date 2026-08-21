@@ -74,8 +74,16 @@ los usuarios en silencio. Ya pasó una vez y estuvo meses sin detectarse.
 
 1. Tests en verde (`xcodebuild test`) y build de Release limpio
 2. `bundle exec fastlane ios bump_version version:X.Y.Z`
-3. **CloudKit Console → Development → "Deploy Schema Changes to Production"**, si se ha tocado
-   cualquier `@Model` (campo o tipo nuevo)
+3. **Desplegar el esquema de CloudKit**, si se ha tocado cualquier `@Model`:
+   1. Ejecutar una build **Debug** (que apunta a Development) con el argumento `-seedCloudKitSchema`.
+      El esquema de Development solo nace cuando la app **escribe** un registro de ese tipo.
+   2. CloudKit Console → **Development** → comprobar que el tipo/campo nuevo aparece.
+   3. Pulsar **"Deploy Schema Changes…"** — solo está activo en Development; en Production
+      aparece en gris porque ese entorno es de solo lectura.
+   4. Verificar en **Production** que el tipo/campo ya está.
+   5. Limpiar los registros de siembra con `-cleanSchemaSeed`.
+   En Production un tipo de registro desconocido **se rechaza**, no se crea: publicar sin este
+   paso rompe la sincronización de esa entidad para todos los usuarios, en silencio.
 4. Escribir `fastlane/metadata/*/release_notes.txt` en **en-US y es-ES**
 5. `bundle exec fastlane ios release` y después `submit`
 6. **Actualizar este CLAUDE.md**: historial de versiones abajo, y arquitectura/convenciones si el
@@ -94,3 +102,9 @@ los usuarios en silencio. Ya pasó una vez y estuvo meses sin detectarse.
 - Los tests requieren simulador real: correr `xcodebuild` con destino correcto
 - CloudKit en desarrollo requiere entitlements firmados — build directo en simulador puede fallar el sync
 - `match` gestiona los certificados desde un repo privado de GitHub — no regenerar manualmente
+- **Entitlements separados por configuración**: Debug usa `RepoMindDebug.entitlements`
+  (CloudKit `Development`, `aps-environment` `development`) y Release usa `RepoMind.entitlements`
+  (`Production`). Durante meses ambos apuntaron a Production: las builds de desarrollo escribían
+  en los datos reales, el esquema de Development nunca se actualizaba al probar, y CloudKit
+  rechazaba en silencio cada tipo nuevo. `aps-environment` importa igual — CloudKit avisa de los
+  cambios por push silencioso, y una build de desarrollo que declara `production` no los recibe.
