@@ -770,6 +770,8 @@ struct RepoListView: View {
         case .changed(let result):
             ToastManager.shared.show(
                 TaskIssueSyncService.summary(for: result), style: .success)
+            // An agent closing your tasks while you were away is the app at its best.
+            for _ in 0..<result.completed { ReviewPrompter.recordCompletedTask() }
         case .syncDisabled where force:
             ToastManager.shared.show(String(localized: "task_import_sync_off"), style: .info)
         case .upToDate where force:
@@ -1637,6 +1639,8 @@ struct AdaptiveRepoListView: View {
         case .changed(let result):
             ToastManager.shared.show(
                 TaskIssueSyncService.summary(for: result), style: .success)
+            // An agent closing your tasks while you were away is the app at its best.
+            for _ in 0..<result.completed { ReviewPrompter.recordCompletedTask() }
         case .syncDisabled where force:
             ToastManager.shared.show(String(localized: "task_import_sync_off"), style: .info)
         case .upToDate where force:

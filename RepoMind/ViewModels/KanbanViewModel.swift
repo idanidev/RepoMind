@@ -356,6 +356,13 @@ final class KanbanViewModel {
         let previousColumn = task.column
         let wasFinal = isFinalColumn(previousColumn)
 
+        // Counted here rather than in `handleTaskEdited`, which returns early unless the repo
+        // publishes to GitHub — most completions would never have been counted. Every route to
+        // done, dragging, the checkbox and the menu, comes through this method.
+        if !wasFinal, isFinalColumn(column), !isDemoMode {
+            ReviewPrompter.recordCompletedTask()
+        }
+
         withAnimation(.snappy) {
             // Si se mueve a otra columna
             if !isSameColumn {
