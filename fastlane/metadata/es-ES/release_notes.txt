@@ -1,15 +1,11 @@
-Novedades:
-
-• Onboarding al abrir la app por primera vez, con una vista previa real de cada función
-• Carpetas para agrupar proyectos: crea, renombra y mueve repos entre ellas. Borrar una carpeta nunca borra los proyectos que contiene
-• Nuevo ajuste "Sincronizar con Issues" para elegir de un vistazo qué repositorios publican sus tareas en GitHub, de uno en uno o todos a la vez
-
 Correcciones:
 
-• Las tareas que un agente de código cierra en GitHub ahora pasan solas a la columna de hechas al abrir el proyecto
-• Si tu token de GitHub caduca, ahora puedes introducir uno nuevo sin cerrar sesión ni perder proyectos ni tareas
-• Recuperadas las tareas que habían perdido su columna y no aparecían en ningún tablero
-• Las tareas que no llegan a publicarse en GitHub explican por qué, y se pueden reintentar desde "Hoy"
-• Los problemas de sincronización con iCloud indican la causa concreta en vez de un error genérico
-• El teclado vuelve a abrirse solo al crear una tarea
-• Al abrir una tarea se ve el botón de eliminar, y ahora pide confirmación antes de borrar
+• Arreglados los proyectos que aparecían duplicados. La causa era una cuenta de GitHub registrada dos veces: cada sincronización volvía a insertar copias de todos tus repositorios
+• Los iconos ya no desaparecen al refrescar. No se perdían: lo que veías eran esas copias recién creadas, que nunca llegaron a tener icono
+• Al abrir un proyecto ya no hace falta esperar para ver lo que tu agente ha cerrado
+
+Novedades:
+
+• Columna de ideas: elígela en los ajustes de cada proyecto y sus tareas dejan de publicarse como issues y de contar como pendientes. Una idea a medias no es una tarea
+• Aviso cuando llega un issue creado fuera de la app, agrupado por repositorio
+• En Mac, configurar el icono de un proyecto ya está en el menú contextual: sin gesto de deslizar, era la única acción a la que no se podía llegar

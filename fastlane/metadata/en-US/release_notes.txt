@@ -1,15 +1,11 @@
-What's new:
-
-• An onboarding on first launch, showing a real preview of each feature
-• Folders to group your projects: create, rename and move repos between them. Deleting a folder never deletes the projects inside it
-• A new "GitHub Issues Sync" setting to see at a glance which repositories publish their tasks, and turn it on one by one or everywhere at once
-
 Fixes:
 
-• Tasks a coding agent closes on GitHub now move to your done column on their own when you open the project
-• When your GitHub token expires you can now enter a new one without signing out, keeping your projects and tasks
-• Recovered tasks that had lost their column and were showing on no board at all
-• Tasks that fail to reach GitHub now say why, and can be retried from "Today"
-• iCloud sync problems name the actual cause instead of a generic error
-• The keyboard opens on its own again when creating a task
-• Opening a task shows the delete button, and deleting now asks for confirmation
+• Projects no longer appear duplicated. The cause was a GitHub account registered twice, which made every sync insert fresh copies of all your repositories
+• Icons no longer vanish on refresh. They were never lost: what you saw were those new copies, which never had an icon in the first place
+• Opening a project no longer means waiting to see what your agent closed
+
+New:
+
+• An ideas column: pick it in each project's settings and its tasks stop being published as issues and stop counting as pending. A half-formed idea is not a task
+• A notification when an issue opened outside the app arrives, grouped by repository
+• On Mac, configuring a project's icon is now in the context menu — with no swipe gesture, it was the one action you could not reach
