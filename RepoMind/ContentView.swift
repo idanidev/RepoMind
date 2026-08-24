@@ -837,6 +837,12 @@ struct RepoListView: View {
 
         guard !accounts.isEmpty else { return }
 
+        // Before syncing, not only at launch. Dedup inside GitHubService is scoped to one account,
+        // so while two account rows share a username every refresh inserts a fresh copy of every
+        // repo — and a fresh copy has `logoURL: nil`, which is why refreshing looked like it was
+        // wiping the icons.
+        DuplicateRepair.run(context: context)
+
         do {
             for account in accounts {
                 if let token = try await KeychainManager.shared.retrieveToken(for: account.tokenKey)

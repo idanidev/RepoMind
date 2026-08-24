@@ -91,6 +91,13 @@ enum DuplicateRepair {
                 if survivor.folder == nil, let folder = duplicate.folder {
                     survivor.folder = folder
                 }
+                // Keep whichever copy actually has an icon. New repos are inserted with
+                // `logoURL: nil`, so a duplicate is usually the blank one — but not always, and
+                // dropping a user-chosen icon during a merge would look exactly like the bug this
+                // repair exists to fix.
+                if survivor.logoURL == nil, let logo = duplicate.logoURL {
+                    survivor.logoURL = logo
+                }
                 survivor.isFavorite = survivor.isFavorite || duplicate.isFavorite
                 context.delete(duplicate)
                 merged += 1
