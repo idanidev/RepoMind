@@ -707,3 +707,88 @@ final class OrphanTaskRepairTests: XCTestCase {
         XCTAssertEqual(task.orderIndex, 8)
     }
 }
+
+
+// MARK: - Duplicate repair
+
+@MainActor
+final class DuplicateRepairTests: XCTestCase {
+    var container: ModelContainer!
+    var context: ModelContext!
+
+    override func setUp() async throws {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none)
+        container = try ModelContainer(
+            for: ProjectRepo.self, TaskItem.self, KanbanColumn.self, GitHubAccount.self,
+            RepoFolder.self, configurations: config)
+        context = container.mainContext
+    }
+
+    private func makeRepo(_ id: Int, _ name: String, account: GitHubAccount?) -> ProjectRepo {
+        let repo = ProjectRepo(repoID: id, name: name, account: account)
+        context.insert(repo)
+        let column = KanbanColumn(name: "Pendiente", orderIndex: 0, project: repo)
+        context.insert(column)
+        return repo
+    }
+
+    private func addTask(_ content: String, to repo: ProjectRepo) -> TaskItem {
+        let column = (repo.columns ?? []).first
+        let task = TaskItem(content: content, column: column, project: repo)
+        context.insert(task)
+        return task
+    }
+
+    func testMergesTwoAccountsWithTheSameUsername() {
+        let a = GitHubAccount(username: "idanidev", tokenKey: "k1")
+        let b = GitHubAccount(username: "idanidev", tokenKey: "k2")
+        context.insert(a); context.insert(b)
+        _ = makeRepo(1, "RepoMind", account: b)
+
+        let result = DuplicateRepair.run(context: context)
+        XCTAssertEqual(result.accountsMerged, 1)
+        XCTAssertEqual(try context.fetch(FetchDescriptor<GitHubAccount>()).count, 1)
+    }
+
+    func testMergesDuplicateReposAndKeepsEveryTask() {
+        let a = GitHubAccount(username: "idanidev", tokenKey: "k")
+        context.insert(a)
+        let first = makeRepo(42, "RepoMind", account: a)
+        let second = makeRepo(42, "RepoMind", account: a)
+        _ = addTask("uno", to: first)
+        _ = addTask("dos", to: first)
+        _ = addTask("tres", to: second)
+
+        let result = DuplicateRepair.run(context: context)
+        XCTAssertEqual(result.reposMerged, 1)
+
+        let repos = try! context.fetch(FetchDescriptor<ProjectRepo>())
+        XCTAssertEqual(repos.count, 1)
+        // The whole point: a merge must never cost a task. The cascade from the deleted repo's
+        // columns would have taken "tres" with it if the task had not been repointed first.
+        XCTAssertEqual(try context.fetch(FetchDescriptor<TaskItem>()).count, 3)
+        XCTAssertTrue((repos[0].tasks ?? []).allSatisfy { $0.column != nil })
+    }
+
+    func testLeavesLocalProjectsAlone() {
+        let a = GitHubAccount(username: "idanidev", tokenKey: "k")
+        context.insert(a)
+        let one = makeRepo(0, "Cosas", account: a)
+        let two = makeRepo(0, "Ideas", account: a)
+        one.isLocal = true
+        two.isLocal = true
+
+        let result = DuplicateRepair.run(context: context)
+        XCTAssertEqual(result.reposMerged, 0)
+        XCTAssertEqual(try context.fetch(FetchDescriptor<ProjectRepo>()).count, 2)
+    }
+
+    func testDoesNothingWhenThereAreNoDuplicates() {
+        let a = GitHubAccount(username: "idanidev", tokenKey: "k")
+        context.insert(a)
+        _ = makeRepo(1, "A", account: a)
+        _ = makeRepo(2, "B", account: a)
+
+        XCTAssertFalse(DuplicateRepair.run(context: context).changed)
+    }
+}

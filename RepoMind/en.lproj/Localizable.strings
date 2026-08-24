@@ -471,3 +471,4 @@
 "idea_column_picker" = "Ideas column";
 "idea_column_none" = "None";
 "idea_column_footer" = "Tasks in this column are treated as ideas: they are never published as GitHub issues and never counted as pending.";
+"duplicates_merged %lld %lld" = "%lld duplicate projects and %lld duplicate accounts merged";

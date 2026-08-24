@@ -99,6 +99,18 @@ struct ContentView: View {
     /// Reattaches tasks that lost their column, and says so — silently fixing eight missing tasks
     /// would leave the same "where did my task go?" question, just with a different answer.
     private func repairOrphanTasks() {
+        // Duplicates first: merging two copies of a repo moves tasks between them, and reattaching
+        // orphans afterwards means they land on the surviving board rather than one about to go.
+        let dupes = DuplicateRepair.run(context: context)
+        if dupes.changed {
+            ToastManager.shared.show(
+                String(
+                    format: String(localized: "duplicates_merged %lld %lld"),
+                    dupes.reposMerged, dupes.accountsMerged),
+                style: .info
+            )
+        }
+
         let repaired = OrphanTaskRepair.run(context: context)
         guard repaired > 0 else { return }
         ToastManager.shared.show(
@@ -1775,6 +1787,13 @@ struct AdaptiveRepoListView: View {
                 repoToFile = repo
             } label: {
                 Label("move_to_folder", systemImage: "folder")
+            }
+            // Mac has no swipe gesture, so anything offered only through swipeActions is simply
+            // unreachable there. Configuring the icon was the one action that had no other route.
+            Button {
+                repoToConfigureIcon = repo
+            } label: {
+                Label("icon_configure_button", systemImage: "photo")
             }
             Button {
                 Task { await toggleFavorite(for: repo) }

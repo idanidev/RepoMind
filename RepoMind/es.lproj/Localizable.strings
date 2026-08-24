@@ -470,3 +470,4 @@
 "idea_column_picker" = "Columna de ideas";
 "idea_column_none" = "Ninguna";
 "idea_column_footer" = "Las tareas de esta columna se tratan como ideas: nunca se publican como issues de GitHub ni cuentan como pendientes.";
+"duplicates_merged %lld %lld" = "%lld proyectos y %lld cuentas duplicados unificados";
