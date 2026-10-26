@@ -1,0 +1,94 @@
+# TestFlight sin Mac: un runner macOS de GitHub archiva la app iOS y la sube a
+# TestFlight (pruebas internas). Arranca con cada push a la rama de abajo; el
+# lanzamiento a mano (Actions → TestFlight → Run workflow) funciona en cuanto
+# el fichero esté también en main, que es la rama que GitHub indexa.
+#
+# Necesita tres secretos del repo (Settings → Secrets and variables → Actions):
+#   ASC_KEY_ID      Key ID de una clave de la API de App Store Connect
+#   ASC_ISSUER_ID   Issuer ID de esa clave
+#   ASC_KEY_P8      El contenido entero del fichero .p8 de la clave
+# La clave tiene que ser de rol Admin: la firma la gestiona Xcode en la nube
+# con ella (no hay certificados en el runner), y eso exige Admin.
+#
+# Se usa el Xcode 26 más nuevo del runner (la tienda aún no acepta builds del
+# 27). El número de build lo pone Xcode al subir (el siguiente libre).
+
+name: TestFlight
+
+on:
+  push:
+    branches:
+      - claude/testflight
+  workflow_dispatch:
+
+concurrency:
+  group: testflight
+  cancel-in-progress: false
+
+jobs:
+  testflight:
+    name: Archive y subida a TestFlight
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Xcode 26, el más nuevo del runner
+        run: |
+          app=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          if [ -z "$app" ]; then
+            echo "::error::No hay Xcode 26 en el runner. Hay:"; ls /Applications | grep -i xcode; exit 1
+          fi
+          sudo xcode-select -s "$app"
+          xcodebuild -version
+
+      - name: Clave de App Store Connect
+        env:
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          if [ -z "$ASC_KEY_ID" ] || [ -z "$ASC_ISSUER_ID" ] || [ -z "$ASC_KEY_P8" ]; then
+            echo "::error::Faltan secretos: ASC_KEY_ID, ASC_ISSUER_ID y ASC_KEY_P8 (Settings → Secrets → Actions)"; exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/asc"
+          printf '%s\n' "$ASC_KEY_P8" > "$RUNNER_TEMP/asc/AuthKey.p8"
+          chmod 600 "$RUNNER_TEMP/asc/AuthKey.p8"
+
+      - name: Archive
+        run: |
+          set +e
+          xcodebuild archive \
+            -project RepoMind.xcodeproj -scheme RepoMind -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/RepoMind.xcarchive" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/asc/AuthKey.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            > "$RUNNER_TEMP/archive.log" 2>&1
+          estado=$?
+          set -e
+          # Solo lo que importa en pantalla; el registro entero va al artefacto.
+          grep -E "error:|\*\* ARCHIVE" "$RUNNER_TEMP/archive.log" || true
+          exit $estado
+
+      - name: Subir a TestFlight
+        run: |
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/RepoMind.xcarchive" \
+            -exportOptionsPlist .github/ExportOptions.plist \
+            -exportPath "$RUNNER_TEMP/export" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/asc/AuthKey.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+
+      - name: Registro del archive
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: archive-log
+          path: ${{ runner.temp }}/archive.log
+          if-no-files-found: ignore
