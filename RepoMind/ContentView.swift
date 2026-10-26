@@ -1096,26 +1096,10 @@ struct RepoRow: View {
             }
     }
 
-    // Colores de lenguaje estilo GitHub
+    // Colores de lenguaje estilo GitHub — la tabla vive en HomeTheme.swift, compartida con las
+    // tarjetas del inicio rediseñado.
     private func languageColor(for language: String) -> Color {
-        switch language.lowercased() {
-        case "swift": return Color(hex: "#F05138")
-        case "javascript", "js": return Color(hex: "#F7DF1E")
-        case "typescript", "ts": return Color(hex: "#3178C6")
-        case "python": return Color(hex: "#3776AB")
-        case "java": return Color(hex: "#B07219")
-        case "kotlin": return Color(hex: "#A97BFF")
-        case "go": return Color(hex: "#00ADD8")
-        case "rust": return Color(hex: "#DEA584")
-        case "ruby": return Color(hex: "#CC342D")
-        case "c++", "cpp": return Color(hex: "#F34B7D")
-        case "c#", "csharp": return Color(hex: "#239120")
-        case "php": return Color(hex: "#777BB4")
-        case "html": return Color(hex: "#E34C26")
-        case "css": return Color(hex: "#1572B6")
-        case "shell", "bash": return Color(hex: "#89E051")
-        default: return .gray
-        }
+        Color.gitHubLanguage(language)
     }
 
     private var accessibilityDescription: String {
