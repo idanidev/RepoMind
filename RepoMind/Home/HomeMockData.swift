@@ -2,18 +2,22 @@ import Foundation
 
 // MARK: - Mock data
 
-/// The six repos of the design mock, for previews and for trying the screen without an account.
+/// Six repos for previews and for trying the screen without an account. Together they exercise
+/// every optional row: a featured card with tasks, a private repo with feedback, a failing build,
+/// a release tag, a folder and an inactive repo.
 ///
-/// Repo names, descriptions and commit messages are data the way GitHub would supply them, so
-/// they are deliberately not localized.
+/// Repo names and descriptions are data the way GitHub would supply them, so they are
+/// deliberately not localized.
 enum HomeMockData {
     static let accountName = "idanidev"
 
-    static let stats = HomeStats(totalRepos: 6, commitsToday: 13, alerts: 4, pendingTasks: 8)
+    static var stats: HomeStats { HomeStats(cards: repos) }
 
     static var repos: [HomeRepoCardData] {
         [focvs, inSync, repoMind, rentalManagerIOS, clarity, rentalManagerWeb]
     }
+
+    static let webFolder = HomeFolderInfo(id: "mock-folder-web", name: "Web", colorHex: "#5B6CFF", orderIndex: 0)
 
     static var focvs: HomeRepoCardData {
         HomeRepoCardData(
@@ -23,19 +27,18 @@ enum HomeMockData {
             description: "Temporizador de enfoque con sesiones suaves y un widget discreto",
             isFavorite: true,
             isFeatured: true,
-            status: .live,
-            version: "v1.2.0",
-            branch: "main",
-            languages: [HomeLanguageShare(name: "Swift", share: 1)],
+            language: "Swift",
             stars: 12,
-            openIssues: 1,
-            pullRequests: 4,
-            build: .passing,
+            pullRequests: 1,
+            version: "v1.2.0",
             tasksTotal: 3,
             tasksPending: 2,
-            lastActivity: hoursAgo(2),
-            lastCommit: HomeCommitInfo(message: "Feat/Auth", author: accountName, date: hoursAgo(2)),
-            commitsLast7Days: [2, 4, 3, 6, 5, 8, 13]
+            taskPreview: [
+                HomeTaskPreview(id: UUID(), title: "Pantalla de sesión salta con el teclado"),
+                HomeTaskPreview(id: UUID(), title: "Widget de bloqueo")
+            ],
+            lastPush: hoursAgo(2),
+            lastActivity: hoursAgo(2)
         )
     }
 
@@ -46,15 +49,12 @@ enum HomeMockData {
             owner: accountName,
             description: "Sincronizador en segundo plano para iOS",
             isFavorite: true,
-            status: .stable,
-            branch: "main",
-            languages: [
-                HomeLanguageShare(name: "Swift", share: 0.89),
-                HomeLanguageShare(name: "Objective-C", share: 0.11)
-            ],
+            isPrivate: true,
+            language: "Swift",
             stars: 1,
-            pullRequests: 18,
+            pullRequests: 0,
             alerts: 2,
+            lastPush: hoursAgo(26),
             lastActivity: hoursAgo(26)
         )
     }
@@ -66,17 +66,13 @@ enum HomeMockData {
             owner: accountName,
             description: "Gestor de tareas y repositorios GitHub",
             isFavorite: true,
-            isOwnApp: true,
-            status: .inDevelopment,
             logoAssetName: "AppLogo",
-            languages: [HomeLanguageShare(name: "Swift", share: 1)],
+            language: "Swift",
+            pullRequests: 0,
+            unpublished: 1,
             tasksTotal: 3,
             tasksPending: 2,
-            taskPreview: [
-                HomeTaskPreview(id: UUID(), title: "Rediseñar UI", isDone: false),
-                HomeTaskPreview(id: UUID(), title: "Conectar API", isDone: true),
-                HomeTaskPreview(id: UUID(), title: "Ajustar base de datos", isDone: false)
-            ],
+            lastPush: hoursAgo(5),
             lastActivity: hoursAgo(5)
         )
     }
@@ -88,16 +84,14 @@ enum HomeMockData {
             owner: accountName,
             description: "Gestión de propiedades de alquiler para pequeños propietarios",
             isFavorite: true,
-            status: .beta,
-            version: "v1.4.0-beta",
-            languages: [
-                HomeLanguageShare(name: "Swift", share: 0.75),
-                HomeLanguageShare(name: "Kotlin", share: 0.25)
-            ],
+            language: "Swift",
             stars: 12,
-            collaborators: 2,
+            pullRequests: 0,
+            isBuildFailing: true,
+            version: "v1.4.0-beta",
             tasksTotal: 3,
             tasksPending: 3,
+            lastPush: hoursAgo(72),
             lastActivity: hoursAgo(72)
         )
     }
@@ -108,16 +102,12 @@ enum HomeMockData {
             name: "Clarity",
             owner: accountName,
             description: "App de iOS para gestionar los gastos",
-            isFavorite: true,
-            status: .maintenance,
-            languages: [
-                HomeLanguageShare(name: "HTML", share: 0.6),
-                HomeLanguageShare(name: "CSS", share: 0.4)
-            ],
+            folder: webFolder,
+            language: "HTML",
             stars: 1,
             pullRequests: 3,
-            lastActivity: hoursAgo(24 * 7),
-            commitsLast7Days: [1, 0, 2, 1, 0, 3, 1]
+            lastPush: hoursAgo(24 * 7),
+            lastActivity: hoursAgo(24 * 7)
         )
     }
 
@@ -127,14 +117,15 @@ enum HomeMockData {
             name: "rental-manager",
             owner: accountName,
             description: "Panel web para gestionar alquileres",
-            isFavorite: true,
-            status: .inactive,
-            languages: [HomeLanguageShare(name: "Svelte", share: 1)],
+            isInactive: true,
+            folder: webFolder,
+            language: "Svelte",
             stars: 1,
             pullRequests: 0,
             tasksTotal: 1,
             tasksPending: 1,
-            lastActivity: hoursAgo(24 * 60)
+            lastPush: hoursAgo(24 * 200),
+            lastActivity: hoursAgo(24 * 200)
         )
     }
 

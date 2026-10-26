@@ -4,84 +4,38 @@ import SwiftUI
 
 // MARK: - Card vocabulary
 
-/// Lifecycle stage of a project, shown as the badge on the trailing edge of its card.
-enum HomeRepoStatus: String, CaseIterable, Identifiable {
-    case live
-    case stable
-    case inDevelopment
-    case beta
-    case maintenance
-    case inactive
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .live: String(localized: "home_status_live")
-        case .stable: String(localized: "home_status_stable")
-        case .inDevelopment: String(localized: "home_status_in_development")
-        case .beta: String(localized: "home_status_beta")
-        case .maintenance: String(localized: "home_status_maintenance")
-        case .inactive: String(localized: "home_status_inactive")
-        }
-    }
-
-    var tint: Color {
-        switch self {
-        case .live: HomeTheme.success
-        case .stable: HomeTheme.info
-        case .inDevelopment: HomeTheme.accent
-        case .beta, .maintenance: HomeTheme.warning
-        case .inactive: HomeTheme.textSecondary
-        }
-    }
-}
-
-/// Outcome of the last CI run, worded like GitHub's own badge.
-enum HomeBuildStatus: String {
-    case passing
-    case failing
-
-    var title: String {
-        switch self {
-        case .passing: String(localized: "home_build_passing")
-        case .failing: String(localized: "home_build_failing")
-        }
-    }
-
-    var tint: Color { self == .passing ? HomeTheme.success : HomeTheme.danger }
-    var symbol: String { self == .passing ? "checkmark.circle.fill" : "xmark.circle.fill" }
-}
-
-/// One language of a repo and the fraction of its code written in it.
-struct HomeLanguageShare: Identifiable, Hashable {
+/// The folder a repo is filed in, as the home needs it for a section header.
+struct HomeFolderInfo: Identifiable, Hashable {
+    let id: String
     let name: String
-    /// `0...1`. A repo with a single known language has `1`.
-    let share: Double
-
-    var id: String { name }
+    let colorHex: String
+    let orderIndex: Int
 }
 
-/// A task shown inline on the card, as a checklist row.
+/// A pending task shown inline on the featured card.
 struct HomeTaskPreview: Identifiable, Hashable {
     let id: UUID
     let title: String
-    let isDone: Bool
 }
 
-struct HomeCommitInfo: Hashable {
-    let message: String
-    let author: String
-    let date: Date
-}
-
-/// The numbers in the strip under the title. Optional ones are left out of the strip entirely
-/// when `nil`, so a source that cannot supply them shows nothing rather than a zero.
+/// The numbers in the strip under the title. Alerts and unpublished tasks only show when they
+/// are not zero: a quiet app stays quiet.
 struct HomeStats: Hashable {
     var totalRepos: Int
-    var commitsToday: Int?
-    var alerts: Int?
     var pendingTasks: Int
+    var alerts = 0
+    var unpublished = 0
+}
+
+extension HomeStats {
+    init(cards: [HomeRepoCardData]) {
+        self.init(
+            totalRepos: cards.count,
+            pendingTasks: cards.reduce(0) { $0 + $1.tasksPending },
+            alerts: cards.reduce(0) { $0 + $1.alerts },
+            unpublished: cards.reduce(0) { $0 + $1.unpublished }
+        )
+    }
 }
 
 // MARK: - Card data
@@ -89,47 +43,45 @@ struct HomeStats: Hashable {
 /// Everything a repo card draws, flattened and value-typed.
 ///
 /// `HomeView` never touches SwiftData: it renders these. That is what lets the same screen show
-/// mock data in a preview, real repos in the app, and later whatever GitHub starts providing
-/// (commit activity, pull requests, CI) without the view changing. Fields the app cannot fill
-/// yet are optional and simply hide their row.
+/// mock data in a preview and real repos in the app. What the model knows comes from
+/// `ProjectRepo`; what only GitHub knows (pull requests, release, CI, last push, visibility)
+/// comes from `RepoActivity` and is optional, so a card without it simply says less.
 struct HomeRepoCardData: Identifiable, Hashable {
     let id: String
     var name: String
     var owner: String?
-    var description: String = ""
+    var description = ""
     var isFavorite = false
-    /// The user's own app. Gets the "Your app" tag and the accent border.
-    var isOwnApp = false
-    /// The hero card at the top: larger logo, larger title, glow.
+    var isPrivate = false
+    /// The hero card at the top: larger logo and title, glow, and the task preview.
     var isFeatured = false
-    var status: HomeRepoStatus?
-    var version: String?
-    var branch: String?
+    /// Archived, or nothing pushed in six months. The only lifecycle badge the card derives,
+    /// because it is the only lifecycle fact GitHub actually knows.
+    var isInactive = false
+    var folder: HomeFolderInfo?
     var logoURL: URL?
     /// An image from the asset catalog, for bundled logos and previews.
     var logoAssetName: String?
     var ownerAvatarURL: URL?
-    var languages: [HomeLanguageShare] = []
+    var language: String?
     var stars = 0
-    var openIssues: Int?
+    /// Open pull requests, when the activity cache has an answer. Shown only when non-zero.
     var pullRequests: Int?
-    /// Unread feedback reports, or anything else that needs the user's eyes.
-    var alerts: Int?
-    var collaborators: Int?
-    var build: HomeBuildStatus?
+    var isBuildFailing = false
+    /// Tag of the latest GitHub release, if the repo publishes any.
+    var version: String?
+    /// Unread feedback reports.
+    var alerts = 0
+    /// Tasks that should be GitHub issues and are not yet.
+    var unpublished = 0
+    /// Issue sync switched itself off after a permission error.
+    var isSyncDisabled = false
     var tasksTotal = 0
     var tasksPending = 0
     var taskPreview: [HomeTaskPreview] = []
+    /// Last push to GitHub when known; `lastActivity` is the fallback.
+    var lastPush: Date?
     var lastActivity: Date = .now
-    var lastCommit: HomeCommitInfo?
-    /// Commits per day, oldest first. Seven entries for the sparkline.
-    var commitsLast7Days: [Int]?
-
-    /// Share of tasks done, `nil` when there are no tasks to measure.
-    var progress: Double? {
-        guard tasksTotal > 0 else { return nil }
-        return Double(tasksTotal - tasksPending) / Double(tasksTotal)
-    }
 
     /// Deterministic monogram colors for a repo without a logo. Derived from the name, not
     /// `hashValue`, so a repo keeps its color between launches.
@@ -152,13 +104,16 @@ extension ProjectRepo {
 }
 
 extension HomeRepoCardData {
-    /// Builds a card from a stored repo, using only what the app knows today.
+    /// Six months without a push reads as inactive.
+    static let inactiveAfter: TimeInterval = 180 * 24 * 60 * 60
+
+    /// Builds a card from a stored repo plus whatever the activity cache knows about it.
     ///
     /// Pending tasks follow the board's own definition of done (`ProjectRepo.doneColumn`) and
     /// skip ideas, the same rules the issue sync applies — a card that disagreed with the board
     /// about how much is left would be worse than no number at all. Orphan tasks (no column)
     /// are not counted either; `OrphanTaskRepair` reattaches them.
-    init(repo: ProjectRepo, unreadFeedback: Int = 0) {
+    init(repo: ProjectRepo, unreadFeedback: Int = 0, activity: RepoActivity? = nil, now: Date = .now) {
         let tasks = (repo.tasks ?? []).sorted { $0.orderIndex < $1.orderIndex }
         let doneID = repo.doneColumn?.id
         let counted = tasks.filter { task in
@@ -170,14 +125,8 @@ extension HomeRepoCardData {
         let full = repo.fullName
         let owner: String? = full.contains("/") ? String(full.prefix { $0 != "/" }) : nil
 
-        let status: HomeRepoStatus?
-        if repo.isArchived {
-            status = .inactive
-        } else if repo.isLocal {
-            status = .inDevelopment
-        } else {
-            status = nil
-        }
+        let lastPush = activity?.pushedAt
+        let quiet = lastPush.map { now.timeIntervalSince($0) > Self.inactiveAfter } ?? false
 
         self.init(
             id: repo.homeCardID,
@@ -185,17 +134,25 @@ extension HomeRepoCardData {
             owner: owner ?? repo.account?.username,
             description: repo.repoDescription,
             isFavorite: repo.isFavorite,
-            status: status,
+            isPrivate: activity?.isPrivate ?? false,
+            isInactive: repo.isArchived || quiet,
+            folder: repo.folder.map {
+                HomeFolderInfo(id: $0.id.uuidString, name: $0.name, colorHex: $0.colorHex, orderIndex: $0.orderIndex)
+            },
             logoURL: repo.logoURL.flatMap(URL.init(string:)),
             ownerAvatarURL: repo.account?.avatarURL.flatMap(URL.init(string:)),
-            languages: repo.language.map { [HomeLanguageShare(name: $0, share: 1)] } ?? [],
+            language: repo.language,
             stars: repo.stargazersCount,
-            alerts: unreadFeedback > 0 ? unreadFeedback : nil,
+            pullRequests: activity?.openPullRequests,
+            isBuildFailing: activity?.isBuildFailing ?? false,
+            version: activity?.latestReleaseTag,
+            alerts: unreadFeedback,
+            unpublished: tasks.filter(\.needsIssueSync).count,
+            isSyncDisabled: repo.syncTasksDisabledReason != nil,
             tasksTotal: counted.count,
             tasksPending: pending.count,
-            taskPreview: pending.prefix(3).map {
-                HomeTaskPreview(id: $0.id, title: $0.content, isDone: false)
-            },
+            taskPreview: pending.prefix(3).map { HomeTaskPreview(id: $0.id, title: $0.content) },
+            lastPush: lastPush,
             lastActivity: repo.updatedAt
         )
     }

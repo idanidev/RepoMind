@@ -6,8 +6,8 @@ import XCTest
 // MARK: - Home card data
 
 /// The redesigned home renders `HomeRepoCardData`, not models. These pin down the mapping from a
-/// stored repo: which tasks count as pending, what the badge says, and that two local projects
-/// never share a card id.
+/// stored repo and the activity cache: which tasks count as pending, what earns a warning chip,
+/// when a repo reads as inactive, and that two local projects never share a card id.
 @MainActor
 final class HomeCardDataTests: XCTestCase {
     /// Kept alive for the duration of a test; `makeContext()` hands out its main context.
@@ -20,7 +20,7 @@ final class HomeCardDataTests: XCTestCase {
     private func makeContext() throws -> ModelContext {
         let config = ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none)
         let container = try ModelContainer(
-            for: ProjectRepo.self, TaskItem.self, KanbanColumn.self, GitHubAccount.self,
+            for: ProjectRepo.self, TaskItem.self, KanbanColumn.self, GitHubAccount.self, RepoFolder.self,
             configurations: config)
         self.container = container
         return container.mainContext
@@ -44,10 +44,27 @@ final class HomeCardDataTests: XCTestCase {
     }
 
     private func addTask(
-        _ content: String, in column: KanbanColumn?, order: Int, to repo: ProjectRepo, context: ModelContext
+        _ content: String, in column: KanbanColumn?, order: Int, to repo: ProjectRepo,
+        context: ModelContext, needsIssueSync: Bool = false
     ) {
-        let task = TaskItem(content: content, column: column, project: repo, orderIndex: order)
+        let task = TaskItem(
+            content: content, column: column, project: repo, orderIndex: order, needsIssueSync: needsIssueSync)
         context.insert(task)
+    }
+
+    private func activity(
+        pushedDaysAgo days: Double? = nil, isPrivate: Bool = false, pullRequests: Int = 0,
+        release: String? = nil, checks: String? = nil
+    ) -> RepoActivity {
+        RepoActivity(
+            repoID: 9_901,
+            pushedAt: days.map { Date.now.addingTimeInterval(-$0 * 86_400) },
+            isPrivate: isPrivate,
+            openPullRequests: pullRequests,
+            latestReleaseTag: release,
+            checksState: checks,
+            fetchedAt: .now
+        )
     }
 
     // MARK: Tasks
@@ -70,18 +87,72 @@ final class HomeCardDataTests: XCTestCase {
         XCTAssertEqual(card.tasksTotal, 5)
         XCTAssertEqual(card.tasksPending, 4)
         XCTAssertEqual(card.taskPreview.map(\.title), ["Task 0", "Task 1", "Task 2"])
-        XCTAssertEqual(try XCTUnwrap(card.progress), 0.2, accuracy: 0.001)
     }
 
-    func testNoTasksMeansNoProgress() throws {
+    func testNoTasksMeansNothingPending() throws {
         let context = try makeContext()
         let card = HomeRepoCardData(repo: makeRepo(in: context))
         XCTAssertEqual(card.tasksTotal, 0)
-        XCTAssertNil(card.progress)
+        XCTAssertEqual(card.tasksPending, 0)
         XCTAssertTrue(card.taskPreview.isEmpty)
     }
 
-    // MARK: Identity and badges
+    // MARK: Warnings
+
+    func testWarningsComeFromTheRepo() throws {
+        let context = try makeContext()
+        let repo = makeRepo(in: context)
+        let todo = addColumn("To Do", order: 0, to: repo, in: context)
+        addTask("Published", in: todo, order: 0, to: repo, context: context)
+        addTask("Waiting", in: todo, order: 1, to: repo, context: context, needsIssueSync: true)
+        addTask("Also waiting", in: todo, order: 2, to: repo, context: context, needsIssueSync: true)
+        repo.syncTasksDisabledReason = "403"
+
+        let card = HomeRepoCardData(repo: repo, unreadFeedback: 3)
+
+        XCTAssertEqual(card.unpublished, 2)
+        XCTAssertTrue(card.isSyncDisabled)
+        XCTAssertEqual(card.alerts, 3)
+        XCTAssertEqual(HomeRepoCardData(repo: makeRepo(in: context, name: "Quiet", repoID: 9_902)).alerts, 0)
+    }
+
+    // MARK: Activity
+
+    func testActivityFillsWhatTheModelLacks() throws {
+        let context = try makeContext()
+        let repo = makeRepo(in: context)
+
+        let bare = HomeRepoCardData(repo: repo)
+        XCTAssertFalse(bare.isPrivate)
+        XCTAssertNil(bare.pullRequests)
+        XCTAssertNil(bare.version)
+        XCTAssertFalse(bare.isBuildFailing)
+        XCTAssertNil(bare.lastPush)
+
+        let known = HomeRepoCardData(
+            repo: repo,
+            activity: activity(pushedDaysAgo: 1, isPrivate: true, pullRequests: 2, release: "v2.0.0", checks: "FAILURE")
+        )
+        XCTAssertTrue(known.isPrivate)
+        XCTAssertEqual(known.pullRequests, 2)
+        XCTAssertEqual(known.version, "v2.0.0")
+        XCTAssertTrue(known.isBuildFailing)
+        XCTAssertNotNil(known.lastPush)
+    }
+
+    func testInactiveComesFromArchiveOrSixQuietMonths() throws {
+        let context = try makeContext()
+        let repo = makeRepo(in: context)
+
+        XCTAssertFalse(HomeRepoCardData(repo: repo).isInactive)
+        XCTAssertFalse(HomeRepoCardData(repo: repo, activity: activity(pushedDaysAgo: 10)).isInactive)
+        XCTAssertTrue(HomeRepoCardData(repo: repo, activity: activity(pushedDaysAgo: 200)).isInactive)
+
+        repo.isArchived = true
+        XCTAssertTrue(HomeRepoCardData(repo: repo, activity: activity(pushedDaysAgo: 1)).isInactive)
+    }
+
+    // MARK: Identity
 
     func testOwnerComesFromTheGitHubURL() throws {
         let context = try makeContext()
@@ -90,24 +161,19 @@ final class HomeCardDataTests: XCTestCase {
         XCTAssertEqual(card.name, "RepoMind")
     }
 
-    func testStatusReflectsArchivedAndLocal() throws {
-        let context = try makeContext()
-        let archived = makeRepo(in: context, name: "Old", repoID: 9_902)
-        archived.isArchived = true
-        let local = makeRepo(in: context, name: "Local", repoID: 0)
-        local.isLocal = true
-        let plain = makeRepo(in: context, name: "Plain", repoID: 9_903)
-
-        XCTAssertEqual(HomeRepoCardData(repo: archived).status, .inactive)
-        XCTAssertEqual(HomeRepoCardData(repo: local).status, .inDevelopment)
-        XCTAssertNil(HomeRepoCardData(repo: plain).status)
-    }
-
-    func testAlertsOnlyWhenThereIsUnreadFeedback() throws {
+    func testFolderIsCarriedOnTheCard() throws {
         let context = try makeContext()
         let repo = makeRepo(in: context)
-        XCTAssertNil(HomeRepoCardData(repo: repo).alerts)
-        XCTAssertEqual(HomeRepoCardData(repo: repo, unreadFeedback: 2).alerts, 2)
+        let folder = RepoFolder(name: "Web", colorHex: "#112233", orderIndex: 2)
+        context.insert(folder)
+        repo.folder = folder
+
+        let card = HomeRepoCardData(repo: repo)
+
+        XCTAssertEqual(card.folder?.name, "Web")
+        XCTAssertEqual(card.folder?.colorHex, "#112233")
+        XCTAssertEqual(card.folder?.orderIndex, 2)
+        XCTAssertNil(HomeRepoCardData(repo: makeRepo(in: context, name: "Loose", repoID: 9_902)).folder)
     }
 
     func testTwoLocalProjectsWithTheSameNameGetDistinctCardIDs() throws {
@@ -122,7 +188,7 @@ final class HomeCardDataTests: XCTestCase {
         XCTAssertNotEqual(HomeRepoCardData(repo: first).id, HomeRepoCardData(repo: second).id)
     }
 
-    // MARK: Filters
+    // MARK: Filters and stats
 
     func testFiltersKeepFavoritesAndPendingWork() {
         let favorite = HomeRepoCardData(id: "a", name: "A", isFavorite: true)
@@ -135,11 +201,17 @@ final class HomeCardDataTests: XCTestCase {
         XCTAssertEqual(HomeFilter.tasks.apply(to: all).map(\.id), ["b"])
     }
 
+    func testStatsSumTheCards() {
+        let stats = HomeStats(cards: HomeMockData.repos)
+        XCTAssertEqual(stats.totalRepos, 6)
+        XCTAssertEqual(stats.pendingTasks, 8)
+        XCTAssertEqual(stats.alerts, 2)
+        XCTAssertEqual(stats.unpublished, 1)
+    }
+
     func testMockDataIsConsistent() {
         let ids = HomeMockData.repos.map(\.id)
         XCTAssertEqual(Set(ids).count, ids.count)
         XCTAssertEqual(HomeMockData.repos.filter(\.isFeatured).count, 1)
-        XCTAssertEqual(HomeMockData.repos.filter(\.isOwnApp).count, 1)
-        XCTAssertEqual(HomeMockData.repos.count, HomeMockData.stats.totalRepos)
     }
 }

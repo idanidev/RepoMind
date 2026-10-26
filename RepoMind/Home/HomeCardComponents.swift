@@ -3,7 +3,7 @@ import SwiftUI
 
 // MARK: - Chip
 
-/// The small metadata pill: neutral by default, tinted when it carries a verdict (build, PRs).
+/// The small metadata pill: neutral by default, tinted when it carries a verdict.
 struct HomeChipModifier: ViewModifier {
     var tint: Color?
 
@@ -53,50 +53,36 @@ struct HomeChip: View {
 }
 
 struct HomeLanguageChip: View {
-    let share: HomeLanguageShare
-
-    private var text: String {
-        guard share.share < 1 else { return share.name }
-        return "\(share.name) \(Int((share.share * 100).rounded()))%"
-    }
+    let language: String
 
     var body: some View {
         HStack(spacing: 5) {
             Circle()
-                .fill(Color.gitHubLanguage(share.name))
+                .fill(Color.gitHubLanguage(language))
                 .frame(width: 7, height: 7)
-            Text(text)
+            Text(language)
         }
         .homeChip()
     }
 }
 
-// MARK: - Status badge
+// MARK: - Inactive badge
 
-struct HomeStatusBadge: View {
-    let status: HomeRepoStatus
-    var version: String?
-
+struct HomeInactiveBadge: View {
     var body: some View {
         HStack(spacing: 5) {
             Circle()
-                .fill(status.tint)
+                .fill(HomeTheme.textSecondary)
                 .frame(width: 6, height: 6)
-            Text(status.title)
-            if let version {
-                Text(verbatim: "•")
-                    .opacity(0.6)
-                Text(version)
-                    .font(.caption2.weight(.semibold).monospaced())
-            }
+            Text("home_status_inactive")
         }
         .font(.caption2.weight(.semibold))
         .lineLimit(1)
-        .foregroundStyle(status.tint)
+        .foregroundStyle(HomeTheme.textSecondary)
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
-        .background(Capsule().fill(status.tint.opacity(0.14)))
-        .overlay(Capsule().strokeBorder(status.tint.opacity(0.35), lineWidth: 0.5))
+        .background(Capsule().fill(HomeTheme.textSecondary.opacity(0.14)))
+        .overlay(Capsule().strokeBorder(HomeTheme.textSecondary.opacity(0.35), lineWidth: 0.5))
         .fixedSize()
     }
 }
@@ -137,62 +123,5 @@ struct HomeRepoLogo: View {
                 .font(.system(size: size * 0.42, weight: .bold, design: .rounded))
                 .foregroundStyle(.white)
         }
-    }
-}
-
-// MARK: - Commit sparkline
-
-/// Seven bars, one per day, the latest at full strength. Drawn with shapes rather than Swift
-/// Charts: there are no axes to show, and a chart would want to add them.
-struct HomeCommitSparkline: View {
-    let values: [Int]
-    var tint: Color = HomeTheme.success
-    var height: CGFloat = 22
-
-    private var peak: CGFloat { CGFloat(max(values.max() ?? 1, 1)) }
-    private var total: Int { values.reduce(0, +) }
-
-    var body: some View {
-        HStack(alignment: .bottom, spacing: 3) {
-            ForEach(Array(values.enumerated()), id: \.offset) { index, value in
-                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
-                    .fill(tint.opacity(index == values.count - 1 ? 1 : 0.55))
-                    .frame(width: 4, height: max(3, height * CGFloat(value) / peak))
-            }
-        }
-        .frame(height: height, alignment: .bottom)
-        .accessibilityElement()
-        .accessibilityLabel(String(format: String(localized: "home_commits_7d_accessibility %lld"), total))
-    }
-}
-
-// MARK: - Progress bar
-
-struct HomeProgressBar: View {
-    let progress: Double
-
-    private var clamped: Double { min(max(progress, 0), 1) }
-
-    var body: some View {
-        GeometryReader { geometry in
-            ZStack(alignment: .leading) {
-                Capsule()
-                    .fill(HomeTheme.surfaceElevated)
-                Capsule()
-                    .fill(
-                        LinearGradient(
-                            colors: [HomeTheme.info, HomeTheme.accent],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    )
-                    .frame(width: max(6, geometry.size.width * clamped))
-            }
-        }
-        .frame(height: 6)
-        .accessibilityElement()
-        .accessibilityLabel(
-            String(format: String(localized: "home_progress_label %lld"), Int((clamped * 100).rounded()))
-        )
     }
 }

@@ -6,19 +6,14 @@ import SwiftUI
 /// One repository on the home screen.
 ///
 /// Every row below the title is optional and driven by the data: a card only grows for what it
-/// can say. The hero (`isFeatured`) and the user's own app (`isOwnApp`) get a glowing border;
-/// everything else sits on a hairline.
+/// can say, and the chips that carry a warning (feedback, unpublished tasks, a failing build)
+/// exist only while there is something to warn about. The hero (`isFeatured`) gets a glowing
+/// border and the task preview; everything else sits on a hairline.
 struct HomeRepoCardView: View {
     let repo: HomeRepoCardData
 
-    private var isHighlighted: Bool { repo.isFeatured || repo.isOwnApp }
-    private var glow: Color { repo.isOwnApp ? HomeTheme.accent : HomeTheme.success }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            if repo.isOwnApp {
-                ownAppTag
-            }
             HStack(alignment: .top, spacing: 12) {
                 HomeRepoLogo(repo: repo, size: repo.isFeatured ? 64 : 48)
                     .shadow(color: HomeTheme.info.opacity(repo.isFeatured ? 0.45 : 0), radius: 10)
@@ -33,11 +28,8 @@ struct HomeRepoCardView: View {
                     activityLine
                 }
             }
-            if let history = repo.commitsLast7Days {
-                sparklineRow(history)
-            }
-            if !repo.taskPreview.isEmpty {
-                taskList
+            if repo.isFeatured, !repo.taskPreview.isEmpty {
+                taskPreview
             }
             metaRow
         }
@@ -49,23 +41,14 @@ struct HomeRepoCardView: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: HomeTheme.cardRadius, style: .continuous)
-                .strokeBorder(border, lineWidth: isHighlighted ? 1 : 0.5)
+                .strokeBorder(border, lineWidth: repo.isFeatured ? 1 : 0.5)
         )
-        .shadow(color: glow.opacity(isHighlighted ? 0.22 : 0), radius: 18, y: 6)
+        .shadow(color: HomeTheme.success.opacity(repo.isFeatured ? 0.22 : 0), radius: 18, y: 6)
+        .opacity(repo.isInactive ? 0.75 : 1)
         .accessibilityElement(children: .combine)
     }
 
     // MARK: Rows
-
-    private var ownAppTag: some View {
-        Text("home_badge_your_app")
-            .font(.caption2.weight(.semibold))
-            .foregroundStyle(HomeTheme.textPrimary)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(Capsule().fill(HomeTheme.surfaceElevated))
-            .overlay(Capsule().strokeBorder(HomeTheme.hairline, lineWidth: 0.5))
-    }
 
     private var titleRow: some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -79,18 +62,15 @@ struct HomeRepoCardView: View {
                 .font(repo.isFeatured ? Font.title2.weight(.bold) : Font.headline.weight(.bold))
                 .foregroundStyle(HomeTheme.textPrimary)
                 .lineLimit(1)
-            if let branch = repo.branch {
-                HStack(spacing: 3) {
-                    Image(systemName: "arrow.triangle.branch")
-                    Text(branch)
-                }
-                .font(.caption.monospaced())
-                .foregroundStyle(HomeTheme.textSecondary)
-                .lineLimit(1)
+            if repo.isPrivate {
+                Image(systemName: "lock.fill")
+                    .font(.caption2)
+                    .foregroundStyle(HomeTheme.textSecondary)
+                    .accessibilityLabel("home_private_label")
             }
             Spacer(minLength: 6)
-            if let status = repo.status {
-                HomeStatusBadge(status: status, version: repo.isFeatured ? repo.version : nil)
+            if repo.isInactive {
+                HomeInactiveBadge()
             }
         }
     }
@@ -106,67 +86,66 @@ struct HomeRepoCardView: View {
         .foregroundStyle(HomeTheme.textSecondary)
     }
 
-    private func sparklineRow(_ history: [Int]) -> some View {
-        HStack(alignment: .bottom) {
-            Text("home_commits_7d")
-                .font(.caption2)
-                .foregroundStyle(HomeTheme.textSecondary)
-            Spacer()
-            HomeCommitSparkline(values: history)
-        }
-    }
-
-    private var taskList: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if let progress = repo.progress {
-                HomeProgressBar(progress: progress)
-            }
-            HomeFlowLayout(spacing: 14, rowSpacing: 6) {
-                ForEach(repo.taskPreview) { task in
-                    HStack(spacing: 5) {
-                        Image(systemName: task.isDone ? "checkmark.square.fill" : "square")
-                            .foregroundStyle(task.isDone ? HomeTheme.success : HomeTheme.textSecondary)
-                        Text(task.title)
-                            .foregroundStyle(task.isDone ? HomeTheme.textSecondary : HomeTheme.textPrimary)
-                            .strikethrough(task.isDone, color: HomeTheme.textSecondary)
-                            .lineLimit(1)
-                    }
-                    .font(.caption)
+    private var taskPreview: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            ForEach(repo.taskPreview) { task in
+                HStack(spacing: 6) {
+                    Image(systemName: "circle")
+                        .font(.system(size: 10))
+                        .foregroundStyle(HomeTheme.accent)
+                    Text(task.title)
+                        .foregroundStyle(HomeTheme.textPrimary)
+                        .lineLimit(1)
                 }
+                .font(.caption)
             }
         }
     }
 
     private var metaRow: some View {
         HomeFlowLayout(spacing: 6, rowSpacing: 6) {
-            ForEach(repo.languages) { HomeLanguageChip(share: $0) }
+            if let language = repo.language {
+                HomeLanguageChip(language: language)
+            }
             if repo.stars > 0 {
                 HomeChip(symbol: "star.fill", text: repo.stars.formatted(), symbolTint: HomeTheme.star)
-            }
-            if let issues = repo.openIssues, issues > 0 {
-                HomeChip(symbol: "smallcircle.filled.circle", text: format("home_open_issues %lld", issues))
             }
             if repo.tasksTotal > 0 {
                 HomeChip(symbol: "checklist", text: tasksText)
             }
-            if let build = repo.build {
-                HomeChip(symbol: build.symbol, text: build.title, tint: build.tint)
+            if repo.alerts > 0 {
+                HomeChip(symbol: "bell.badge.fill", text: repo.alerts.formatted(), tint: HomeTheme.warning)
             }
-            if let prs = repo.pullRequests {
+            if repo.unpublished > 0 {
+                HomeChip(
+                    symbol: "arrow.up.circle",
+                    text: format("home_unpublished_chip %lld", repo.unpublished),
+                    tint: HomeTheme.danger
+                )
+            }
+            if repo.isSyncDisabled {
+                HomeChip(
+                    symbol: "exclamationmark.triangle.fill",
+                    text: String(localized: "home_sync_disabled_chip"),
+                    tint: HomeTheme.danger
+                )
+            }
+            if let prs = repo.pullRequests, prs > 0 {
                 HomeChip(
                     symbol: "arrow.triangle.pull",
                     text: format("home_prs_count %lld", prs),
-                    tint: prs > 0 ? HomeTheme.accent : nil
+                    tint: HomeTheme.accent
                 )
             }
-            if let alerts = repo.alerts, alerts > 0 {
-                HomeChip(symbol: "exclamationmark.triangle.fill", text: alerts.formatted(), tint: HomeTheme.warning)
+            if repo.isBuildFailing {
+                HomeChip(
+                    symbol: "xmark.circle.fill",
+                    text: String(localized: "home_build_failing"),
+                    tint: HomeTheme.danger
+                )
             }
-            if let version = repo.version, !repo.isFeatured {
+            if let version = repo.version {
                 HomeChip(symbol: "tag.fill", text: version)
-            }
-            if let collaborators = repo.collaborators {
-                HomeChip(symbol: "person.2.fill", text: format("home_collaborators_count %lld", collaborators))
             }
         }
     }
@@ -174,10 +153,10 @@ struct HomeRepoCardView: View {
     // MARK: Text
 
     private var border: AnyShapeStyle {
-        guard isHighlighted else { return AnyShapeStyle(HomeTheme.hairline) }
+        guard repo.isFeatured else { return AnyShapeStyle(HomeTheme.hairline) }
         return AnyShapeStyle(
             LinearGradient(
-                colors: [glow.opacity(0.8), glow.opacity(0.25), HomeTheme.hairline],
+                colors: [HomeTheme.success.opacity(0.8), HomeTheme.success.opacity(0.25), HomeTheme.hairline],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
@@ -185,13 +164,10 @@ struct HomeRepoCardView: View {
     }
 
     private var activityText: String {
-        guard let commit = repo.lastCommit else {
-            return String(format: String(localized: "home_last_activity %@"), relative(repo.lastActivity))
+        if let lastPush = repo.lastPush {
+            return String(format: String(localized: "home_last_push %@"), relative(lastPush))
         }
-        return String(
-            format: String(localized: "home_last_commit_detail"),
-            relative(commit.date), commit.message, commit.author
-        )
+        return String(format: String(localized: "home_last_activity %@"), relative(repo.lastActivity))
     }
 
     private var tasksText: String {

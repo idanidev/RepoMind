@@ -172,6 +172,40 @@ actor GitHubService {
         return try decoder.decode([GitHubRepo].self, from: data)
     }
 
+    // MARK: - Repo activity (GraphQL)
+
+    /// Open pull requests, latest release, CI state, last push and visibility for many repos in
+    /// one request per batch. See `RepoActivityQuery` for the document.
+    func fetchRepoActivity(
+        for repos: [(owner: String, name: String)], token: String
+    ) async throws -> [RepoActivity] {
+        var results: [RepoActivity] = []
+        for start in stride(from: 0, to: repos.count, by: RepoActivityQuery.batchSize) {
+            let batch = Array(repos[start..<min(start + RepoActivityQuery.batchSize, repos.count)])
+            let document = RepoActivityQuery.document(for: batch)
+            guard !document.isEmpty else { continue }
+
+            var request = try buildRequest(path: RepoActivityQuery.endpointPath, token: token)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = try JSONEncoder().encode(["query": document])
+            let (data, response) = try await performRequestWithRetry(request)
+
+            guard let http = response as? HTTPURLResponse else {
+                throw GitHubError.invalidResponse(0)
+            }
+            switch http.statusCode {
+            case 200:
+                results += try RepoActivityQuery.parse(data)
+            case 401:
+                throw GitHubError.invalidToken
+            default:
+                throw GitHubError.invalidResponse(http.statusCode)
+            }
+        }
+        return results
+    }
+
     // MARK: - Fetch Repo Contents (File Browser)
 
     func fetchContents(owner: String, repo: String, path: String, token: String) async throws -> [RepoContentItem] {

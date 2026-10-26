@@ -8,11 +8,12 @@ enum HomeRoute: Hashable {
 
 // MARK: - Live home
 
-/// The redesigned home fed from SwiftData.
+/// The redesigned home fed from SwiftData and the activity cache.
 ///
-/// `HomeView` knows nothing about models. This is the one place that turns `ProjectRepo` into
-/// card data, applies the free-tier limit the same way `RepoListView` does, and pushes the board
-/// when a card is tapped. Drop it in wherever `RepoListView()` is used to try the redesign.
+/// `HomeView` knows nothing about models. This is the one place that turns `ProjectRepo` plus
+/// `RepoActivity` into card data, applies the free-tier limit the same way `RepoListView` does,
+/// and pushes the board when a card is tapped. Drop it in wherever `RepoListView()` is used to
+/// try the redesign.
 struct HomeLiveView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \ProjectRepo.updatedAt, order: .reverse) private var repos: [ProjectRepo]
@@ -20,31 +21,43 @@ struct HomeLiveView: View {
     @Query private var feedbackIssues: [FeedbackIssue]
 
     @State private var subscription = SubscriptionManager.shared
+    @State private var activity = RepoActivityStore.shared
     @State private var path = NavigationPath()
     @State private var showAddLocalProject = false
 
     var body: some View {
         NavigationStack(path: $path) {
-            HomeView(
-                accountName: accountName,
-                stats: stats,
-                repos: cards,
-                onSelectRepo: open,
-                onAdd: { showAddLocalProject = true },
-                onNotifications: { path.append(HomeRoute.today) }
-            )
-            .navigationDestination(for: ProjectRepo.self) { repo in
-                KanbanView(project: repo)
+            home
+        }
+    }
+
+    private var home: some View {
+        let cards = self.cards
+        return HomeView(
+            accountName: accountName,
+            stats: HomeStats(cards: cards),
+            repos: cards,
+            onSelectRepo: open,
+            onAdd: { showAddLocalProject = true },
+            onNotifications: { path.append(HomeRoute.today) },
+            onRefresh: { await activity.refresh(repos: repos, accounts: accounts, force: true) }
+        )
+        .navigationDestination(for: ProjectRepo.self) { repo in
+            KanbanView(project: repo)
+        }
+        .navigationDestination(for: HomeRoute.self) { route in
+            switch route {
+            case .today: TodayView()
             }
-            .navigationDestination(for: HomeRoute.self) { route in
-                switch route {
-                case .today: TodayView()
-                }
-            }
-            .sheet(isPresented: $showAddLocalProject) {
-                AddLocalProjectSheet()
-                    .environment(\.modelContext, context)
-            }
+        }
+        .sheet(isPresented: $showAddLocalProject) {
+            AddLocalProjectSheet()
+                .environment(\.modelContext, context)
+        }
+        // Once on appear and again whenever repos arrive, as they do from CloudKit on a fresh
+        // device. The store's hour-long cache makes the extra runs free.
+        .task(id: repos.count) {
+            await activity.refresh(repos: repos, accounts: accounts)
         }
     }
 
@@ -82,21 +95,14 @@ struct HomeLiveView: View {
     private var cards: [HomeRepoCardData] {
         let unread = unreadFeedbackByRepo
         return visibleRepos.enumerated().map { index, repo in
-            var card = HomeRepoCardData(repo: repo, unreadFeedback: unread[repo.fullName] ?? 0)
+            var card = HomeRepoCardData(
+                repo: repo,
+                unreadFeedback: unread[repo.fullName] ?? 0,
+                activity: activity.activity(for: repo.repoID)
+            )
             card.isFeatured = index == 0
             return card
         }
-    }
-
-    private var stats: HomeStats {
-        let cards = self.cards
-        let alerts = cards.reduce(0) { $0 + ($1.alerts ?? 0) }
-        return HomeStats(
-            totalRepos: cards.count,
-            commitsToday: nil,
-            alerts: alerts,
-            pendingTasks: cards.reduce(0) { $0 + $1.tasksPending }
-        )
     }
 
     private func open(_ card: HomeRepoCardData) {

@@ -44,6 +44,10 @@ bundle exec fastlane ios upload_metadata
 - **Salud de iCloud**: `CloudKitSyncMonitor.swift` observa `eventChangedNotification` y desglosa
   los `partialFailure` — sin esto un fallo de sync es indistinguible del éxito
 - **Reparación**: `OrphanTaskRepair.swift` reengancha tareas que perdieron su columna
+- **Actividad de GitHub**: `RepoActivityStore.swift` cachea una hora en `UserDefaults` lo que solo
+  sabe GitHub de cada repo (PRs abiertas, último release, estado de CI, último push, visibilidad),
+  obtenido en una sola consulta GraphQL con `GitHubService.fetchRepoActivity`. A propósito no es
+  SwiftData: es volátil, y así no toca el esquema de CloudKit
 - **Bridge MCP**: `bridge/` (TypeScript) expone las tareas a agentes de código vía GitHub Issues
 
 ## Estructura de carpetas

@@ -152,8 +152,9 @@ struct HomeHeaderView: View {
 
 // MARK: - Stats strip
 
-/// "6 total • 13 commits today • 4 alerts • 8 pending". Scrolls sideways rather than shrinking
-/// when a large Dynamic Type size or a long translation does not fit.
+/// "6 repos • 8 pending • 4 alerts • 2 unpublished". Alerts and unpublished only appear when
+/// non-zero. Scrolls sideways rather than shrinking when a large Dynamic Type size or a long
+/// translation does not fit.
 struct HomeStatsStrip: View {
     let stats: HomeStats
 
@@ -162,24 +163,19 @@ struct HomeStatsStrip: View {
             HStack(spacing: 6) {
                 Text("home_stat_total \(stats.totalRepos)")
                     .foregroundStyle(HomeTheme.success)
-                if let commits = stats.commitsToday {
-                    separator
-                    HStack(spacing: 3) {
-                        Text("home_stat_commits_today \(commits)")
-                        Image(systemName: "flame.fill")
-                            .font(.caption2)
-                            .foregroundStyle(.orange)
-                    }
-                    .foregroundStyle(HomeTheme.success)
-                }
-                if let alerts = stats.alerts {
-                    separator
-                    Text("home_stat_alerts \(alerts)")
-                        .foregroundStyle(alerts > 0 ? HomeTheme.accent : HomeTheme.textSecondary)
-                }
                 separator
                 Text("home_stat_pending \(stats.pendingTasks)")
                     .foregroundStyle(stats.pendingTasks > 0 ? HomeTheme.accent : HomeTheme.textSecondary)
+                if stats.alerts > 0 {
+                    separator
+                    Text("home_stat_alerts \(stats.alerts)")
+                        .foregroundStyle(HomeTheme.warning)
+                }
+                if stats.unpublished > 0 {
+                    separator
+                    Text("home_stat_unpublished \(stats.unpublished)")
+                        .foregroundStyle(HomeTheme.danger)
+                }
             }
             .font(.footnote.weight(.semibold))
             .monospacedDigit()
