@@ -1,5 +1,5 @@
 # TestFlight sin Mac: un runner macOS de GitHub archiva la app iOS y la sube a
-# TestFlight (pruebas internas). Arranca con cada push a la rama de abajo; el
+# TestFlight (pruebas internas). Arranca con cada push a las ramas de abajo; el
 # lanzamiento a mano (Actions → TestFlight → Run workflow) funciona en cuanto
 # el fichero esté también en main, que es la rama que GitHub indexa.
 #
@@ -18,6 +18,7 @@ name: TestFlight
 on:
   push:
     branches:
+      - redesign/home-oled
       - claude/testflight
   workflow_dispatch:
 
