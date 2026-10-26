@@ -55,7 +55,7 @@ bundle exec fastlane ios upload_metadata
 ```
 RepoMind/
 ├── Components/        # Vistas reutilizables (Kanban*, TaskCard, VoiceFAB)
-├── Home/              # Rediseño del inicio (HomeView, tarjetas, HomeLiveView) — aún no conectado
+├── Home/              # Inicio rediseñado (HomeView, tarjetas, HomeLiveView) — es la home en iPhone
 ├── ViewModels/        # KanbanViewModel.swift
 ├── Models/            # Modelos SwiftData (@Model)
 ├── en.lproj/          # Strings inglés

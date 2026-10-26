@@ -28,16 +28,16 @@ enum HomeFilter: String, CaseIterable, Identifiable {
 
 // MARK: - Header
 
-/// Title, account, the four actions, the stats strip and the filter chips — everything above
+/// Title, account, the three actions, the stats strip and the filter chips — everything above
 /// the first card. Search is inline: tapping the glass opens a field under the title instead of
-/// pushing the whole screen into a navigation bar it does not otherwise have.
+/// pushing the whole screen into a navigation bar it does not otherwise have. Filtering lives
+/// in the chips, so there is no separate filter button.
 struct HomeHeaderView: View {
     var accountName: String?
     let stats: HomeStats
     @Binding var filter: HomeFilter
     @Binding var isSearching: Bool
     @Binding var searchText: String
-    var onFilter: () -> Void = {}
     var onAdd: () -> Void = {}
     var onNotifications: () -> Void = {}
 
@@ -91,7 +91,6 @@ struct HomeHeaderView: View {
                 iconButton("magnifyingglass", label: "home_search_label") {
                     withAnimation(.snappy(duration: 0.25)) { isSearching.toggle() }
                 }
-                iconButton("line.3.horizontal.decrease", label: "filter_repos_label", action: onFilter)
                 iconButton("plus", label: "home_add_label", action: onAdd)
                 iconButton("bell", label: "home_notifications_label", action: onNotifications)
             }

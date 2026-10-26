@@ -43,7 +43,9 @@ struct ContentView: View {
                     if horizontalSizeClass == .regular {
                         AdaptiveRepoListView()
                     } else {
-                        RepoListView()
+                        // The redesigned home. `RepoListView` stays for reference until the
+                        // new screen covers its swipe actions and the free-tier banner.
+                        HomeLiveView()
                     }
                 } else {
                     LoginView(isAuthenticated: $isAuthenticated)

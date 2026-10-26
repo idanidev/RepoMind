@@ -15,10 +15,13 @@ struct HomeView: View {
     let stats: HomeStats
     let repos: [HomeRepoCardData]
     var onSelectRepo: (HomeRepoCardData) -> Void = { _ in }
-    var onFilter: () -> Void = {}
     var onAdd: () -> Void = {}
     var onNotifications: () -> Void = {}
     var onRefresh: () async -> Void = {}
+    /// Asked when a tab other than Repos is tapped. Returning `true` means the host handled it
+    /// (pushed a screen, opened a sheet) and the bar stays on Repos; `false` shows the
+    /// placeholder. The preview handles nothing, the live screen handles Tasks and Settings.
+    var onSelectTab: (HomeTab) -> Bool = { _ in false }
 
     @State private var filter: HomeFilter = .all
     @State private var tab: HomeTab = .repos
@@ -78,7 +81,7 @@ struct HomeView: View {
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            HomeTabBar(selection: $tab)
+            HomeTabBar(selection: tabSelection)
                 .padding(.horizontal, HomeTheme.gutter)
                 .padding(.top, 8)
                 .padding(.bottom, 4)
@@ -94,6 +97,20 @@ struct HomeView: View {
         .toolbar(.hidden, for: .navigationBar)
     }
 
+    /// Routes a tap on Tasks or Settings to the host before switching tabs.
+    private var tabSelection: Binding<HomeTab> {
+        Binding(
+            get: { tab },
+            set: { selected in
+                if selected != .repos, onSelectTab(selected) {
+                    tab = .repos
+                } else {
+                    tab = selected
+                }
+            }
+        )
+    }
+
     // MARK: Repos
 
     private var reposTab: some View {
@@ -105,7 +122,6 @@ struct HomeView: View {
                     filter: $filter,
                     isSearching: $isSearching,
                     searchText: $searchText,
-                    onFilter: onFilter,
                     onAdd: onAdd,
                     onNotifications: onNotifications
                 )
