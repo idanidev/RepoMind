@@ -105,7 +105,8 @@ final class HomeDigestTests: XCTestCase {
             schema: 1, app: "InSync", generatedAt: now, periodDays: 30,
             headline: [
                 RepoStats.Headline(key: "active_day", label: "Activas hoy", value: 12, previous: nil, primary: nil),
-                RepoStats.Headline(key: "active_week", label: "Activas 7 días", value: 31, previous: 25, primary: true),
+                RepoStats.Headline(
+                    key: "active_week", label: "Activas 7 días", value: 31, previous: 25, primary: true),
             ],
             issues: [
                 RepoStats.Issue(kind: "crash", title: "a", at: now, count: 3, version: nil, url: nil, status: nil),
