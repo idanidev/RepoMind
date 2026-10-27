@@ -544,3 +544,30 @@
 "stats_times %lld" = "%lld veces";
 "stats_show_all" = "Ver todas";
 "stats_show_less" = "Ver menos";
+
+/* Resumen de la home */
+"home_digest_title" = "Resumen";
+"home_digest_captured %lld" = "%lld capturadas esta semana";
+"home_digest_tile_abandoned" = "abandonadas";
+"home_digest_tile_unpublished" = "sin publicar";
+"home_digest_tile_builds" = "builds en rojo";
+"home_digest_tile_feedback" = "informes sin leer";
+"home_digest_prs %lld" = "%lld PR(s) abiertas";
+"home_digest_dormant %lld" = "%lld repo(s) dormido(s): tareas pendientes y ningún push en un mes";
+"home_digest_sync_errors %lld" = "%lld tarea(s) no se han podido publicar";
+"home_digest_apps" = "APPS";
+"home_digest_crashes %lld" = "%lld cierre(s)";
+"home_digest_reports %lld" = "%lld reporte(s)";
+"home_digest_title_abandoned" = "Tareas abandonadas";
+"home_digest_title_sync_errors" = "Errores al publicar";
+"home_digest_title_builds" = "Builds en rojo";
+"home_digest_title_prs" = "PRs abiertas";
+"home_digest_title_dormant" = "Repos dormidos";
+"home_digest_abandoned_footer" = "Capturadas hace dos semanas o más y aún sin hacer. Termínalas, pásalas a ideas o bórralas.";
+"home_digest_dormant_footer" = "Repos con tareas pendientes y ningún push en un mes. O el trabajo no avanza o las tareas ya no valen.";
+"home_digest_open_board" = "Abrir tablero";
+"home_digest_captured_ago %@" = "capturada %@";
+"home_digest_last_push %@" = "último push %@";
+"home_digest_pr_count %lld" = "%lld PR(s) abiertas";
+"home_digest_build_failing" = "build en rojo";
+"home_digest_empty" = "Nada por aquí";

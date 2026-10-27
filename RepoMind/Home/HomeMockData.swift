@@ -13,6 +13,17 @@ enum HomeMockData {
 
     static var stats: HomeStats { HomeStats(cards: repos) }
 
+    static var digest: HomeDigest {
+        HomeDigest(
+            abandoned: 4, unpublished: 2, syncErrors: 1, failingBuilds: 1, pullRequests: 3,
+            unreadFeedback: 2, dormantRepos: 1, capturedThisWeek: 7,
+            apps: [
+                HomeDigestApp(
+                    repoID: -2, name: "InSync", headline: "31 Activas 7 días", change: 0.12,
+                    crashes: 2, reports: 1)
+            ])
+    }
+
     static var repos: [HomeRepoCardData] {
         [focvs, inSync, repoMind, rentalManagerIOS, clarity, rentalManagerWeb]
     }

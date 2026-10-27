@@ -73,7 +73,8 @@ Sin Mac, lo mismo desde GitHub Actions (`.github/workflows`), con los secretos `
 ```
 RepoMind/
 ├── Components/        # Vistas reutilizables (Kanban*, TaskCard, VoiceFAB)
-├── Home/              # Inicio rediseñado (HomeView, tarjetas, HomeLiveView con las pestañas) — la home en iPhone
+├── Home/              # Inicio rediseñado (HomeView, tarjetas, HomeLiveView con las pestañas) — la home en iPhone.
+│                      # HomeDigest: el resumen de arriba (abandonadas, sin publicar, builds, PRs, repos dormidos, apps)
 ├── Board/             # Tablero rediseñado para iPhone (BoardView sobre KanbanViewModel); iPad/Mac usan KanbanView
 ├── ViewModels/        # KanbanViewModel.swift
 ├── Models/            # Modelos SwiftData (@Model)

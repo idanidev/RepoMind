@@ -4,6 +4,8 @@ import SwiftUI
 /// Where the user can go from the home screen besides a board.
 enum HomeRoute: Hashable {
     case today
+    case digest(HomeDigestKind)
+    case stats(ProjectRepo)
 }
 
 // MARK: - Live home
@@ -78,6 +80,8 @@ struct HomeLiveView: View {
             .navigationDestination(for: HomeRoute.self) { route in
                 switch route {
                 case .today: TodayView()
+                case .digest(let kind): HomeDigestView(kind: kind)
+                case .stats(let repo): BoardStatsView(project: repo)
                 }
             }
             .sheet(isPresented: $showAddLocalProject) {
@@ -129,6 +133,7 @@ struct HomeLiveView: View {
                 names: accountNames, selected: selectedAccount,
                 isPro: subscription.isPro, isDemo: isDemoMode),
             stats: HomeStats(cards: cards.filter { !$0.isArchived }),
+            digest: digest,
             repos: cards,
             repoLimit: subscription.isPro ? nil : subscription.maxFreeRepos,
             searchText: searchText,
@@ -254,7 +259,32 @@ struct HomeLiveView: View {
             signOut: { showSignOutConfirm = true },
             add: { showAddLocalProject = true },
             notifications: { path.append(HomeRoute.today) },
-            refresh: { await refresh() }
+            refresh: { await refresh() },
+            openDigest: { kind in
+                // Today already lists these two, with the retry button; no second screen.
+                switch kind {
+                case .unpublished, .feedback: path.append(HomeRoute.today)
+                default: path.append(HomeRoute.digest(kind))
+                }
+            },
+            openStats: { repoID in
+                if let repo = repos.first(where: { $0.repoID == repoID }) {
+                    path.append(HomeRoute.stats(repo))
+                }
+            }
+        )
+    }
+
+    /// The same repos the strip counts: the selected account, archived left out.
+    private var digest: HomeDigest {
+        let mine = repos.filter { selectedAccount == nil || $0.account?.username == selectedAccount }
+        let unread = feedbackIssues.filter { !$0.isRead && !$0.isSnoozed && $0.state == "open" }
+        let names = Set(mine.map(\.fullName))
+        return HomeDigest(
+            repos: mine,
+            unreadFeedback: unread.filter { names.contains($0.repoFullName) }.count,
+            activity: activity.activity(for:),
+            stats: statsStore.stats(for:)
         )
     }
 

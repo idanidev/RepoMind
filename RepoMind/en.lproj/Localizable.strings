@@ -545,3 +545,30 @@
 "stats_times %lld" = "%lld times";
 "stats_show_all" = "Show all";
 "stats_show_less" = "Show less";
+
+/* Home digest */
+"home_digest_title" = "Summary";
+"home_digest_captured %lld" = "%lld captured this week";
+"home_digest_tile_abandoned" = "abandoned";
+"home_digest_tile_unpublished" = "unpublished";
+"home_digest_tile_builds" = "failing builds";
+"home_digest_tile_feedback" = "unread reports";
+"home_digest_prs %lld" = "%lld open pull request(s)";
+"home_digest_dormant %lld" = "%lld dormant repo(s): tasks waiting, no push in a month";
+"home_digest_sync_errors %lld" = "%lld task(s) could not be published";
+"home_digest_apps" = "APPS";
+"home_digest_crashes %lld" = "%lld crash(es)";
+"home_digest_reports %lld" = "%lld report(s)";
+"home_digest_title_abandoned" = "Abandoned tasks";
+"home_digest_title_sync_errors" = "Publish errors";
+"home_digest_title_builds" = "Failing builds";
+"home_digest_title_prs" = "Open pull requests";
+"home_digest_title_dormant" = "Dormant repos";
+"home_digest_abandoned_footer" = "Captured two weeks ago or more and still not done. Finish them, move them to ideas, or delete them.";
+"home_digest_dormant_footer" = "Repos with pending tasks and no push in a month. Either the work is not happening or the tasks are stale.";
+"home_digest_open_board" = "Open board";
+"home_digest_captured_ago %@" = "captured %@";
+"home_digest_last_push %@" = "last push %@";
+"home_digest_pr_count %lld" = "%lld open PR(s)";
+"home_digest_build_failing" = "build failing";
+"home_digest_empty" = "Nothing here";

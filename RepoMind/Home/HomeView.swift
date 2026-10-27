@@ -18,6 +18,8 @@ struct HomeActions {
     var add: () -> Void = {}
     var notifications: () -> Void = {}
     var refresh: () async -> Void = {}
+    var openDigest: (HomeDigestKind) -> Void = { _ in }
+    var openStats: (Int) -> Void = { _ in }
 }
 
 // MARK: - Home
@@ -31,6 +33,8 @@ struct HomeActions {
 struct HomeView: View {
     var account = HomeAccountMenuData()
     let stats: HomeStats
+    /// The summary card under the header. Quiet by default, so a preview needs nothing.
+    var digest = HomeDigest()
     let repos: [HomeRepoCardData]
     /// `nil` for Pro. A free account sees at most this many repos per filter, favorites first,
     /// and a banner says how many are hidden — the same gate `RepoListView` applies.
@@ -109,6 +113,12 @@ struct HomeView: View {
                 )
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.bottom, 2)
+
+                // Only on the main list: a search or a filter is a question about repos, not
+                // about the account, and the digest answering it there would be noise.
+                if !digest.isQuiet, query.isEmpty, filter == .all {
+                    HomeDigestCard(digest: digest, onOpen: actions.openDigest, onOpenStats: actions.openStats)
+                }
 
                 if visibleRepos.isEmpty {
                     emptyState
@@ -288,6 +298,7 @@ struct HomeView: View {
     HomeView(
         account: HomeAccountMenuData(names: [HomeMockData.accountName], isPro: true),
         stats: HomeMockData.stats,
+        digest: HomeMockData.digest,
         repos: HomeMockData.repos
     )
     .background(HomeTheme.background)
