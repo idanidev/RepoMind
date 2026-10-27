@@ -47,15 +47,22 @@ platform :ios do
       readonly: true
     )
 
-    profile = ENV["sigh_#{BUNDLE_ID.gsub('.','_')}_appstore_profile-name"]
+    # match deja el perfil en lane_context y en ENV["sigh_<bundle id>_appstore_profile-name"],
+    # con los puntos del bundle id tal cual (no con guiones bajos).
+    profile = (lane_context[SharedValues::MATCH_PROVISIONING_PROFILE_MAPPING] || {})[BUNDLE_ID] ||
+              ENV["sigh_#{BUNDLE_ID}_appstore_profile-name"]
+    identity = ENV["sigh_#{BUNDLE_ID}_appstore_certificate-name"] || "Apple Distribution"
+    UI.user_error!("match no ha dejado perfil para #{BUNDLE_ID}") if ENV["CI"] && profile.to_s.empty?
 
     # En CI el archive se firma a mano con el certificado de distribución que trae match.
     # Con la firma automática, Xcode busca un certificado de desarrollo con clave privada en
     # el runner, no lo encuentra y crea uno nuevo en cada run; a los pocos runs la cuenta
     # llega al máximo de certificados y el archive falla ("Choose a certificate to revoke").
+    # Vale para todo el build porque el scheme solo archiva la app: no hay extensiones ni
+    # paquetes de Swift a los que un perfil impuesto les sobre.
     xcargs = ENV["CI"] ? [
       "CODE_SIGN_STYLE=Manual",
-      "CODE_SIGN_IDENTITY='Apple Distribution'",
+      "CODE_SIGN_IDENTITY='#{identity}'",
       "PROVISIONING_PROFILE_SPECIFIER='#{profile}'",
       "DEVELOPMENT_TEAM=AXK73U74AC",
     ].join(" ") : nil

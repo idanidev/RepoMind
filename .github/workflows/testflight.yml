@@ -30,7 +30,9 @@ on:
     paths-ignore:
       - "**.md"
       - "docs/**"
-      - "fastlane/**"
+      # El Fastfile sí cuenta: la lane beta es la que compila y firma.
+      - "fastlane/metadata/**"
+      - "fastlane/screenshots/**"
       - ".github/workflows/tests.yml"
       - ".github/workflows/release.yml"
       - ".github/workflows/docs.yml"
