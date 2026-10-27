@@ -51,12 +51,15 @@ jobs:
           xcrun simctl list devices available | grep "$udid"
 
       - name: xcodebuild test
+        # Sin paralelo: Xcode clona el simulador por cada worker y, en un runner justo de recursos,
+        # un clon no llega a arrancar la app ("server died") y un test sin culpa se marca fallado.
         run: |
           set +e
           xcodebuild test \
             -project RepoMind.xcodeproj -scheme RepoMind \
             -destination "platform=iOS Simulator,id=${{ steps.sim.outputs.udid }}" \
             -only-testing:RepoMindTests \
+            -parallel-testing-enabled NO \
             -resultBundlePath "$RUNNER_TEMP/Tests.xcresult" \
             > "$RUNNER_TEMP/tests.log" 2>&1
           estado=$?
