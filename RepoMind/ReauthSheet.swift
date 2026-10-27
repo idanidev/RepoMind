@@ -101,7 +101,7 @@ struct ReauthSheet: View {
                     format: String(localized: "reauth_wrong_account %@ %@"), user.login, account.username)
                 return
             }
-            try KeychainManager.shared.saveToken(trimmed, for: account.tokenKey)
+            try await KeychainManager.shared.saveToken(trimmed, for: account.tokenKey)
             ToastManager.shared.show(String(localized: "reauth_success"), style: .success)
             dismiss()
         } catch {

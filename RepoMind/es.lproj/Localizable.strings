@@ -742,3 +742,7 @@
 "alert_store_approved_body" = "Lista para publicarse.";
 "alert_store_rejected_title %@ %@" = "%@ %@ rechazada";
 "alert_store_rejected_body" = "Mira el motivo en App Store Connect.";
+
+/* Launch errors */
+"db_error_title" = "Error de base de datos";
+"db_error_hint" = "Prueba a reinstalar la app o contacta con soporte.";

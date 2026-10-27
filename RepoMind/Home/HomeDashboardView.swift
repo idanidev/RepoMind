@@ -43,17 +43,7 @@ struct HomeDashboardView: View {
                 }
                 HomeDashboardGitHubCard(
                     github: data.github, onOpenRepo: actions.openRepo, onOpenDigest: actions.openDigest)
-                if data.apps.isEmpty {
-                    appsHint
-                } else {
-                    ForEach(data.apps) { app in
-                        HomeDashboardAppCard(summary: app, onOpenStats: actions.openStats)
-                    }
-                }
-                if !data.store.isEmpty {
-                    HomeStoreCard(apps: data.store, updatedAt: data.storeUpdatedAt, onOpenRepo: actions.openRepo)
-                }
-                appsPanelLink
+                appCards
                 HomeDashboardAccountCard(data: data, onShowRepos: actions.showRepos)
             }
             .padding(.horizontal, HomeTheme.gutter)
@@ -62,6 +52,24 @@ struct HomeDashboardView: View {
         }
         .refreshable { await actions.refresh() }
         .scrollIndicators(.hidden)
+    }
+
+    /// The apps' cards, the App Store card and the link to the apps panel. Apart because a `ViewBuilder`
+    /// takes at most ten children and the stack above reached eleven when the store card arrived:
+    /// that is a compile error that only shows on the next build.
+    @ViewBuilder
+    private var appCards: some View {
+        if data.apps.isEmpty {
+            appsHint
+        } else {
+            ForEach(data.apps) { app in
+                HomeDashboardAppCard(summary: app, onOpenStats: actions.openStats)
+            }
+        }
+        if !data.store.isEmpty {
+            HomeStoreCard(apps: data.store, updatedAt: data.storeUpdatedAt, onOpenRepo: actions.openRepo)
+        }
+        appsPanelLink
     }
 
     // MARK: Header

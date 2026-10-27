@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 import UserNotifications
 
 // MARK: - Router

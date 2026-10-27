@@ -47,6 +47,11 @@ final class KanbanViewModel {
         self.modelContext = modelContext
     }
 
+    /// One of these is created and dropped per board, and the tests free them from a synchronous
+    /// `tearDown`. See the convention in CLAUDE.md: the synthesized main-actor `deinit` aborts in
+    /// the iOS 26 runtime when the object dies outside a task (swiftlang/swift#85663).
+    nonisolated deinit {}
+
     // MARK: - GitHub Issue Sync
 
     private var isDemoMode: Bool {

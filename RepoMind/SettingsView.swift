@@ -213,56 +213,7 @@ struct SettingsView: View {
                 }
             }
 
-            // MARK: - Task sync
-
-            Section {
-                NavigationLink {
-                    IssueSyncSettingsView()
-                } label: {
-                    HStack {
-                        Label(
-                            "issue_sync_settings_title",
-                            systemImage: "arrow.trianglehead.2.clockwise")
-                        Spacer()
-                        Text("\(repos.filter(\.syncTasksToGitHub).count)/\(repos.filter { !$0.isLocal }.count)")
-                            .font(.subheadline)
-                            .monospacedDigit()
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            } header: {
-                Text("issue_sync_section_header")
-            }
-
-            // MARK: - Backup
-
-            Section {
-                Button {
-                    exportBackup()
-                } label: {
-                    Label("export_backup_button", systemImage: "square.and.arrow.up")
-                }
-                .disabled(repos.isEmpty)
-
-                Button {
-                    showImporter = true
-                } label: {
-                    if isImporting {
-                        HStack {
-                            Text("import_backup_button")
-                            Spacer()
-                            ProgressView().controlSize(.small)
-                        }
-                    } else {
-                        Label("import_backup_button", systemImage: "square.and.arrow.down")
-                    }
-                }
-                .disabled(isImporting)
-            } header: {
-                Text("backup_section_header")
-            } footer: {
-                Text("backup_footer")
-            }
+            taskSyncAndBackupSections
 
             // MARK: - Debug (solo en desarrollo)
 
@@ -297,70 +248,13 @@ struct SettingsView: View {
             }
             #endif
 
-            // MARK: - About
-
-            // MARK: - Voice
-
-            Section {
-                Toggle("voice_ai_toggle", isOn: $voiceAIEnabled)
-                Picker("voice_silence_picker", selection: $voiceSilenceSeconds) {
-                    Text("voice_silence_2").tag(2.0)
-                    Text("voice_silence_3").tag(3.0)
-                    Text("voice_silence_5").tag(5.0)
-                    Text("voice_silence_never").tag(0.0)
-                }
-                TextField("voice_vocabulary_placeholder", text: $voiceCustomVocabulary, axis: .vertical)
-                    .lineLimit(1...4)
-                    .autocorrectionDisabled()
-            } header: {
-                Text("voice_section_header")
-            } footer: {
-                Text("voice_ai_footer")
-            }
-
-            // MARK: - Agent
-
-            Section {
-                Toggle("agent_delegate_toggle", isOn: $delegateNewTasks)
-            } header: {
-                Text("agent_section_header")
-            } footer: {
-                Text("agent_footer")
-            }
+            voiceAndAgentSections
 
             // MARK: - App Store
 
             SettingsStoreSection()
 
-            // MARK: - Alerts (Pro)
-
-            Section {
-                Group {
-                    Toggle("alerts_ci_toggle", isOn: $alertsCI)
-                    Toggle("alerts_releases_toggle", isOn: $alertsReleases)
-                    Toggle("alerts_security_toggle", isOn: $alertsSecurity)
-                    Toggle("alerts_crashes_toggle", isOn: $alertsCrashes)
-                    Toggle("alerts_store_toggle", isOn: $alertsStore)
-                }
-                .disabled(!subscription.isPro)
-                if !subscription.isPro {
-                    Button {
-                        showPaywall = true
-                    } label: {
-                        Label("alerts_pro_button", systemImage: "crown")
-                            .foregroundStyle(.purple)
-                    }
-                }
-            } header: {
-                Text("alerts_section_header")
-            } footer: {
-                Text("alerts_footer")
-            }
-            .onChange(of: [alertsCI, alertsReleases, alertsSecurity, alertsCrashes, alertsStore]) { _, now in
-                if now.contains(true) {
-                    Task { _ = await FeedbackNotificationManager.shared.requestAuthorizationIfNeeded() }
-                }
-            }
+            alertsSection
 
             Section("about_header") {
                 HStack {
@@ -412,6 +306,120 @@ struct SettingsView: View {
             allowsMultipleSelection: false
         ) { result in
             Task { await handleImport(result) }
+        }
+    }
+
+    // MARK: - Sections split out of the list
+
+    // A `ViewBuilder` takes at most ten children. With the Debug section counted the list above had
+    // eleven, which fails the tests job (it builds Debug) while an archive still compiled. Task sync
+    // and backup, voice and agent, and alerts live apart so the list keeps room to grow.
+
+    @ViewBuilder
+    private var taskSyncAndBackupSections: some View {
+        Section {
+            NavigationLink {
+                IssueSyncSettingsView()
+            } label: {
+                HStack {
+                    Label(
+                        "issue_sync_settings_title",
+                        systemImage: "arrow.trianglehead.2.clockwise")
+                    Spacer()
+                    Text("\(repos.filter(\.syncTasksToGitHub).count)/\(repos.filter { !$0.isLocal }.count)")
+                        .font(.subheadline)
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                }
+            }
+        } header: {
+            Text("issue_sync_section_header")
+        }
+
+        Section {
+            Button {
+                exportBackup()
+            } label: {
+                Label("export_backup_button", systemImage: "square.and.arrow.up")
+            }
+            .disabled(repos.isEmpty)
+
+            Button {
+                showImporter = true
+            } label: {
+                if isImporting {
+                    HStack {
+                        Text("import_backup_button")
+                        Spacer()
+                        ProgressView().controlSize(.small)
+                    }
+                } else {
+                    Label("import_backup_button", systemImage: "square.and.arrow.down")
+                }
+            }
+            .disabled(isImporting)
+        } header: {
+            Text("backup_section_header")
+        } footer: {
+            Text("backup_footer")
+        }
+    }
+
+    @ViewBuilder
+    private var voiceAndAgentSections: some View {
+        Section {
+            Toggle("voice_ai_toggle", isOn: $voiceAIEnabled)
+            Picker("voice_silence_picker", selection: $voiceSilenceSeconds) {
+                Text("voice_silence_2").tag(2.0)
+                Text("voice_silence_3").tag(3.0)
+                Text("voice_silence_5").tag(5.0)
+                Text("voice_silence_never").tag(0.0)
+            }
+            TextField("voice_vocabulary_placeholder", text: $voiceCustomVocabulary, axis: .vertical)
+                .lineLimit(1...4)
+                .autocorrectionDisabled()
+        } header: {
+            Text("voice_section_header")
+        } footer: {
+            Text("voice_ai_footer")
+        }
+
+        Section {
+            Toggle("agent_delegate_toggle", isOn: $delegateNewTasks)
+        } header: {
+            Text("agent_section_header")
+        } footer: {
+            Text("agent_footer")
+        }
+    }
+
+    private var alertsSection: some View {
+        Section {
+            Group {
+                Toggle("alerts_ci_toggle", isOn: $alertsCI)
+                Toggle("alerts_releases_toggle", isOn: $alertsReleases)
+                Toggle("alerts_security_toggle", isOn: $alertsSecurity)
+                Toggle("alerts_crashes_toggle", isOn: $alertsCrashes)
+                Toggle("alerts_store_toggle", isOn: $alertsStore)
+            }
+            .disabled(!subscription.isPro)
+            if !subscription.isPro {
+                Button {
+                    showPaywall = true
+                } label: {
+                    Label("alerts_pro_button", systemImage: "crown")
+                        .foregroundStyle(.purple)
+                }
+            }
+        } header: {
+            Text("alerts_section_header")
+        } footer: {
+            Text("alerts_footer")
+        }
+        .onChange(of: [alertsCI, alertsReleases, alertsSecurity, alertsCrashes, alertsStore]) { _, now in
+            if now.contains(true) {
+                Task { _ = await FeedbackNotificationManager.shared.requestAuthorizationIfNeeded() }
+            }
         }
     }
 

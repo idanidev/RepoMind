@@ -743,3 +743,7 @@
 "alert_store_approved_body" = "It is ready to be released.";
 "alert_store_rejected_title %@ %@" = "%@ %@ was rejected";
 "alert_store_rejected_body" = "Open App Store Connect to see why.";
+
+/* Launch errors */
+"db_error_title" = "Database Error";
+"db_error_hint" = "Try reinstalling the app or contact support.";
