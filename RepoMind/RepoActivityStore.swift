@@ -33,6 +33,14 @@ final class RepoActivityStore {
         load()
     }
 
+    /// Explicit and `nonisolated` on purpose. With the module's default isolation on the main
+    /// actor, a synthesized `deinit` is main-actor isolated too, and Swift routes it through
+    /// `swift_task_deinitOnExecutor`; the iOS 26 simulator runtime aborts in there ("pointer
+    /// being freed was not allocated") when the object dies outside a task, which is exactly
+    /// what killed the test host at the end of `RepoActivityStoreTests` (swiftlang/swift#85663).
+    /// Nothing here needs the actor to be released.
+    nonisolated deinit {}
+
     func activity(for repoID: Int) -> RepoActivity? {
         activities[repoID]
     }

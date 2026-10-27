@@ -31,6 +31,10 @@ final class RepoStatsStore {
         self.session = session
     }
 
+    /// Explicit and `nonisolated` for the same reason as in `RepoActivityStore`: a synthesized
+    /// main-actor `deinit` crashes the iOS 26 simulator runtime when the object dies outside a task.
+    nonisolated deinit {}
+
     // MARK: Configuration
 
     func endpoint(for repoID: Int) -> URL? {
