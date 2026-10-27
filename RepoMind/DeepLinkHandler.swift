@@ -15,6 +15,10 @@ import SwiftData
 //   repomind://open-repo?name=my-app
 //     - name (required): repo name to navigate to
 //
+//   repomind://capture
+//     - opens the dictation sheet with the microphone on: say the app and the task. The widget,
+//       the Siri shortcut and the Action Button all end up here.
+//
 
 @MainActor
 enum DeepLinkHandler {
@@ -25,6 +29,8 @@ enum DeepLinkHandler {
         switch url.host {
         case "add-task":
             handleAddTask(url: url, context: context)
+        case "capture":
+            GlobalCaptureRouter.shared.request()
         default:
             #if DEBUG
             print("[DeepLink] Unknown action: \(url.host ?? "nil")")

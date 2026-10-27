@@ -43,6 +43,8 @@ struct RepoMindApp: App {
     private let initError: String?
 
     @State private var showQuickAddTask = false
+    /// The dictation sheet, opened from the widget, the shortcut, Siri or `repomind://capture`.
+    @State private var showGlobalCapture = false
 
     init() {
         _ = SubscriptionManager.shared
@@ -119,6 +121,10 @@ struct RepoMindApp: App {
                         #if canImport(UIKit)
                             QuickActionRouter.shared.consumePendingIfNeeded()
                         #endif
+                        // A request that came in before there was an interface to show it.
+                        if GlobalCaptureRouter.shared.consumePending() {
+                            showGlobalCapture = true
+                        }
                     }
                     .task {
                         // Skip when not authenticated or in demo mode (no real repos to sync).
@@ -132,6 +138,14 @@ struct RepoMindApp: App {
                     }
                     .sheet(isPresented: $showQuickAddTask) {
                         QuickAddTaskView()
+                    }
+                    .sheet(isPresented: $showGlobalCapture) {
+                        GlobalCaptureSheet()
+                    }
+                    .onReceive(NotificationCenter.default.publisher(for: .globalCaptureRequested)) { _ in
+                        if GlobalCaptureRouter.shared.consumePending() {
+                            showGlobalCapture = true
+                        }
                     }
                     .onReceive(NotificationCenter.default.publisher(for: .quickActionTriggered)) { note in
                         if (note.userInfo?["type"] as? String) == QuickActionRouter.quickAddTaskType {

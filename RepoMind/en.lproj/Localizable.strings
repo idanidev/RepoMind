@@ -690,3 +690,18 @@
 "agent_delegate_toggle" = "Delegate new tasks to the agent";
 "agent_footer" = "A delegated task is published with the `agent` label. A repo with the agent workflow picks it up: Claude Code implements it in GitHub Actions and opens a pull request that closes it. The kind the capture detects (bug, enhancement, idea, chore) goes as a label too.";
 "home_tasks_delegated_badge" = "agent";
+
+/* Dictating a task from anywhere: the widget, the shortcut, Siri */
+"global_capture_title" = "Dictate a task";
+"global_capture_listening" = "Listening…";
+"global_capture_hint" = "Say the app and the task, like “In InSync, fix the login”.";
+"global_capture_nothing_heard" = "I didn't hear anything.";
+"global_capture_try_again" = "Try again";
+"global_capture_app" = "App";
+"global_capture_pick_app" = "Pick an app";
+"global_capture_needs_app" = "Choose which app each task goes to before saving.";
+"global_capture_column_first" = "First column";
+"global_capture_saved_many %lld %@" = "%lld tasks added to %@";
+"intent_capture_title" = "Add a task by voice";
+"intent_capture_description" = "Opens RepoMind listening: say the app and the task.";
+"intent_capture_short_title" = "Add task";

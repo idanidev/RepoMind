@@ -16,6 +16,16 @@ nonisolated enum CaptureKind: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
+    /// What the chip and the picker call it.
+    var title: String {
+        switch self {
+        case .bug: String(localized: "capture_kind_bug")
+        case .feature: String(localized: "capture_kind_feature")
+        case .idea: String(localized: "capture_kind_idea")
+        case .chore: String(localized: "capture_kind_chore")
+        }
+    }
+
     var symbol: String {
         switch self {
         case .bug: "ant.fill"
@@ -37,6 +47,9 @@ struct CaptureDraft: Identifiable, Hashable {
     var columnName: String?
     /// Goes to the agent: the issue gets the `agent` label and the repo's workflow picks it up.
     var delegate = false
+    /// `ProjectRepo.repoID` of the app it goes to. Only set when the capture starts outside a
+    /// board (widget, Siri, the shortcut): on a board the app is the board's own, and nil.
+    var repoID: Int?
 
     var labels: TaskLabels { TaskLabels(kind: kind, delegated: delegate) }
 
@@ -77,9 +90,10 @@ struct CaptureDraft: Identifiable, Hashable {
 
     init(
         id: UUID = UUID(), title: String, details: String = "", kind: CaptureKind = .feature,
-        columnName: String? = nil, delegate: Bool = false
+        columnName: String? = nil, delegate: Bool = false, repoID: Int? = nil
     ) {
         self.id = id
+        self.repoID = repoID
         self.title = title
         self.details = details
         self.kind = kind
@@ -129,6 +143,12 @@ enum VoiceVocabulary {
 
     static func terms(for project: ProjectRepo) -> [String] {
         Array(unique(names(for: project) + developerTerms).prefix(120))
+    }
+
+    /// Outside a board there is no current repo: every app's name goes first, then the columns
+    /// the recognizer will hear as well.
+    static func terms(repoNames: [String], columns: [String]) -> [String] {
+        Array(unique(repoNames + customTerms + columns + developerTerms).prefix(120))
     }
 
     private static func unique(_ terms: [String]) -> [String] {

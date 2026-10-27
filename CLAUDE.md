@@ -81,6 +81,14 @@ Sin Mac, lo mismo desde GitHub Actions (`.github/workflows`), con los secretos `
   campo nuevo en `TaskItem` exige desplegar el esquema de CloudKit y hoy no hay Mac para sembrarlo
   (pasarlo al modelo con el siguiente despliegue). `TaskIssueSyncService.createIssue` añade esas
   etiquetas; `agent` dispara en el repo el workflow de Claude Code (en InSync, `agent.yml`)
+- **Captura desde cualquier sitio**: `Capture/`. `GlobalCaptureSheet` se abre con el micrófono ya
+  encendido desde `repomind://capture`, el atajo "Añade una tarea en RepoMind" (`CaptureTaskIntent`,
+  App Intents: Siri, botón de acción, Spotlight, control de Atajos) y el widget. Se dice la app y la
+  tarea ("en InSync, arreglar el login"); `CaptureRepoResolver` (puro, probado) encuentra la app aunque
+  el reconocedor escriba "in sync", y quita la frase que la nombra solo si va al principio o al final;
+  en iOS 26 `VoiceComposer.composeGlobal` lee mejor el dictado, y la hoja pide la app si nadie la dijo
+  en vez de adivinarla. Las tarjetas de revisión (`CaptureDraftCard`) son las mismas que las del tablero.
+  `GlobalCaptureRouter` guarda la petición hasta que haya interfaz (arranque en frío desde Siri)
 - **Bridge MCP**: `bridge/` (TypeScript) expone las tareas a agentes de código vía GitHub Issues
 
 ## Estructura de carpetas
@@ -94,6 +102,7 @@ RepoMind/
 │                      # ritmo de captura, últimas capturas, dónde se acumula, GitHub, apps, cuenta y sync.
 │                      # Repos = HomeView con las tarjetas
 ├── Board/             # Tablero rediseñado para iPhone (BoardView sobre KanbanViewModel); iPad/Mac usan KanbanView
+├── Capture/           # Dictar una tarea fuera de un tablero: hoja, modelo, quién es la app, atajo de Siri
 ├── ViewModels/        # KanbanViewModel.swift
 ├── Models/            # Modelos SwiftData (@Model)
 ├── en.lproj/          # Strings inglés

@@ -689,3 +689,18 @@
 "agent_delegate_toggle" = "Delegar al agente las tareas nuevas";
 "agent_footer" = "Una tarea delegada se publica con la etiqueta `agent`. Un repo con el workflow del agente la recoge: Claude Code la implementa en GitHub Actions y abre una pull request que la cierra. El tipo que detecta la captura (fallo, mejora, idea, tarea) va también como etiqueta.";
 "home_tasks_delegated_badge" = "agente";
+
+/* Dictar una tarea desde cualquier sitio: el widget, el atajo, Siri */
+"global_capture_title" = "Dictar una tarea";
+"global_capture_listening" = "Escuchando…";
+"global_capture_hint" = "Di la app y la tarea, por ejemplo «En InSync, arreglar el login».";
+"global_capture_nothing_heard" = "No he oído nada.";
+"global_capture_try_again" = "Probar otra vez";
+"global_capture_app" = "App";
+"global_capture_pick_app" = "Elige una app";
+"global_capture_needs_app" = "Elige en qué app va cada tarea antes de guardar.";
+"global_capture_column_first" = "Primera columna";
+"global_capture_saved_many %lld %@" = "%lld tareas añadidas a %@";
+"intent_capture_title" = "Añadir una tarea por voz";
+"intent_capture_description" = "Abre RepoMind escuchando: di la app y la tarea.";
+"intent_capture_short_title" = "Añadir tarea";
