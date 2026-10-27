@@ -37,10 +37,11 @@ Sin Mac, lo mismo desde GitHub Actions (`.github/workflows`), con los secretos `
 `MATCH_PASSWORD`:
 
 - `tests.yml` — tests unitarios en simulador, con cada push a las ramas de trabajo y cada PR a main
-- `testflight.yml` — `fastlane ios beta` (match + gym + subida a TestFlight) con cada push a las ramas
-  de trabajo. Firma a mano con el certificado de distribución de match: la firma "en la nube" con
-  `-allowProvisioningUpdates` creaba un certificado de desarrollo por run y a los siete la cuenta
-  llegó al máximo ("Choose a certificate to revoke")
+- `testflight.yml` — build y subida a TestFlight con cada push a las ramas de trabajo. Con los
+  secretos `MATCH_*` firma con match (`fastlane ios beta`); sin ellos, firma en la nube con
+  `-allowProvisioningUpdates`, que crea un certificado "Apple Development" por run: a los siete la
+  cuenta llegó al máximo ("Choose a certificate to revoke") y hay que revocar los recientes en el
+  portal de desarrollador antes de relanzar
 - `release.yml` — a mano: sube metadatos y notas de `fastlane/metadata` y, si se marca, envía a revisión
   la build ya subida. Como todo `workflow_dispatch`, solo aparece en Actions cuando el fichero está en main
 

@@ -1,23 +1,28 @@
-# TestFlight sin Mac: un runner macOS de GitHub compila la app iOS con `fastlane ios beta` y
-# la sube a TestFlight (pruebas internas). Arranca con cada push a las ramas de abajo; el
-# lanzamiento a mano (Actions → TestFlight → Run workflow) funciona en cuanto el fichero esté
-# también en main, que es la rama que GitHub indexa.
+# TestFlight sin Mac: un runner macOS de GitHub compila la app iOS y la sube a TestFlight
+# (pruebas internas). Arranca con cada push a las ramas de abajo; el lanzamiento a mano
+# (Actions → TestFlight → Run workflow) funciona en cuanto el fichero esté también en main,
+# que es la rama que GitHub indexa.
 #
-# Firma con `match`, como desde el Mac: el certificado de distribución y el perfil salen del
-# repo privado de certificados, y el runner no pide nada a Apple. Antes se firmaba "en la nube"
-# con -allowProvisioningUpdates, y cada run creaba un certificado de desarrollo nuevo (el runner
-# nunca tiene la clave privada del anterior): a los siete runs la cuenta llegó al máximo y el
-# archive murió con "Choose a certificate to revoke".
+# Firma de dos maneras, según los secretos que haya:
+#
+# - Con `match`, si están MATCH_GIT_URL, MATCH_GIT_TOKEN y MATCH_PASSWORD: `fastlane ios beta`
+#   baja el certificado de distribución y el perfil del repo privado de certificados y no pide
+#   nada a Apple. Es la buena.
+# - En la nube, si no están: xcodebuild con -allowProvisioningUpdates y la clave de App Store
+#   Connect, como los runs 1 a 7. Cada run crea un certificado "Apple Development" nuevo, porque
+#   el runner nunca tiene la clave privada del anterior, y a los siete la cuenta llegó al máximo
+#   ("Choose a certificate to revoke"). Cuando pase, revocar los de desarrollo recientes en
+#   https://developer.apple.com/account/resources/certificates/list y relanzar.
 #
 # Secretos del repo (Settings → Secrets and variables → Actions):
-#   ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8   Clave de la API de App Store Connect (rol Admin):
-#       con ella fastlane sube la build y match habla con Apple si hace falta.
-#   MATCH_GIT_URL      URL https del repo privado de certificados de match.
-#   MATCH_GIT_TOKEN    Un token de GitHub (fine-grained, solo lectura de Contents sobre ese
-#                      repo) para que el runner pueda clonarlo.
+#   ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8   Clave de la API de App Store Connect, rol Admin:
+#       sube la build y firma en la nube. Obligatorios.
+#   MATCH_GIT_URL      URL https del repo privado de certificados de match (idanidev/ios-certs).
+#   MATCH_GIT_TOKEN    Un token de GitHub (fine-grained, solo lectura de Contents sobre ese repo).
 #   MATCH_PASSWORD     La contraseña con la que match cifró ese repo.
 #
-# Se usa el Xcode 26 más nuevo del runner. El número de build lo pone la lane (fecha y hora).
+# Se usa el Xcode 26 más nuevo del runner. El número de build: la fecha y hora con match, el
+# siguiente libre en App Store Connect en la nube (manageAppVersionAndBuildNumber).
 
 name: TestFlight
 
@@ -71,7 +76,7 @@ jobs:
           sudo xcode-select -s "$app"
           xcodebuild -version
 
-      - name: Clave de App Store Connect y acceso a match
+      - name: Clave de App Store Connect, y match si hay secretos
         env:
           ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
           MATCH_GIT_TOKEN: ${{ secrets.MATCH_GIT_TOKEN }}
@@ -79,25 +84,31 @@ jobs:
           if [ -z "$ASC_KEY_ID" ] || [ -z "$ASC_ISSUER_ID" ] || [ -z "$ASC_KEY_P8" ]; then
             echo "::error::Faltan secretos: ASC_KEY_ID, ASC_ISSUER_ID y ASC_KEY_P8 (Settings → Secrets → Actions)"; exit 1
           fi
-          if [ -z "$MATCH_GIT_URL" ] || [ -z "$MATCH_GIT_TOKEN" ] || [ -z "$MATCH_PASSWORD" ]; then
-            echo "::error::Faltan secretos de match: MATCH_GIT_URL, MATCH_GIT_TOKEN y MATCH_PASSWORD"; exit 1
-          fi
           mkdir -p "$RUNNER_TEMP/asc"
           printf '%s\n' "$ASC_KEY_P8" > "$RUNNER_TEMP/asc/AuthKey.p8"
           chmod 600 "$RUNNER_TEMP/asc/AuthKey.p8"
           # Para el api_key del Fastfile. No puede ir en el env del job: ahí `runner` no existe.
           echo "ASC_KEY_FILEPATH=$RUNNER_TEMP/asc/AuthKey.p8" >> "$GITHUB_ENV"
-          # match clona el repo de certificados por https con autenticación básica: usuario
-          # cualquiera y el token como contraseña, en base64. Enmascarado para que no salga en el log.
-          auth=$(printf '%s' "x-access-token:$MATCH_GIT_TOKEN" | base64 | tr -d '\n')
-          echo "::add-mask::$auth"
-          echo "MATCH_GIT_BASIC_AUTHORIZATION=$auth" >> "$GITHUB_ENV"
+          if [ -n "$MATCH_GIT_URL" ] && [ -n "$MATCH_GIT_TOKEN" ] && [ -n "$MATCH_PASSWORD" ]; then
+            # match clona el repo de certificados por https con autenticación básica: usuario
+            # cualquiera y el token como contraseña, en base64. Enmascarado para que no salga en el log.
+            auth=$(printf '%s' "x-access-token:$MATCH_GIT_TOKEN" | base64 | tr -d '\n')
+            echo "::add-mask::$auth"
+            echo "MATCH_GIT_BASIC_AUTHORIZATION=$auth" >> "$GITHUB_ENV"
+            echo "FIRMA=match" >> "$GITHUB_ENV"
+            echo "Firma con match."
+          else
+            echo "FIRMA=nube" >> "$GITHUB_ENV"
+            echo "::notice::Sin secretos de match (MATCH_GIT_URL, MATCH_GIT_TOKEN, MATCH_PASSWORD): se firma en la nube"
+          fi
 
-      - name: Compilar y subir a TestFlight
+      # ── Camino 1: match ──
+      - name: Compilar y subir a TestFlight (match)
+        if: env.FIRMA == 'match'
         run: bundle exec fastlane ios beta
 
       - name: Registro de gym
-        if: failure()
+        if: failure() && env.FIRMA == 'match'
         run: |
           log=$(ls -t ~/Library/Logs/gym/*.log 2>/dev/null | head -1)
           if [ -n "$log" ]; then
@@ -106,6 +117,41 @@ jobs:
             echo "::endgroup::"
             cp "$log" "$RUNNER_TEMP/archive.log"
           fi
+
+      # ── Camino 2: firma en la nube ──
+      - name: Archive (firma en la nube)
+        if: env.FIRMA == 'nube'
+        run: |
+          set +e
+          xcodebuild archive \
+            -project RepoMind.xcodeproj -scheme RepoMind -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/RepoMind.xcarchive" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/asc/AuthKey.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            > "$RUNNER_TEMP/archive.log" 2>&1
+          estado=$?
+          set -e
+          # Solo lo que importa en pantalla; el registro entero va al artefacto.
+          grep -E "error:|\*\* ARCHIVE" "$RUNNER_TEMP/archive.log" || true
+          if grep -q "maximum number of certificates" "$RUNNER_TEMP/archive.log"; then
+            echo "::error::La cuenta de Apple está al máximo de certificados. Revoca los 'Apple Development' recientes en https://developer.apple.com/account/resources/certificates/list y relanza."
+          fi
+          exit $estado
+
+      - name: Subir a TestFlight (firma en la nube)
+        if: env.FIRMA == 'nube'
+        run: |
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/RepoMind.xcarchive" \
+            -exportOptionsPlist .github/ExportOptions.plist \
+            -exportPath "$RUNNER_TEMP/export" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/asc/AuthKey.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID"
 
       - name: Registro del archive
         if: always()
