@@ -49,3 +49,6 @@ build/
 # Fastlane credentials
 fastlane/.env
 fastlane/.env.*
+
+# Claude Code: ajustes locales (llevan credenciales de App Store Connect)
+.claude/settings.local.json

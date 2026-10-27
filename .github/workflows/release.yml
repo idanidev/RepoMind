@@ -1,12 +1,18 @@
-# Publicación sin Mac. No compila nada: toma la build que testflight.yml ya subió a App Store
-# Connect para la versión del proyecto, sube los metadatos y las notas de la versión desde
-# fastlane/metadata y, si se marca, la envía a revisión. Solo a mano (Actions → Release → Run
-# workflow), y solo cuando el fichero esté en main, que es la rama que GitHub indexa.
+# Publicación sin Mac. No compila nada: toma una build que testflight.yml ya subió a App Store
+# Connect, sube los metadatos y las notas de la versión desde fastlane/metadata y, si se marca,
+# la envía a revisión. Solo a mano (Actions → Release → Run workflow), y solo cuando el fichero
+# esté en main, que es la rama que GitHub indexa.
 #
 # Antes de lanzarlo:
-#   1. La build de esa versión tiene que estar procesada en App Store Connect (TestFlight la enseña).
-#   2. fastlane/metadata/en-US/release_notes.txt y es-ES/release_notes.txt escritas para la versión.
-#   3. Si se ha tocado algún @Model, el esquema de CloudKit desplegado (ver CLAUDE.md).
+#   1. La rama con la versión nueva (MARKETING_VERSION) y sus notas tiene que estar ya en main: este
+#      workflow lee la versión del árbol que tiene delante y no deja publicar otra.
+#   2. La build de esa versión tiene que estar procesada en App Store Connect (TestFlight la enseña) y
+#      haber salido firmada con match: las firmadas en la nube solo valen para TestFlight interno y
+#      App Store Connect no las deja enviar a revisión.
+#   3. fastlane/metadata/en-US/release_notes.txt y es-ES/release_notes.txt escritas para la versión.
+#   4. Si se ha tocado algún @Model, el esquema de CloudKit desplegado (ver CLAUDE.md).
+#   5. Con "Enviar a revisión", pon el número de build que quieres enviar: sin él se envía la más nueva
+#      que haya procesado Apple, que puede ser la de un push posterior.
 # Usa los mismos secretos que testflight.yml.
 
 name: Release
@@ -18,10 +24,17 @@ on:
         description: "Versión a publicar (vacío = la MARKETING_VERSION del proyecto)"
         required: false
         default: ""
+      build:
+        description: "Número de build a enviar a revisión (vacío = la más nueva que haya procesado Apple)"
+        required: false
+        default: ""
       submit:
         description: "Enviar a revisión. Sin marcar, solo sube metadatos y notas"
         type: boolean
         default: false
+
+permissions:
+  contents: read
 
 jobs:
   release:
@@ -34,6 +47,8 @@ jobs:
       FASTLANE_SKIP_UPDATE_CHECK: "1"
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: ruby/setup-ruby@v1
         with:
@@ -53,17 +68,42 @@ jobs:
           # Para el api_key del Fastfile. No puede ir en el env del job: ahí `runner` no existe.
           echo "ASC_KEY_FILEPATH=$RUNNER_TEMP/asc/AuthKey.p8" >> "$GITHUB_ENV"
 
-      - name: Versión
+      # Lo que se escribe a mano llega por el entorno, nunca pegado en el script.
+      - name: Versión, notas y build
         id: ver
+        env:
+          VERSION_INPUT: ${{ github.event.inputs.version }}
+          BUILD_INPUT: ${{ github.event.inputs.build }}
         run: |
-          version="${{ github.event.inputs.version }}"
-          if [ -z "$version" ]; then
-            version=$(grep -m1 'MARKETING_VERSION = ' RepoMind.xcodeproj/project.pbxproj | sed -E 's/.*= ([0-9.]+);/\1/')
-          fi
-          if [ -z "$version" ]; then
+          # Todos los ajustes de build del proyecto (app, widget, tests...) llevan la misma versión.
+          proyecto=$(grep -o 'MARKETING_VERSION = [0-9.]*;' RepoMind.xcodeproj/project.pbxproj | sed -E 's/.*= ([0-9.]+);/\1/' | sort -u)
+          if [ -z "$proyecto" ]; then
             echo "::error::No se ha podido leer la versión del proyecto"; exit 1
           fi
+          if [ "$(printf '%s\n' "$proyecto" | wc -l)" -ne 1 ]; then
+            echo "::error::Los targets no tienen la misma MARKETING_VERSION:"; printf '%s\n' "$proyecto"; exit 1
+          fi
+          version="${VERSION_INPUT:-$proyecto}"
+          if ! printf '%s' "$version" | grep -Eq '^[0-9]+(\.[0-9]+){1,2}$'; then
+            echo "::error::Versión no válida: $version"; exit 1
+          fi
+          if [ "$version" != "$proyecto" ]; then
+            echo "::error::Pides la $version pero el árbol de esta rama es la $proyecto. Haz merge a main de la rama con la versión que quieres publicar y lanza esto desde main."; exit 1
+          fi
+          for idioma in en-US es-ES; do
+            notas="fastlane/metadata/$idioma/release_notes.txt"
+            if [ ! -s "$notas" ]; then
+              echo "::error::Faltan las notas de la versión: $notas"; exit 1
+            fi
+          done
+          if [ -n "$BUILD_INPUT" ] && ! printf '%s' "$BUILD_INPUT" | grep -Eq '^[0-9]+$'; then
+            echo "::error::El número de build son solo cifras: $BUILD_INPUT"; exit 1
+          fi
+          if [ "${{ github.event.inputs.submit }}" = "true" ] && [ -z "$BUILD_INPUT" ]; then
+            echo "::warning::Se envía la build más nueva que haya procesado Apple. Pon el número de build para fijar cuál."
+          fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "build=$BUILD_INPUT" >> "$GITHUB_OUTPUT"
           echo "Versión: $version"
 
       - name: Metadatos y notas de la versión
@@ -71,4 +111,6 @@ jobs:
 
       - name: Enviar a revisión
         if: ${{ github.event.inputs.submit == 'true' }}
-        run: bundle exec fastlane ios submit version:${{ steps.ver.outputs.version }}
+        env:
+          BUILD: ${{ steps.ver.outputs.build }}
+        run: bundle exec fastlane ios submit version:${{ steps.ver.outputs.version }} ${BUILD:+build:$BUILD}

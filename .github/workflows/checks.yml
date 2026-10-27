@@ -1,0 +1,98 @@
+# Comprobaciones que no necesitan Mac ni compilador, en Linux. Un minuto de Linux cuenta uno; uno de
+# macOS cuenta diez. Cazan en segundos lo que de otro modo se descubre tras un run de diez minutos de
+# macOS: un SwiftUI con más de 10 vistas en un bloque (el error que ya rompió la compilación una vez),
+# un texto sin traducir o con otro número de %@ en cada idioma, un plural mal escrito.
+#
+# - scripts/checks/strings.py          en/es con las mismas claves y formatos, plurales, claves que existen
+# - scripts/checks/viewbuilder_arity.py  bloques de SwiftUI con más de 10 hijos
+# - scripts/store-status/               pruebas del script que lee App Store Connect
+# - bridge/                             compilación y pruebas del puente MCP
+# - SwiftLint y actionlint              solo informan: no tumban el run
+#
+# Arranca con cada push a las ramas de trabajo y con cada PR a main.
+
+name: Checks
+
+on:
+  push:
+    branches:
+      - main
+      - redesign/home-oled
+      - claude/testflight
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checks-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Textos, SwiftUI, script de la App Store y bridge
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: scripts/checks/requirements.txt
+
+      - name: Dependencias de las comprobaciones
+        run: pip install -r scripts/checks/requirements.txt
+
+      - name: Textos en inglés y español
+        run: python3 scripts/checks/strings.py
+
+      - name: Bloques de SwiftUI de más de 10 vistas
+        if: ${{ !cancelled() }}
+        run: python3 scripts/checks/viewbuilder_arity.py
+
+      - uses: ruby/setup-ruby@v1
+        if: ${{ !cancelled() }}
+        with:
+          ruby-version: "3.3"
+
+      - name: Pruebas del script de la App Store
+        if: ${{ !cancelled() }}
+        run: |
+          gem install jwt -v 2.10.2 --no-document
+          ruby scripts/store-status/test_store_status.rb
+
+      - uses: actions/setup-node@v4
+        if: ${{ !cancelled() }}
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: bridge/package-lock.json
+
+      - name: Bridge MCP (compilar y probar)
+        if: ${{ !cancelled() }}
+        working-directory: bridge
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+          npm test
+
+      # Solo informan. Si la imagen no baja o hay avisos viejos no se tumba un push por ello; se
+      # miran en el registro y, cuando estén limpios, se quita el continue-on-error.
+      - name: SwiftLint (informativo)
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        run: |
+          docker run --rm -v "$PWD:/work" -w /work ghcr.io/realm/swiftlint:latest \
+            swiftlint lint --config .swiftlint.yml --reporter github-actions-logging
+
+      - name: actionlint (informativo)
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        run: docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:latest -color

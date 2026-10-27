@@ -1,10 +1,18 @@
+# La web pública de RepoMind: la dirección de soporte, la política de privacidad y las condiciones que
+# enlaza la App Store. Solo se publican esas tres páginas; el resto de docs/ (prompts, hoja de ruta,
+# marketing, contratos) es de trabajo y no tiene por qué estar en internet.
+
 name: Deploy docs to GitHub Pages
 
 on:
   push:
     branches: [main]
     paths:
-      - 'docs/**'
+      - 'docs/index.html'
+      - 'docs/privacy.html'
+      - 'docs/terms.html'
+      - '.github/workflows/docs.yml'
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -28,10 +36,15 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
+      - name: Solo las páginas públicas
+        run: |
+          mkdir _site
+          cp docs/index.html docs/privacy.html docs/terms.html _site/
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: docs
+          path: _site
 
       - name: Deploy to GitHub Pages
         id: deployment

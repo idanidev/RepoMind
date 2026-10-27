@@ -149,6 +149,9 @@ platform :ios do
   desc "Envía a revisión el build ya subido (sin recompilar)"
   lane :submit do |options|
     app_ver = options[:version] || get_version_number(xcodeproj: PROJECT, target: SCHEME)
+    # Con `build:` se envía ESA build; sin él, la más nueva que haya procesado Apple, que puede ser la de
+    # un push posterior al que se quería publicar.
+    pinned = options[:build] ? { build_number: options[:build].to_s } : {}
 
     deliver(
       api_key:                      api_key,
@@ -163,7 +166,8 @@ platform :ios do
       run_precheck_before_submit:   false,
       submission_information: {
         export_compliance_uses_encryption: false
-      }
+      },
+      **pinned
     )
 
     UI.success "🚀 iOS v#{app_ver} enviada a revisión en App Store"
@@ -294,7 +298,8 @@ platform :mac do
     PLIST
 
     Dir.chdir(root_dir) do
-      sh "xcodebuild " \
+      # pipefail: con `|| true` un archive fallido pasaba por bueno y el export usaba uno viejo.
+      sh "set -o pipefail && xcodebuild " \
          "-scheme #{SCHEME} " \
          "-project #{PROJECT} " \
          "-configuration Release " \
@@ -306,7 +311,7 @@ platform :mac do
          "-authenticationKeyPath '#{key_path}' " \
          "-authenticationKeyID #{key_id} " \
          "-authenticationKeyIssuerID #{issuer_id} " \
-         "| xcpretty || true"
+         "| xcpretty"
 
       sh "xcodebuild " \
          "-exportArchive " \

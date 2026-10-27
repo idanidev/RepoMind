@@ -42,7 +42,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      # Sin guardar el token en .git/config: solo el último paso lo necesita (lo recibe por el entorno) y
+      # los que corren con la clave de App Store Connect no deben poder escribir en el repo.
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: ruby/setup-ruby@v1
         with:

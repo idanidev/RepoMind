@@ -42,8 +42,17 @@ on:
       - ".github/workflows/release.yml"
       - ".github/workflows/docs.yml"
       - ".github/workflows/store-status.yml"
-      - "scripts/store-status/**"
+      - ".github/workflows/checks.yml"
+      - "scripts/**"
+      # Los tests no cambian lo que se instala, y bridge, .claude y los ajustes del linter tampoco.
+      - "RepoMindTests/**"
+      - "bridge/**"
+      - ".claude/**"
+      - ".swiftlint.yml"
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 concurrency:
   group: testflight
@@ -53,7 +62,8 @@ jobs:
   testflight:
     name: Archive y subida a TestFlight
     runs-on: macos-26
-    timeout-minutes: 60
+    # Archive y subida tardan unos 10 minutos; esto corta uno colgado antes de que se coma la cuota.
+    timeout-minutes: 30
     env:
       ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
       ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
@@ -63,6 +73,8 @@ jobs:
       FASTLANE_XCODEBUILD_SETTINGS_TIMEOUT: "120"
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: ruby/setup-ruby@v1
         with:
@@ -71,7 +83,8 @@ jobs:
 
       - name: Xcode 26, el más nuevo del runner
         run: |
-          app=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          # Sin betas ni candidatas: App Store Connect rechaza lo compilado con un SDK beta.
+          app=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | grep -viE 'beta|candidate|_rc' | sort -V | tail -1)
           if [ -z "$app" ]; then
             echo "::error::No hay Xcode 26 en el runner. Hay:"; ls /Applications | grep -i xcode; exit 1
           fi
@@ -138,7 +151,7 @@ jobs:
           set -e
           # Solo lo que importa en pantalla; el registro entero va al artefacto.
           grep -E "error:|\*\* ARCHIVE" "$RUNNER_TEMP/archive.log" || true
-          if grep -q "maximum number of certificates" "$RUNNER_TEMP/archive.log"; then
+          if grep -qiE "maximum number of certificates|Choose a certificate to revoke" "$RUNNER_TEMP/archive.log"; then
             echo "::error::La cuenta de Apple está al máximo de certificados. Revoca los 'Apple Development' recientes en https://developer.apple.com/account/resources/certificates/list y relanza."
           fi
           exit $estado
@@ -156,9 +169,10 @@ jobs:
             -authenticationKeyIssuerID "$ASC_ISSUER_ID"
 
       - name: Registro del archive
-        if: always()
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: archive-log
           path: ${{ runner.temp }}/archive.log
           if-no-files-found: ignore
+          retention-days: 3
