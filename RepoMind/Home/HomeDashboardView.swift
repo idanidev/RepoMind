@@ -50,6 +50,9 @@ struct HomeDashboardView: View {
                         HomeDashboardAppCard(summary: app, onOpenStats: actions.openStats)
                     }
                 }
+                if !data.store.isEmpty {
+                    HomeStoreCard(apps: data.store, updatedAt: data.storeUpdatedAt, onOpenRepo: actions.openRepo)
+                }
                 appsPanelLink
                 HomeDashboardAccountCard(data: data, onShowRepos: actions.showRepos)
             }

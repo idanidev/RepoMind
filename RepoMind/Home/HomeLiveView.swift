@@ -37,6 +37,7 @@ struct HomeLiveView: View {
     @State private var subscription = SubscriptionManager.shared
     @State private var activity = RepoActivityStore.shared
     @State private var statsStore = RepoStatsStore.shared
+    @State private var storeStore = StoreStatusStore.shared
     @State private var notifications = NotificationRouter.shared
     @State private var path = NavigationPath()
     @State private var tab: HomeTab = .start
@@ -140,12 +141,19 @@ struct HomeLiveView: View {
                     await syncRepos(silent: true)
                 }
                 statsStore.loadCached(for: repos.map(\.repoID))
+                storeStore.loadCached()
                 await activity.refresh(repos: repos, accounts: accounts)
+                await storeStore.refresh(accounts: storeAccounts)
                 for repoID in repos.map(\.repoID) where statsStore.isConfigured(repoID) {
                     await statsStore.refresh(repoID: repoID)
                 }
             }
         }
+    }
+
+    /// The logins the store status can read its file with.
+    private var storeAccounts: [StoreAccount] {
+        accounts.map { StoreAccount(username: $0.username, tokenKey: $0.tokenKey) }
     }
 
     // MARK: Notifications
@@ -361,7 +369,9 @@ struct HomeLiveView: View {
                 iCloudLastSuccess: syncMonitor.lastSuccessDate,
                 lastGitHubSync: lastSyncTimestamp > 0 ? Date(timeIntervalSince1970: lastSyncTimestamp) : nil,
                 activityRefreshedAt: activity.lastRefresh),
-            isPro: subscription.isPro
+            isPro: subscription.isPro,
+            store: storeStore.status,
+            storeUpdatedAt: storeStore.fetchedAt
         )
     }
 
@@ -470,6 +480,7 @@ struct HomeLiveView: View {
         await syncRepos(silent: false)
         await importAgentCompletedTasks(force: true)
         await activity.refresh(repos: repos, accounts: accounts, force: true)
+        await storeStore.refresh(accounts: storeAccounts, force: true)
     }
 
     /// The same sync `RepoListView` runs, minus the weekly schedule: here it happens on

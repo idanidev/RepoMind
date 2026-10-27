@@ -42,6 +42,9 @@ Sin Mac, lo mismo desde GitHub Actions (`.github/workflows`), con los secretos `
   `-allowProvisioningUpdates`, que crea un certificado "Apple Development" por run: a los siete la
   cuenta llegó al máximo ("Choose a certificate to revoke") y hay que revocar los recientes en el
   portal de desarrollador antes de relanzar
+- `store-status.yml` — cada día, en Linux (un minuto cuenta uno, no diez como en macOS), lee App Store
+  Connect con la clave de los secretos y publica `store.json` en la rama `store-data`. Opcional
+  `ASC_VENDOR_NUMBER` para las descargas. Arranca también con un push que toque `scripts/store-status/`
 - `release.yml` — a mano: sube metadatos y notas de `fastlane/metadata` y, si se marca, envía a revisión
   la build ya subida. Como todo `workflow_dispatch`, solo aparece en Actions cuando el fichero está en main
 
@@ -96,6 +99,15 @@ Sin Mac, lo mismo desde GitHub Actions (`.github/workflows`), con los secretos `
   entitlements. Comparte versión y número de build con la app (los dos en el proyecto). Con la firma
   en la nube (`testflight.yml` sin secretos de match) Xcode crea solo el App ID y el perfil del widget;
   con match, el perfil del widget hay que crearlo una vez con `fastlane ios certificates`
+- **Estado de la App Store**: `Store/`. RepoMind no habla con Apple, porque la clave de la API (rol
+  Admin) no puede vivir en un móvil: el workflow `store-status.yml` (`scripts/store-status/store_status.rb`,
+  con pruebas en Ruby) la usa cada día y escribe el JSON de `docs/store-contract.md` en la rama `store-data`;
+  `StoreStatusStore` lo lee con el token de GitHub de la cuenta dueña del repo (solo se manda a
+  `raw.githubusercontent.com`), lo guarda en `UserDefaults` y `HomeStoreCard` lo pinta en Inicio:
+  versión publicada y pendiente por plataforma (`StoreStatus.releases`), build de TestFlight, aviso de
+  "build sin enviar a revisión" y descargas por día. Las reglas están en Swift, no en el script, que solo
+  vuelca lo de Apple. Las alertas (Pro, `RepoAlertRules.storeAlert`) avisan al entrar en revisión, aprobarse,
+  rechazarse o publicarse. La dirección del `store.json` se pone en Ajustes → App Store
 - **Notificaciones**: `Notifications/`. Toda notificación local lleva en su `userInfo` un
   `NotificationTarget` (ids y una URL, nunca modelos: un toque puede arrancar la app en frío antes de que
   exista el store). `NotificationDelegate`, puesto en `AppDelegate` antes de terminar el arranque, lo recoge
@@ -119,6 +131,7 @@ RepoMind/
 ├── Board/             # Tablero rediseñado para iPhone (BoardView sobre KanbanViewModel); iPad/Mac usan KanbanView
 ├── Capture/           # Dictar una tarea fuera de un tablero: hoja, modelo, quién es la app, atajo de Siri
 ├── Notifications/     # Adónde lleva cada notificación: target, router, delegado y resolución contra el store
+├── Store/             # Estado de la App Store: modelo, almacén y la sección de Ajustes (el script va en scripts/store-status)
 ├── ViewModels/        # KanbanViewModel.swift
 ├── Models/            # Modelos SwiftData (@Model)
 ├── en.lproj/          # Strings inglés

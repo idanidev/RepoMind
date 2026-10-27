@@ -710,3 +710,36 @@
 "alert_security_body_other %lld" = "GitHub reports %lld new security alerts.";
 "alert_crash_body_one" = "A new crash was reported.";
 "alert_crash_body_other %lld" = "%lld new crashes were reported.";
+
+/* App Store: published version, what is in review, TestFlight, downloads */
+"home_store_title" = "App Store";
+"home_store_unsent %@" = "%@ in TestFlight, not sent";
+"home_store_not_published" = "Not published";
+"home_store_downloads_7" = "downloads, 7 days";
+"home_store_downloads_30" = "downloads, 30 days";
+"home_store_purchases_30" = "purchases, 30 days";
+"home_store_state_waiting" = "waiting for review";
+"home_store_state_in_review" = "in review";
+"home_store_state_approved" = "approved";
+"home_store_state_rejected" = "rejected";
+"home_store_state_draft" = "not sent yet";
+"home_store_state_processing" = "processing";
+"store_section_header" = "App Store";
+"store_url_placeholder" = "https://raw.githubusercontent.com/you/repo/store-data/store.json";
+"store_url_invalid" = "That is not a valid https address.";
+"store_save_button" = "Save and read";
+"store_disconnect_button" = "Disconnect";
+"store_footer" = "The address of the store.json that your store-status workflow publishes: which version of each app is published, what is in review, the latest TestFlight build and the downloads. It is read with your GitHub token; the App Store Connect key never leaves GitHub.";
+"store_connected %lld %@" = "Connected: %lld apps, updated %@";
+"store_error_token" = "GitHub rejected the token. Sign in again.";
+"store_error_not_found" = "No store.json at that address. Has the workflow run? A private repo also needs a token that can read it.";
+"store_error_format" = "That file is not an App Store status in the format RepoMind reads.";
+"alerts_store_toggle" = "App Store: review and release";
+"alert_store_live_title %@ %@" = "%@ %@ is live";
+"alert_store_live_body" = "It can be downloaded from the App Store now.";
+"alert_store_review_title %@ %@" = "%@ %@ is in review";
+"alert_store_review_body" = "Apple has started reviewing it.";
+"alert_store_approved_title %@ %@" = "%@ %@ was approved";
+"alert_store_approved_body" = "It is ready to be released.";
+"alert_store_rejected_title %@ %@" = "%@ %@ was rejected";
+"alert_store_rejected_body" = "Open App Store Connect to see why.";

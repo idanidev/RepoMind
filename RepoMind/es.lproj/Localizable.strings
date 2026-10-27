@@ -709,3 +709,36 @@
 "alert_security_body_other %lld" = "GitHub avisa de %lld alertas de seguridad nuevas.";
 "alert_crash_body_one" = "Se ha registrado un cierre nuevo.";
 "alert_crash_body_other %lld" = "Se han registrado %lld cierres nuevos.";
+
+/* App Store: versión publicada, lo que está en revisión, TestFlight, descargas */
+"home_store_title" = "App Store";
+"home_store_unsent %@" = "%@ en TestFlight, sin enviar";
+"home_store_not_published" = "Sin publicar";
+"home_store_downloads_7" = "descargas, 7 días";
+"home_store_downloads_30" = "descargas, 30 días";
+"home_store_purchases_30" = "compras, 30 días";
+"home_store_state_waiting" = "esperando revisión";
+"home_store_state_in_review" = "en revisión";
+"home_store_state_approved" = "aprobada";
+"home_store_state_rejected" = "rechazada";
+"home_store_state_draft" = "sin enviar";
+"home_store_state_processing" = "procesando";
+"store_section_header" = "App Store";
+"store_url_placeholder" = "https://raw.githubusercontent.com/tu-usuario/repo/store-data/store.json";
+"store_url_invalid" = "Esa dirección no es una https válida.";
+"store_save_button" = "Guardar y leer";
+"store_disconnect_button" = "Desconectar";
+"store_footer" = "La dirección del store.json que publica tu workflow de store-status: qué versión de cada app está publicada, qué está en revisión, la última build de TestFlight y las descargas. Se lee con tu token de GitHub; la clave de App Store Connect no sale de GitHub.";
+"store_connected %lld %@" = "Conectado: %lld apps, actualizado %@";
+"store_error_token" = "GitHub ha rechazado el token. Vuelve a iniciar sesión.";
+"store_error_not_found" = "No hay store.json en esa dirección. ¿Ha corrido el workflow? Un repo privado también necesita un token que pueda leerlo.";
+"store_error_format" = "Ese fichero no es un estado de la App Store en el formato que lee RepoMind.";
+"alerts_store_toggle" = "App Store: revisión y publicación";
+"alert_store_live_title %@ %@" = "%@ %@ ya está publicada";
+"alert_store_live_body" = "Ya se puede descargar en la App Store.";
+"alert_store_review_title %@ %@" = "%@ %@ está en revisión";
+"alert_store_review_body" = "Apple ha empezado a revisarla.";
+"alert_store_approved_title %@ %@" = "%@ %@ aprobada";
+"alert_store_approved_body" = "Lista para publicarse.";
+"alert_store_rejected_title %@ %@" = "%@ %@ rechazada";
+"alert_store_rejected_body" = "Mira el motivo en App Store Connect.";

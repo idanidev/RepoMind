@@ -24,6 +24,9 @@ struct HomeDashboardData: Hashable {
     var busiest: [HomeRepoLoad] = []
     var github = HomeGitHubSummary()
     var apps: [HomeAppSummary] = []
+    /// The apps on the App Store, when the user connected the store status. Empty otherwise.
+    var store: [HomeStoreApp] = []
+    var storeUpdatedAt: Date?
     /// Most repos first.
     var languages: [HomeLanguageShare] = []
     var sync = HomeSyncStatus()
@@ -158,6 +161,8 @@ extension HomeDashboardData {
         stats: (Int) -> RepoStats?,
         sync: HomeSyncStatus,
         isPro: Bool,
+        store: StoreStatus? = nil,
+        storeUpdatedAt: Date? = nil,
         now: Date = .now
     ) {
         let live = repos.filter { !$0.isArchived }
@@ -176,6 +181,8 @@ extension HomeDashboardData {
             busiest: Self.busiest(in: live),
             github: Self.github(in: live, activity: activity, now: now),
             apps: live.compactMap { repo in stats(repo.repoID).flatMap { HomeAppSummary(repo: repo, stats: $0) } },
+            store: store?.apps.map { HomeStoreApp(app: $0, repos: live) } ?? [],
+            storeUpdatedAt: storeUpdatedAt,
             languages: Self.languages(in: live),
             sync: sync,
             repos: HomeRepoCounts(

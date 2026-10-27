@@ -9,6 +9,7 @@ Nuevo Inicio, nueva home y nuevo tablero en iPhone.
 • Dicta desde cualquier sitio: un widget en la pantalla de inicio y de bloqueo, Siri ("Añade una tarea en RepoMind") y el botón de acción abren la app escuchando. Di la app y la tarea, como "En InSync, arreglar el login"
 • Agente: cada tarea lleva su tipo como etiqueta de GitHub y se puede pasar a un agente de código
 • Notificaciones: al tocar un reporte o una issue nueva se abre la tarea o el reporte, se leen mejor, se agrupan por app y salen también con la app abierta
+• App Store: qué versión de cada una de tus apps está publicada, cuál está en revisión o rechazada, la última build de TestFlight y un aviso si nunca se envió, y tus descargas por día. Se conecta en Ajustes
 • Pro: alertas de builds en rojo, nuevas versiones, alertas de seguridad y cierres, y un panel con todas tus apps
 • Perfil dentro de Ajustes, búsqueda abajo junto a las pestañas
 

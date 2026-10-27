@@ -67,6 +67,7 @@ struct SettingsView: View {
     @AppStorage("alerts_releases") private var alertsReleases = true
     @AppStorage("alerts_security") private var alertsSecurity = true
     @AppStorage("alerts_crashes") private var alertsCrashes = true
+    @AppStorage("alerts_store") private var alertsStore = true
     @AppStorage("delegateNewTasks") private var delegateNewTasks = false
 
     @Environment(\.dismiss) private var dismiss
@@ -327,6 +328,10 @@ struct SettingsView: View {
                 Text("agent_footer")
             }
 
+            // MARK: - App Store
+
+            SettingsStoreSection()
+
             // MARK: - Alerts (Pro)
 
             Section {
@@ -335,6 +340,7 @@ struct SettingsView: View {
                     Toggle("alerts_releases_toggle", isOn: $alertsReleases)
                     Toggle("alerts_security_toggle", isOn: $alertsSecurity)
                     Toggle("alerts_crashes_toggle", isOn: $alertsCrashes)
+                    Toggle("alerts_store_toggle", isOn: $alertsStore)
                 }
                 .disabled(!subscription.isPro)
                 if !subscription.isPro {
@@ -350,7 +356,7 @@ struct SettingsView: View {
             } footer: {
                 Text("alerts_footer")
             }
-            .onChange(of: [alertsCI, alertsReleases, alertsSecurity, alertsCrashes]) { _, now in
+            .onChange(of: [alertsCI, alertsReleases, alertsSecurity, alertsCrashes, alertsStore]) { _, now in
                 if now.contains(true) {
                     Task { _ = await FeedbackNotificationManager.shared.requestAuthorizationIfNeeded() }
                 }

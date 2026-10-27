@@ -12,6 +12,8 @@ nonisolated enum RepoAlertRules {
         case releases
         case security
         case crashes
+        /// A version of one of the developer's apps went into review, was approved, rejected or published.
+        case store
 
         var id: String { rawValue }
         var defaultsKey: String { "alerts_" + rawValue }
@@ -25,6 +27,9 @@ nonisolated enum RepoAlertRules {
         var securityAlerts: Int?
         /// The newest crash's date and the crash count the stats carried, as text.
         var crashSignature: String?
+        /// `live|pending`: the published version, and the one on its way as `version:state`. Keyed in
+        /// `RepoAlertCenter` by the negated Apple ID of the app, apart from the GitHub repo ids.
+        var storeSignature: String?
     }
 
     struct Alert: Hashable {
@@ -48,7 +53,57 @@ nonisolated enum RepoAlertRules {
         case .releases: return page("/releases/latest")
         case .security: return page("/security/dependabot")
         case .crashes: return .stats(repoID: alert.repoID)
+        case .store:
+            // For a store alert `repoID` is the app's Apple ID.
+            guard let url = URL(string: "https://appstoreconnect.apple.com/apps/\(alert.repoID)/distribution")
+            else { return .board(repoID: alert.repoID) }
+            return .web(url)
         }
+    }
+
+    /// A change in what the App Store says about one app. The first sight is recorded, never announced.
+    /// Published beats everything else; a version going into review, being approved or rejected each
+    /// say so. Waiting for review and drafts are the developer's own doing, so they stay quiet.
+    static func storeAlert(
+        previous: Seen?, app: StoreStatus.StoreApp, name: String, enabled: Set<Kind>
+    ) -> (alert: Alert?, seen: Seen) {
+        var seen = previous ?? Seen()
+        let release = app.primaryRelease
+        let liveVersion = release?.live?.version ?? ""
+        let pendingSignature = release?.pending.map { "\($0.version):\($0.state)" } ?? ""
+        seen.storeSignature = "\(liveVersion)|\(pendingSignature)"
+        guard enabled.contains(.store), let known = previous?.storeSignature else { return (nil, seen) }
+
+        let parts = known.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+        let knownLive = parts.first ?? ""
+        let knownPending = parts.count > 1 ? parts[1] : ""
+        let appleID = Int(app.id) ?? 0
+
+        if !liveVersion.isEmpty, liveVersion != knownLive {
+            return (Alert(
+                kind: .store, repoID: appleID,
+                title: String(format: String(localized: "alert_store_live_title %@ %@"), name, liveVersion),
+                body: String(localized: "alert_store_live_body")), seen)
+        }
+        guard let pending = release?.pending, "\(pending.version):\(pending.state)" != knownPending else {
+            return (nil, seen)
+        }
+        let title: String
+        let body: String
+        switch pending.kind {
+        case .inReview:
+            title = String(format: String(localized: "alert_store_review_title %@ %@"), name, pending.version)
+            body = String(localized: "alert_store_review_body")
+        case .approved:
+            title = String(format: String(localized: "alert_store_approved_title %@ %@"), name, pending.version)
+            body = String(localized: "alert_store_approved_body")
+        case .rejected:
+            title = String(format: String(localized: "alert_store_rejected_title %@ %@"), name, pending.version)
+            body = String(localized: "alert_store_rejected_body")
+        default:
+            return (nil, seen)
+        }
+        return (Alert(kind: .store, repoID: appleID, title: title, body: body), seen)
     }
 
     static func gitHubAlerts(
@@ -187,9 +242,30 @@ final class RepoAlertCenter {
                 }
             }
         }
+        await checkStore(live: live, accounts: accounts, alerts: &alerts)
         save()
         let htmlURLs = Dictionary(live.map { ($0.repoID, $0.htmlURL) }, uniquingKeysWith: { first, _ in first })
         await post(alerts, htmlURLs: htmlURLs)
+    }
+
+    /// The App Store status, read again and compared like the rest. Its keys in `seen` are negative, so
+    /// an Apple ID can never collide with a GitHub repo id.
+    private func checkStore(
+        live: [ProjectRepo], accounts: [GitHubAccount], alerts: inout [RepoAlertRules.Alert]
+    ) async {
+        let store = StoreStatusStore.shared
+        guard store.isConfigured else { return }
+        await store.refresh(
+            accounts: accounts.map { StoreAccount(username: $0.username, tokenKey: $0.tokenKey) }, force: true)
+        guard let status = store.status else { return }
+        let enabled = enabledKinds
+        for app in status.apps {
+            let key = -(Int(app.id) ?? 0)
+            let name = live.first { app.matches(repoName: $0.name) }?.name ?? app.name
+            let result = RepoAlertRules.storeAlert(previous: seen[key], app: app, name: name, enabled: enabled)
+            if let alert = result.alert { alerts.append(alert) }
+            seen[key] = result.seen
+        }
     }
 
     private func post(_ alerts: [RepoAlertRules.Alert], htmlURLs: [Int: String]) async {

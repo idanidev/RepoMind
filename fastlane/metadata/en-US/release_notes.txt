@@ -9,6 +9,7 @@ A new Home, a new repo list and a new board on iPhone.
 • Dictate from anywhere: a Home Screen and Lock Screen widget, Siri ("Add a task in RepoMind") and the Action Button open the app listening. Say the app and the task, like "In InSync, fix the login"
 • Agent: each task carries its kind as a GitHub label and can be handed to a coding agent
 • Notifications: tapping a report or a new issue opens the task or the report itself, they read cleaner and stack by app, and they show up even with the app open
+• App Store: which version of each of your apps is published, which one is in review or rejected, the latest TestFlight build and a warning when it was never sent, and your downloads per day. Connect it in Settings
 • Pro: alerts for failing builds, new releases, security alerts and crashes, and a panel with all your apps
 • Profile under Settings, search at the bottom next to the tabs
 
