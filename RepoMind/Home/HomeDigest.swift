@@ -97,10 +97,10 @@ extension HomeDigest {
     /// Work, not ideas: tasks in a column that is neither the done one nor the idea one.
     static func pendingTasks(in repos: [ProjectRepo]) -> [TaskItem] {
         repos.flatMap { repo -> [TaskItem] in
-            let doneID = repo.doneColumn?.id
+            let roles = RepoColumnRoles(repo)
             return (repo.tasks ?? []).filter { task in
-                guard let column = task.column, column.id != doneID else { return false }
-                return !repo.isIdea(task)
+                guard let column = task.column, column.id != roles.doneID else { return false }
+                return !roles.isIdea(task)
             }
         }
     }
@@ -115,12 +115,16 @@ extension HomeDigest {
     }
 
     static func unpublishedTasks(in repos: [ProjectRepo]) -> [TaskItem] {
-        repos.flatMap { repo in (repo.tasks ?? []).filter { $0.needsIssueSync && !repo.isIdea($0) } }
+        repos.flatMap { repo -> [TaskItem] in
+            let roles = RepoColumnRoles(repo)
+            return (repo.tasks ?? []).filter { $0.needsIssueSync && !roles.isIdea($0) }
+        }
     }
 
     static func syncErrorTasks(in repos: [ProjectRepo]) -> [TaskItem] {
-        repos.flatMap { repo in
-            (repo.tasks ?? []).filter { $0.lastSyncError != nil && !repo.isIdea($0) }
+        repos.flatMap { repo -> [TaskItem] in
+            let roles = RepoColumnRoles(repo)
+            return (repo.tasks ?? []).filter { $0.lastSyncError != nil && !roles.isIdea($0) }
         }
     }
 

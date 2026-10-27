@@ -181,6 +181,25 @@ extension ProjectRepo {
     }
 }
 
+/// A repo's done and idea columns, read once. `doneColumn` sorts the columns, searches their names and
+/// reads UserDefaults, and `isIdea` reads the columns and UserDefaults again; asked once per task, a
+/// pass over a few thousand tasks did thousands of sorts and well over a hundred thousand string
+/// searches every time the home redrew. Same answers, asked once per repo.
+struct RepoColumnRoles {
+    let doneID: UUID?
+    let ideaID: UUID?
+
+    init(_ repo: ProjectRepo) {
+        doneID = repo.doneColumn?.id
+        ideaID = repo.ideaColumn?.id
+    }
+
+    func isIdea(_ task: TaskItem) -> Bool {
+        guard let ideaID else { return false }
+        return task.column?.id == ideaID
+    }
+}
+
 // MARK: - Kanban Column
 
 @Model

@@ -198,17 +198,18 @@ extension HomeDashboardData {
     /// A task is work, done, or an idea, exactly as the board counts it.
     private enum Shape { case pending, done, idea, orphan }
 
-    private static func shape(of task: TaskItem, in repo: ProjectRepo) -> Shape {
+    private static func shape(of task: TaskItem, roles: RepoColumnRoles) -> Shape {
         guard let column = task.column else { return .orphan }
-        if repo.isIdea(task) { return .idea }
-        return column.id == repo.doneColumn?.id ? .done : .pending
+        if roles.isIdea(task) { return .idea }
+        return column.id == roles.doneID ? .done : .pending
     }
 
     private static func totals(in repos: [ProjectRepo], startOfToday: Date, now: Date) -> HomeTaskTotals {
         var totals = HomeTaskTotals()
         for repo in repos {
+            let roles = RepoColumnRoles(repo)
             for task in repo.tasks ?? [] {
-                switch shape(of: task, in: repo) {
+                switch shape(of: task, roles: roles) {
                 case .pending: totals.pending += 1
                 case .done: totals.done += 1
                 case .idea: totals.ideas += 1
@@ -235,26 +236,35 @@ extension HomeDashboardData {
     }
 
     private static func recent(in repos: [ProjectRepo]) -> [HomeRecentTask] {
-        repos.flatMap { repo in
-            (repo.tasks ?? []).compactMap { task -> HomeRecentTask? in
-                let shape = shape(of: task, in: repo)
-                guard shape != .orphan else { return nil }
-                return HomeRecentTask(
-                    id: task.id, title: task.content, repoName: repo.name, repoCardID: repo.homeCardID,
-                    createdAt: task.createdAt, isDone: shape == .done)
-            }
+        // Only the newest few are kept, so the rest are never built: a struct and a `homeCardID` (a string
+        // made from reflection) per task, thousands of them, to show eight.
+        let newest = repos.flatMap { repo -> [(task: TaskItem, repo: ProjectRepo)] in
+            (repo.tasks ?? []).map { (task: $0, repo: repo) }
         }
-        .sorted { $0.createdAt > $1.createdAt }
-        .prefix(recentLimit)
-        .map { $0 }
+        .sorted { $0.task.createdAt > $1.task.createdAt }
+        var result: [HomeRecentTask] = []
+        var roles: [PersistentIdentifier: RepoColumnRoles] = [:]
+        for entry in newest {
+            let repoRoles = roles[entry.repo.persistentModelID] ?? RepoColumnRoles(entry.repo)
+            roles[entry.repo.persistentModelID] = repoRoles
+            let state = shape(of: entry.task, roles: repoRoles)
+            guard state != .orphan else { continue }
+            result.append(
+                HomeRecentTask(
+                    id: entry.task.id, title: entry.task.content, repoName: entry.repo.name,
+                    repoCardID: entry.repo.homeCardID, createdAt: entry.task.createdAt, isDone: state == .done))
+            if result.count == recentLimit { break }
+        }
+        return result
     }
 
     private static func busiest(in repos: [ProjectRepo]) -> [HomeRepoLoad] {
         repos.compactMap { repo -> HomeRepoLoad? in
             var pending = 0
             var total = 0
+            let roles = RepoColumnRoles(repo)
             for task in repo.tasks ?? [] {
-                switch shape(of: task, in: repo) {
+                switch shape(of: task, roles: roles) {
                 case .pending: pending += 1; total += 1
                 case .done: total += 1
                 case .idea, .orphan: continue

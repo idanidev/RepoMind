@@ -120,12 +120,12 @@ extension HomeRepoCardData {
     /// are not counted either; `OrphanTaskRepair` reattaches them.
     init(repo: ProjectRepo, unreadFeedback: Int = 0, activity: RepoActivity? = nil, now: Date = .now) {
         let tasks = (repo.tasks ?? []).sorted { $0.orderIndex < $1.orderIndex }
-        let doneID = repo.doneColumn?.id
+        let roles = RepoColumnRoles(repo)
         let counted = tasks.filter { task in
-            guard task.column != nil, !repo.isIdea(task) else { return false }
+            guard task.column != nil, !roles.isIdea(task) else { return false }
             return true
         }
-        let pending = counted.filter { $0.column?.id != doneID }
+        let pending = counted.filter { $0.column?.id != roles.doneID }
 
         let full = repo.fullName
         let owner: String? = full.contains("/") ? String(full.prefix { $0 != "/" }) : nil

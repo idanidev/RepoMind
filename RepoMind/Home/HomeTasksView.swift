@@ -106,7 +106,13 @@ struct HomeTasksView: View {
     var searchText = ""
     var actions = HomeTasksActions()
 
+    /// How many rows a repo shows before "Show more": a backlog of hundreds in one repo would otherwise
+    /// build every row, all at once, inside a single lazy item.
+    static let rowsPerGroup = 8
+
     @State private var filter: HomeTaskFilter = .pending
+    /// The repos whose full list is open.
+    @State private var expanded: Set<String> = []
 
     private var groups: [HomeTaskGroup] { HomeTaskRow.groups(rows, filter: filter, query: searchText) }
 
@@ -159,7 +165,7 @@ struct HomeTasksView: View {
             HStack(spacing: 10) {
                 Image(systemName: "bell.badge.fill")
                     .foregroundStyle(HomeTheme.warning)
-                Text(String(format: String(localized: "home_tasks_attention %lld"), attention))
+                Text("home_tasks_attention \(attention)")
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(HomeTheme.textPrimary)
                 Spacer()
@@ -181,7 +187,9 @@ struct HomeTasksView: View {
     }
 
     private func groupCard(_ group: HomeTaskGroup) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        let visible = expanded.contains(group.id) ? group.rows : Array(group.rows.prefix(Self.rowsPerGroup))
+        let hidden = group.rows.count - visible.count
+        return VStack(alignment: .leading, spacing: 8) {
             Button {
                 actions.openRepo(group.id)
             } label: {
@@ -198,12 +206,25 @@ struct HomeTasksView: View {
                     Image(systemName: "chevron.right")
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(HomeTheme.textSecondary)
+                        .accessibilityHidden(true)
                 }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            ForEach(group.rows) { row in
+            ForEach(visible) { row in
                 taskRow(row, repoCardID: group.id)
+            }
+            if hidden > 0 {
+                Button {
+                    withAnimation(.smooth(duration: 0.25)) { _ = expanded.insert(group.id) }
+                } label: {
+                    Text("home_tasks_show_more \(hidden)")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(HomeTheme.accent)
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
             }
         }
         .padding(HomeTheme.cardPadding)
@@ -220,6 +241,7 @@ struct HomeTasksView: View {
                     .font(.caption)
                     .foregroundStyle(tint(for: row.state))
                     .padding(.top, 2)
+                    .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(row.title)
                         .font(.footnote)
@@ -236,6 +258,16 @@ struct HomeTasksView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        // The glyph said "pending", "done" or "idea" to the eye; it says it to VoiceOver here.
+        .accessibilityValue(stateLabel(for: row.state))
+    }
+
+    private func stateLabel(for state: HomeTaskState) -> LocalizedStringKey {
+        switch state {
+        case .pending: "home_tasks_filter_pending"
+        case .done: "home_tasks_filter_done"
+        case .idea: "home_tasks_filter_ideas"
+        }
     }
 
     private func meta(for row: HomeTaskRow) -> String {
@@ -288,13 +320,14 @@ extension HomeTaskRow {
     /// Every task with a column, as the board counts them, newest first.
     static func rows(in repos: [ProjectRepo]) -> [HomeTaskRow] {
         repos.flatMap { repo -> [HomeTaskRow] in
-            let doneID = repo.doneColumn?.id
+            let roles = RepoColumnRoles(repo)
+            let cardID = repo.homeCardID
             return (repo.tasks ?? []).compactMap { task -> HomeTaskRow? in
                 guard let column = task.column else { return nil }
-                let state: HomeTaskState = repo.isIdea(task) ? .idea : (column.id == doneID ? .done : .pending)
+                let state: HomeTaskState = roles.isIdea(task) ? .idea : (column.id == roles.doneID ? .done : .pending)
                 let labels = TaskLabelStore.labels(for: task.id)
                 return HomeTaskRow(
-                    id: task.id, title: task.content, repoName: repo.name, repoCardID: repo.homeCardID,
+                    id: task.id, title: task.content, repoName: repo.name, repoCardID: cardID,
                     columnName: column.name, createdAt: task.createdAt, issueNumber: task.issueNumber,
                     needsIssueSync: task.needsIssueSync, state: state,
                     kind: labels?.kind, delegated: labels?.delegated ?? false)

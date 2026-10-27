@@ -24,6 +24,7 @@ enum HomeRoute: Hashable {
 struct HomeLiveView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.openURL) private var openURL
+    @Environment(\.scenePhase) private var scenePhase
     @Query(sort: \ProjectRepo.updatedAt, order: .reverse) private var repos: [ProjectRepo]
     @Query private var accounts: [GitHubAccount]
     @Query private var feedbackIssues: [FeedbackIssue]
@@ -44,6 +45,11 @@ struct HomeLiveView: View {
     @State private var selectedAccount: String?
     @State private var isSearching = false
     @State private var searchText = ""
+    /// `searchText` once typing has paused: what the lists filter by. They rebuilt on every keystroke.
+    @State private var query = ""
+    /// Moves when the day changes or the app comes back, so that "today" is today again: the start screen
+    /// stayed on yesterday's date and counts until something unrelated redrew it.
+    @State private var dayTick = Date.now
     @FocusState private var searchFocused: Bool
     @State private var isSyncing = false
     @State private var showAddLocalProject = false
@@ -59,6 +65,7 @@ struct HomeLiveView: View {
     private static let syncSuccessFeedback = UINotificationFeedbackGenerator()
 
     var body: some View {
+        let _ = dayTick
         NavigationStack(path: $path) {
             ZStack {
                 HomeTheme.background
@@ -70,7 +77,7 @@ struct HomeLiveView: View {
                     reposTab
                 case .tasks:
                     HomeTasksView(
-                        rows: taskRows, attention: attentionCount, searchText: searchText,
+                        rows: taskRows, attention: attentionCount, searchText: query,
                         actions: HomeTasksActions(
                             openRepo: dashboardActions.openRepo,
                             openToday: { path.append(HomeRoute.today) },
@@ -99,7 +106,7 @@ struct HomeLiveView: View {
                             openStats: dashboardActions.openStats,
                             upgrade: { showPaywall = true },
                             refresh: { await refresh() }))
-                case .digest(let kind): onBlack { HomeDigestView(kind: kind) }
+                case .digest(let kind): onBlack { HomeDigestView(kind: kind, scope: entitledRepos) }
                 case .stats(let repo): BoardStatsView(project: repo)
                 case .board(let repo, let focus): BoardView(project: repo, focus: focus)
                 }
@@ -140,14 +147,43 @@ struct HomeLiveView: View {
                 if repos.isEmpty {
                     await syncRepos(silent: true)
                 }
-                statsStore.loadCached(for: repos.map(\.repoID))
-                storeStore.loadCached()
-                await activity.refresh(repos: repos, accounts: accounts)
-                await storeStore.refresh(accounts: storeAccounts)
-                for repoID in repos.map(\.repoID) where statsStore.isConfigured(repoID) {
-                    await statsStore.refresh(repoID: repoID)
+                await refreshCaches()
+            }
+            // Coming back to the app: what the day changed, what GitHub closed while it was away (the
+            // classic list does this; here it only happened on a pull), and the caches that went stale.
+            .onChange(of: scenePhase) { _, phase in
+                guard phase == .active else { return }
+                dayTick = .now
+                Task {
+                    await importAgentCompletedTasks(force: false)
+                    await refreshCaches()
                 }
             }
+            .task {
+                for await _ in NotificationCenter.default.notifications(named: .NSCalendarDayChanged) {
+                    dayTick = .now
+                }
+            }
+            // Typing is not filtering: the lists wait for a pause.
+            .task(id: searchText) {
+                if !searchText.isEmpty {
+                    try? await Task.sleep(for: .milliseconds(250))
+                }
+                guard !Task.isCancelled else { return }
+                query = searchText
+            }
+        }
+    }
+
+    /// The caches that go stale: activity, App Store status and every connected app's statistics. Each
+    /// keeps its own hour, so calling this often is free.
+    private func refreshCaches() async {
+        statsStore.loadCached(for: repos.map(\.repoID))
+        storeStore.loadCached()
+        await activity.refresh(repos: repos, accounts: accounts)
+        await storeStore.refresh(accounts: storeAccounts)
+        for repoID in repos.map(\.repoID) where statsStore.isConfigured(repoID) {
+            await statsStore.refresh(repoID: repoID)
         }
     }
 
@@ -198,8 +234,8 @@ struct HomeLiveView: View {
             account: accountMenuData,
             stats: HomeStats(cards: cards.filter { !$0.isArchived }),
             repos: cards,
-            repoLimit: subscription.isPro ? nil : subscription.maxFreeRepos,
-            searchText: searchText,
+            repoLimit: subscription.repoLimit,
+            searchText: query,
             actions: actions
         )
     }
@@ -264,7 +300,7 @@ struct HomeLiveView: View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(HomeTheme.textSecondary)
-            TextField("search_placeholder", text: $searchText)
+            TextField(tab == .tasks ? "search_tasks_placeholder" : "search_placeholder", text: $searchText)
                 .textFieldStyle(.plain)
                 .foregroundStyle(HomeTheme.textPrimary)
                 .autocorrectionDisabled()
@@ -277,6 +313,7 @@ struct HomeLiveView: View {
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundStyle(HomeTheme.textSecondary)
+                        .homeHitArea(extending: 14)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("home_clear_search_label")
@@ -349,9 +386,24 @@ struct HomeLiveView: View {
         .navigationTitle("home_tab_profile")
     }
 
+    /// The repos of the selected account that its plan shows, in the order of the Repos tab: favorites
+    /// first, then the most recently updated, cut to `repoLimit` on a free account. The cap used to exist
+    /// only in that list, so the start screen, the tasks, the digests and the apps panel counted, listed
+    /// and opened repos the free tier hides.
+    private var entitledRepos: [ProjectRepo] {
+        let mine = repos.filter {
+            !$0.isArchived && (selectedAccount == nil || $0.account?.username == selectedAccount)
+        }
+        let ordered = mine.filter(\.isFavorite) + mine.filter { !$0.isFavorite }
+        return SubscriptionManager.visible(ordered, limit: subscription.repoLimit, isFavorite: \.isFavorite)
+    }
+
     /// The same repos the list shows: the selected account, archived counted apart.
     private var dashboard: HomeDashboardData {
-        let mine = repos.filter { selectedAccount == nil || $0.account?.username == selectedAccount }
+        let archived = repos.filter {
+            $0.isArchived && (selectedAccount == nil || $0.account?.username == selectedAccount)
+        }
+        let mine = entitledRepos + archived
         let names = Set(mine.map(\.fullName))
         let unread = feedbackIssues.filter {
             !$0.isRead && !$0.isSnoozed && $0.state == "open" && names.contains($0.repoFullName)
@@ -379,8 +431,7 @@ struct HomeLiveView: View {
 
     /// Every connected app of the selected account with what its backend last said.
     private var appEntries: [HomeAppPanelEntry] {
-        repos
-            .filter { !$0.isArchived && (selectedAccount == nil || $0.account?.username == selectedAccount) }
+        entitledRepos
             .compactMap { repo in
                 statsStore.stats(for: repo.repoID).map {
                     HomeAppPanelEntry(
@@ -391,15 +442,19 @@ struct HomeLiveView: View {
 
     /// Every task of the selected account's live repos, newest first.
     private var taskRows: [HomeTaskRow] {
-        HomeTaskRow.rows(in: repos.filter {
-            !$0.isArchived && (selectedAccount == nil || $0.account?.username == selectedAccount)
-        })
+        HomeTaskRow.rows(in: entitledRepos)
     }
 
-    /// What Today lists: unread reports, tasks never published, and a sync that is failing.
+    /// What Today lists: unread reports, tasks never published, and a sync that is failing. Counted
+    /// directly: this used to build the whole start screen (every task walked eight times) just to read
+    /// two of its numbers, on every redraw of the Tasks tab.
     private var attentionCount: Int {
-        let digest = dashboard.digest
-        return digest.unreadFeedback + digest.unpublished + (syncMonitor.hasSyncProblem ? 1 : 0)
+        let scope = entitledRepos
+        let names = Set(scope.map(\.fullName))
+        let unread = feedbackIssues.filter {
+            !$0.isRead && !$0.isSnoozed && $0.state == "open" && names.contains($0.repoFullName)
+        }.count
+        return unread + HomeDigest.unpublishedTasks(in: scope).count + (syncMonitor.hasSyncProblem ? 1 : 0)
     }
 
     private var dashboardActions: HomeDashboardActions {

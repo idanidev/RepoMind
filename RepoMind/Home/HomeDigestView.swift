@@ -8,12 +8,15 @@ import SwiftUI
 /// the same `HomeDigest` functions as the card, so the two always agree.
 struct HomeDigestView: View {
     let kind: HomeDigestKind
+    /// The repos the home counted this digest from: its selected account, within its plan. With none,
+    /// every repo, which is what the view did before and what the previews need.
+    var scope: [ProjectRepo]?
 
     @Environment(\.openURL) private var openURL
     @Query(sort: \ProjectRepo.updatedAt, order: .reverse) private var repos: [ProjectRepo]
     @State private var activity = RepoActivityStore.shared
 
-    private var live: [ProjectRepo] { repos.filter { !$0.isArchived } }
+    private var live: [ProjectRepo] { (scope ?? repos).filter { !$0.isArchived } }
 
     var body: some View {
         Group {
@@ -170,7 +173,7 @@ struct HomeDigestView: View {
         var parts: [String] = []
         let facts = activity.activity(for: repo.repoID)
         if let count = facts?.openPullRequests, count > 0 {
-            parts.append(String(format: String(localized: "home_digest_pr_count %lld"), count))
+            parts.append(String(localized: "home_digest_pr_count \(count)"))
         }
         if facts?.isBuildFailing == true {
             parts.append(String(localized: "home_digest_build_failing"))
