@@ -9,29 +9,40 @@ argument-hint: [ios|mac|both]
 
 ## Versión actual
 
-!`plutil -p RepoMind/Info.plist 2>/dev/null || grep -r "MARKETING_VERSION" RepoMind.xcodeproj/project.pbxproj | head -3`
+!`grep -h "MARKETING_VERSION" RepoMind.xcodeproj/project.pbxproj | sort -u`
 
-## Último tag de versión
+## Último envío a revisión
 
-!`git tag --sort=-version:refname | head -5`
+Este repo no pone tags: el último envío es el commit "chore(release): X.Y.Z submitted for review".
 
-## Cambios desde el último release
+!`git log --grep='submitted for review' -1 --format='%h %ad %s' --date=short`
 
-!`git log $(git describe --tags --abbrev=0)..HEAD --oneline 2>/dev/null || git log --oneline -20`
+## Cambios desde el último envío
+
+!`git log $(git log --grep='submitted for review' -1 --format=%h)..HEAD --oneline 2>/dev/null | head -60`
+
+## ¿Cambió algún @Model desde entonces?
+
+!`git diff --stat $(git log --grep='submitted for review' -1 --format=%h)..HEAD -- RepoMind/Models.swift`
 
 ---
 
 Plataforma objetivo: **$ARGUMENTS**
 
-Sigue estos pasos para el release:
+El orden completo está en CLAUDE.md → "Publicar una versión". Sigue estos pasos:
 
 1. Verifica que no hay cambios sin commitear (git status debe estar limpio)
-2. Resume los cambios desde el último release para el changelog
+2. Resume los cambios desde el último envío para las notas de la versión
 3. Sugiere el número de versión siguiente (semver: MAJOR.MINOR.PATCH)
-4. Indica el comando exacto de fastlane a ejecutar según la plataforma:
-   - `ios` → `bundle exec fastlane ios release`
-   - `mac` → `bundle exec fastlane mac release`
-   - `both` → ambos en orden (ios primero)
-5. Recuerda verificar en App Store Connect después del upload
+4. **Si el diff de `Models.swift` toca un `@Model` (un campo o una clase), para aquí**: antes de enviar hay
+   que desplegar el esquema de CloudKit (CLAUDE.md, paso 3). Sin eso, la sincronización de esa entidad se
+   rompe en silencio para todos los usuarios
+5. Comprueba que `fastlane/metadata/en-US/release_notes.txt` y `es-ES/release_notes.txt` hablan de esta versión
+6. Indica cómo publicar, según haya Mac o no:
+   - Con Mac: `ios` → `bundle exec fastlane ios release` y luego `submit`; `mac` →
+     `bundle exec fastlane mac release`; `both` → ambos, ios primero
+   - Sin Mac: la rama con la versión tiene que estar en main; Actions → Release con el número de build
+     y "Enviar a revisión". Solo vale una build firmada con match (las de la nube son TestFlight interno)
+7. Recuerda verificar en App Store Connect después del upload y actualizar el historial de CLAUDE.md
 
 **No ejecutes fastlane directamente** — muestra el comando y espera confirmación.
