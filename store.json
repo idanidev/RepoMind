@@ -1,0 +1,410 @@
+{
+  "schema": 1,
+  "generatedAt": "2026-10-27T12:37:14Z",
+  "apps": [
+    {
+      "id": "6759563602",
+      "name": "RepoMind: Dicta tareas GitHub",
+      "bundleId": "idanidev.RepoMind",
+      "versions": [
+        {
+          "platform": "IOS",
+          "version": "1.5.2",
+          "state": "READY_FOR_DISTRIBUTION",
+          "createdAt": "2026-08-24T03:51:42-07:00"
+        },
+        {
+          "platform": "MAC_OS",
+          "version": "1.5.2",
+          "state": "READY_FOR_DISTRIBUTION",
+          "createdAt": "2026-08-21T07:33:45-07:00"
+        },
+        {
+          "platform": "IOS",
+          "version": "1.5.1",
+          "state": "READY_FOR_DISTRIBUTION",
+          "createdAt": "2026-08-21T03:26:28-07:00"
+        },
+        {
+          "platform": "MAC_OS",
+          "version": "1.4.2",
+          "state": "READY_FOR_DISTRIBUTION",
+          "createdAt": "2026-05-24T08:40:08-07:00"
+        },
+        {
+          "platform": "IOS",
+          "version": "1.4.2",
+          "state": "READY_FOR_DISTRIBUTION",
+          "createdAt": "2026-05-24T08:36:42-07:00"
+        },
+        {
+          "platform": "MAC_OS",
+          "version": "1.4.1",
+          "state": "READY_FOR_DISTRIBUTION",
+          "createdAt": "2026-05-05T02:14:09-07:00"
+        }
+      ],
+      "builds": [
+        {
+          "version": "1.5.3",
+          "build": "202608241260",
+          "uploadedAt": "2026-10-27T01:25:49-07:00",
+          "state": "VALID",
+          "expired": false
+        },
+        {
+          "version": "1.5.3",
+          "build": "202608241259",
+          "uploadedAt": "2026-10-26T23:00:33-07:00",
+          "state": "VALID",
+          "expired": false
+        },
+        {
+          "version": "1.5.3",
+          "build": "202608241258",
+          "uploadedAt": "2026-10-26T21:57:30-07:00",
+          "state": "VALID",
+          "expired": false
+        },
+        {
+          "version": "1.5.3",
+          "build": "202608241257",
+          "uploadedAt": "2026-10-26T21:38:17-07:00",
+          "state": "VALID",
+          "expired": false
+        },
+        {
+          "version": "1.5.3",
+          "build": "202608241256",
+          "uploadedAt": "2026-10-26T21:11:57-07:00",
+          "state": "VALID",
+          "expired": false
+        }
+      ],
+      "repo": "RepoMind"
+    },
+    {
+      "id": "6762994393",
+      "name": "Clarity: Control de gastos",
+      "bundleId": "com.idanidev.clarity",
+      "versions": [
+        {
+          "platform": "IOS",
+          "version": "2.4.3",
+          "state": "READY_FOR_DISTRIBUTION",
+          "createdAt": "2026-10-04T03:23:47-07:00"
+        },
+        {
+          "platform": "IOS",
+          "version": "2.4.2",
+          "state": "READY_FOR_DISTRIBUTION",
+          "createdAt": "2026-10-02T12:43:30-07:00"
+        },
+        {
+          "platform": "IOS",
+          "version": "2.4.1",
+          "state": "READY_FOR_DISTRIBUTION",
+          "createdAt": "2026-09-24T04:01:27-07:00"
+        },
+        {
+          "platform": "IOS",
+          "version": "2.4.0",
+          "state": "READY_FOR_DISTRIBUTION",
+          "createdAt": "2026-09-22T08:57:12-07:00"
+        },
+        {
+          "platform": "IOS",
+          "version": "2.3.1",
+          "state": "READY_FOR_DISTRIBUTION",
+          "createdAt": "2026-09-21T23:45:32-07:00"
+        },
+        {
+          "platform": "IOS",
+          "version": "2.3.0",
+          "state": "READY_FOR_DISTRIBUTION",
+          "createdAt": "2026-09-17T10:04:41-07:00"
+        }
+      ],
+      "builds": [
+        {
+          "version": "2.4.4",
+          "build": "49",
+          "uploadedAt": "2026-10-26T18:04:42-07:00",
+          "state": "VALID",
+          "expired": false
+        },
+        {
+          "version": "2.4.4",
+          "build": "48",
+          "uploadedAt": "2026-10-26T07:22:07-07:00",
+          "state": "VALID",
+          "expired": false
+        },
+        {
+          "version": "2.4.3",
+          "build": "48",
+          "uploadedAt": "2026-10-04T03:26:37-07:00",
+          "state": "VALID",
+          "expired": false
+        },
+        {
+          "version": "2.4.2",
+          "build": "47",
+          "uploadedAt": "2026-10-02T12:51:33-07:00",
+          "state": "VALID",
+          "expired": false
+        },
+        {
+          "version": "2.4.1",
+          "build": "46",
+          "uploadedAt": "2026-09-24T04:11:54-07:00",
+          "state": "VALID",
+          "expired": false
+        }
+      ]
+    },
+    {
+      "id": "6798864347",
+      "name": "InSync: Turnos en Pareja",
+      "bundleId": "com.idanidev.syncrocalendar.app",
+      "versions": [
+        {
+          "platform": "IOS",
+          "version": "1.0.13",
+          "state": "READY_FOR_DISTRIBUTION",
+          "createdAt": "2026-10-14T12:16:15-07:00"
+        },
+        {
+          "platform": "IOS",
+          "version": "1.0.12",
+          "state": "READY_FOR_DISTRIBUTION",
+          "createdAt": "2026-10-08T07:34:10-07:00"
+        },
+        {
+          "platform": "IOS",
+          "version": "1.0.11",
+          "state": "READY_FOR_DISTRIBUTION",
+          "createdAt": "2026-10-04T14:24:55-07:00"
+        },
+        {
+          "platform": "IOS",
+          "version": "1.0.10",
+          "state": "READY_FOR_DISTRIBUTION",
+          "createdAt": "2026-10-02T01:15:33-07:00"
+        },
+        {
+          "platform": "IOS",
+          "version": "1.0.9",
+          "state": "READY_FOR_DISTRIBUTION",
+          "createdAt": "2026-09-29T07:51:22-07:00"
+        },
+        {
+          "platform": "IOS",
+          "version": "1.0.8",
+          "state": "READY_FOR_DISTRIBUTION",
+          "createdAt": "2026-09-27T23:38:44-07:00"
+        }
+      ],
+      "builds": [
+        {
+          "version": "1.0.13",
+          "build": "65",
+          "uploadedAt": "2026-10-14T12:28:31-07:00",
+          "state": "VALID",
+          "expired": false
+        },
+        {
+          "version": "1.0.13",
+          "build": "64",
+          "uploadedAt": "2026-10-14T08:47:10-07:00",
+          "state": "VALID",
+          "expired": false
+        },
+        {
+          "version": "1.0.13",
+          "build": "63",
+          "uploadedAt": "2026-10-14T08:17:11-07:00",
+          "state": "VALID",
+          "expired": false
+        },
+        {
+          "version": "1.0.13",
+          "build": "62",
+          "uploadedAt": "2026-10-13T12:14:36-07:00",
+          "state": "VALID",
+          "expired": false
+        },
+        {
+          "version": "1.0.13",
+          "build": "61",
+          "uploadedAt": "2026-10-13T11:48:21-07:00",
+          "state": "VALID",
+          "expired": false
+        }
+      ],
+      "repo": "InSync"
+    },
+    {
+      "id": "6771300021",
+      "name": "RentalMngr: Alquileres",
+      "bundleId": "idanidev.RentalMngr",
+      "versions": [
+        {
+          "platform": "IOS",
+          "version": "1.0",
+          "state": "PREPARE_FOR_SUBMISSION",
+          "createdAt": "2026-05-20T01:53:46-07:00"
+        }
+      ],
+      "builds": [
+
+      ]
+    },
+    {
+      "id": "6798872905",
+      "name": "FOCVS: bloquea apps y decide",
+      "bundleId": "idanidev.Focusflow",
+      "versions": [
+        {
+          "platform": "IOS",
+          "version": "1.0",
+          "state": "PREPARE_FOR_SUBMISSION",
+          "createdAt": "2026-08-06T15:02:38-07:00"
+        }
+      ],
+      "builds": [
+        {
+          "version": "1.0",
+          "build": "1",
+          "uploadedAt": "2026-08-06T15:08:01-07:00",
+          "state": "VALID",
+          "expired": false
+        }
+      ]
+    },
+    {
+      "id": "6766271007",
+      "name": "iTurn",
+      "bundleId": "com.iturn.app",
+      "versions": [
+        {
+          "platform": "IOS",
+          "version": "1.2.1",
+          "state": "READY_FOR_DISTRIBUTION",
+          "createdAt": "2026-05-17T15:22:13-07:00"
+        },
+        {
+          "platform": "IOS",
+          "version": "1.2.0",
+          "state": "READY_FOR_DISTRIBUTION",
+          "createdAt": "2026-05-13T07:45:50-07:00"
+        },
+        {
+          "platform": "IOS",
+          "version": "1.1.0",
+          "state": "READY_FOR_DISTRIBUTION",
+          "createdAt": "2026-05-07T14:01:02-07:00"
+        },
+        {
+          "platform": "IOS",
+          "version": "1.0",
+          "state": "READY_FOR_DISTRIBUTION",
+          "createdAt": "2026-05-04T08:26:45-07:00"
+        }
+      ],
+      "builds": [
+        {
+          "version": "1.2.1",
+          "build": "7",
+          "uploadedAt": "2026-05-17T14:16:40-07:00",
+          "state": "VALID",
+          "expired": true
+        },
+        {
+          "version": "1.2.0",
+          "build": "6",
+          "uploadedAt": "2026-05-13T07:42:54-07:00",
+          "state": "VALID",
+          "expired": true
+        },
+        {
+          "version": "1.1.0",
+          "build": "5",
+          "uploadedAt": "2026-05-07T13:58:20-07:00",
+          "state": "VALID",
+          "expired": true
+        },
+        {
+          "version": "0.4.0",
+          "build": "4",
+          "uploadedAt": "2026-05-05T08:23:50-07:00",
+          "state": "VALID",
+          "expired": true
+        },
+        {
+          "version": "0.4.0",
+          "build": "3",
+          "uploadedAt": "2026-05-05T08:09:32-07:00",
+          "state": "VALID",
+          "expired": true
+        }
+      ]
+    },
+    {
+      "id": "6757203320",
+      "name": "All1Fit: WOD, RM y Tabata",
+      "bundleId": "com.idanidev.All1Fit",
+      "versions": [
+        {
+          "platform": "IOS",
+          "version": "2.0.0",
+          "state": "READY_FOR_DISTRIBUTION",
+          "createdAt": "2026-03-30T08:43:05-07:00"
+        },
+        {
+          "platform": "IOS",
+          "version": "1.0.1",
+          "state": "READY_FOR_DISTRIBUTION",
+          "createdAt": "2025-12-30T12:13:02-08:00"
+        }
+      ],
+      "builds": [
+        {
+          "version": "2.0.0",
+          "build": "8",
+          "uploadedAt": "2026-04-20T01:01:28-07:00",
+          "state": "VALID",
+          "expired": true
+        },
+        {
+          "version": "2.0.0",
+          "build": "7",
+          "uploadedAt": "2026-04-08T15:53:28-07:00",
+          "state": "VALID",
+          "expired": true
+        },
+        {
+          "version": "1.1.0",
+          "build": "6",
+          "uploadedAt": "2026-04-08T15:42:04-07:00",
+          "state": "VALID",
+          "expired": true
+        },
+        {
+          "version": "1.1.0",
+          "build": "5",
+          "uploadedAt": "2026-04-08T15:32:56-07:00",
+          "state": "VALID",
+          "expired": true
+        },
+        {
+          "version": "1.1.0",
+          "build": "4",
+          "uploadedAt": "2026-04-06T05:03:36-07:00",
+          "state": "VALID",
+          "expired": true
+        }
+      ]
+    }
+  ]
+}
