@@ -63,7 +63,7 @@ enum DeepLinkHandler {
             let allRepos = (try? context.fetch(FetchDescriptor<ProjectRepo>())) ?? []
             // Exact match wins. Matching on substring alone sent `repo=api` to "api-legacy",
             // silently filing the task against the wrong project.
-            repo = allRepos.first { $0.name.localizedCompare(repoName) == .orderedSame }
+            repo = allRepos.first { $0.name.localizedCaseInsensitiveCompare(repoName) == .orderedSame }
                 ?? allRepos.first { $0.name.localizedStandardContains(repoName) }
         } else {
             repo = try? context.fetch(
@@ -84,7 +84,7 @@ enum DeepLinkHandler {
         let column: KanbanColumn?
         if let columnName {
             // The whole name first: "do" is a part of "To Do" and of "Doing".
-            column = columns.first { $0.name.localizedCompare(columnName) == .orderedSame }
+            column = columns.first { $0.name.localizedCaseInsensitiveCompare(columnName) == .orderedSame }
                 ?? columns.first { $0.name.localizedStandardContains(columnName) }
         } else {
             column = columns.first

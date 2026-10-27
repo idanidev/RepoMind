@@ -47,7 +47,7 @@ struct SettingsStoreSection: View {
                     store.disconnect()
                     text = ""
                 } label: {
-                    Label("store_disconnect_button", systemImage: "link.badge.minus")
+                    Label("store_disconnect_button", systemImage: "minus.circle")
                 }
             }
         } header: {
