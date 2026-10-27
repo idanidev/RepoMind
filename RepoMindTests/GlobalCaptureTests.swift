@@ -239,6 +239,8 @@ final class GlobalCaptureTests: XCTestCase {
         let second = ProjectRepo(repoID: 0, name: "Ideas", isLocal: true)
         context.insert(first)
         context.insert(second)
+        // Saved, as the app does it: two unsaved models carry temporary identifiers that print the same.
+        try context.save()
 
         let options = GlobalCaptureModel.options(from: [first, second])
 
@@ -252,6 +254,7 @@ final class GlobalCaptureTests: XCTestCase {
         let second = ProjectRepo(repoID: 0, name: "Ideas", isLocal: true)
         context.insert(first)
         context.insert(second)
+        try context.save()
         let options = GlobalCaptureModel.options(from: [first, second])
         let model = GlobalCaptureModel()
         model.refreshOptions(options)
