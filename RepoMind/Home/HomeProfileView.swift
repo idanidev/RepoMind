@@ -46,7 +46,7 @@ struct HomeProfileView: View {
                 Text(account.username)
                     .font(.headline.weight(.bold))
                     .foregroundStyle(HomeTheme.textPrimary)
-                Text(String(format: String(localized: "home_profile_repos %lld"), count))
+                Text("home_profile_repos \(count)")
                     .font(.caption)
                     .foregroundStyle(HomeTheme.textSecondary)
             }
@@ -101,7 +101,7 @@ struct HomeProfileView: View {
                     Button(action: onUpgrade) {
                         Label("upgrade_to_pro_button", systemImage: "crown")
                             .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(HomeTheme.onAccent)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 10)
                             .background(Capsule().fill(HomeTheme.accent))

@@ -62,7 +62,9 @@ struct BoardStatsSeriesCard: View {
             } else {
                 Chart {
                     ForEach(points) { point in
-                        BarMark(x: .value("day", point.day, unit: .day), y: .value("value", point.value))
+                        BarMark(
+                            x: .value("chart_axis_day", point.day, unit: .day),
+                            y: .value("chart_axis_value", point.value))
                             .foregroundStyle(HomeTheme.accent)
                             .cornerRadius(2)
                     }
@@ -72,7 +74,7 @@ struct BoardStatsSeriesCard: View {
                     AxisMarks(position: .leading, values: .automatic(desiredCount: 3))
                 }
                 .frame(height: 140)
-                Text(String(format: String(localized: "stats_period %lld"), periodDays))
+                Text("stats_period \(periodDays)")
                     .font(.caption2)
                     .foregroundStyle(HomeTheme.textSecondary)
             }
@@ -104,7 +106,7 @@ struct BoardStatsSignalsCard: View {
         VStack(alignment: .leading, spacing: 12) {
             BoardStatsSectionTitle(
                 title: String(localized: "stats_section_signals"),
-                trailing: String(format: String(localized: "stats_period %lld"), stats.periodDays)
+                trailing: String(localized: "stats_period \(stats.periodDays)")
             )
             ForEach(shown) { group in
                 VStack(alignment: .leading, spacing: 6) {
@@ -243,43 +245,48 @@ struct BoardStatsIssuesCard: View {
 
     private func row(_ issue: RepoStats.Issue) -> some View {
         let link = SafeLink.web(issue.url)
-        return Button {
-            if let link { openURL(link) }
-        } label: {
-            HStack(alignment: .top, spacing: 10) {
-                Image(systemName: issue.isCrash ? "exclamationmark.octagon.fill" : "bubble.left.fill")
+        let face = HStack(alignment: .top, spacing: 10) {
+            Image(systemName: issue.isCrash ? "exclamationmark.octagon.fill" : "bubble.left.fill")
+                .font(.subheadline)
+                .foregroundStyle(issue.isCrash ? HomeTheme.danger : HomeTheme.warning)
+                .frame(width: 20)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(issue.title)
                     .font(.subheadline)
-                    .foregroundStyle(issue.isCrash ? HomeTheme.danger : HomeTheme.warning)
-                    .frame(width: 20)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(issue.title)
-                        .font(.subheadline)
-                        .foregroundStyle(HomeTheme.textPrimary)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
-                    Text(caption(issue))
-                        .font(.caption2)
-                        .foregroundStyle(HomeTheme.textSecondary)
-                        .lineLimit(1)
-                }
-                Spacer(minLength: 0)
-                if link != nil {
-                    Image(systemName: "arrow.up.right.square")
-                        .font(.caption)
-                        .foregroundStyle(HomeTheme.textSecondary)
-                }
+                    .foregroundStyle(HomeTheme.textPrimary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                Text(caption(issue))
+                    .font(.caption2)
+                    .foregroundStyle(HomeTheme.textSecondary)
+                    .lineLimit(1)
             }
-            .contentShape(Rectangle())
+            Spacer(minLength: 0)
+            if link != nil {
+                Image(systemName: "arrow.up.right.square")
+                    .font(.caption)
+                    .foregroundStyle(HomeTheme.textSecondary)
+                    .accessibilityHidden(true)
+            }
         }
-        .buttonStyle(.plain)
-        .disabled(link == nil)
+        .contentShape(Rectangle())
+        // A button only when the backend gave a link worth opening: a disabled one reads "dimmed".
+        return Group {
+            if let link {
+                Button { openURL(link) } label: { face }
+                    .buttonStyle(.plain)
+            } else {
+                face.accessibilityElement(children: .combine)
+            }
+        }
     }
 
     private func caption(_ issue: RepoStats.Issue) -> String {
         var parts = [String(localized: issue.isCrash ? "stats_issue_crash" : "stats_issue_report")]
         parts.append(issue.at.formatted(.relative(presentation: .numeric, unitsStyle: .abbreviated)))
         if issue.count > 1 {
-            parts.append(String(format: String(localized: "stats_times %lld"), issue.count))
+            parts.append(String(localized: "stats_times \(issue.count)"))
         }
         if let version = issue.version, !version.isEmpty {
             parts.append(version)

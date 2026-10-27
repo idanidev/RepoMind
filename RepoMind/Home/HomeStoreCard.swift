@@ -126,7 +126,7 @@ struct HomeStoreCard: View {
             }
             if downloads.hasActivity, downloads.sparkline.count > 1 {
                 Chart(Array(downloads.sparkline.enumerated()), id: \.offset) { point in
-                    BarMark(x: .value("day", point.offset), y: .value("downloads", point.element))
+                    BarMark(x: .value("chart_axis_day", point.offset), y: .value("chart_axis_downloads", point.element))
                         .foregroundStyle(HomeTheme.accent.opacity(0.8))
                         .cornerRadius(1.5)
                 }

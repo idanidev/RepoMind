@@ -93,7 +93,6 @@
 "switch_to_list_hint" = "Switch to list view";
 "switch_to_board_hint" = "Switch to board view";
 "column_options_label" = "Column options";
-"Add task to %@" = "Add task to %@";
 "task_edit_hint" = "Tap to edit, hold to drag";
 
 /* Voice FAB */
@@ -197,7 +196,6 @@
 "pro_tier_label" = "Pro";
 
 /* Pricing */
-"purchase_error" = "Error processing purchase. Please try again.";
 "purchase_success_toast" = "Welcome to RepoMind Pro!";
 "paywall_already_pro_title" = "You already have Pro!";
 "paywall_already_pro_subtitle" = "All features are unlocked. Enjoy RepoMind Pro.";
@@ -451,7 +449,6 @@
 "delete_task_confirm_message_issue" = "Its GitHub issue will be deleted too. This can't be undone.";
 "tasks_completed_by_agent %lld" = "%lld tasks completed on GitHub";
 "task_import_sync_off" = "No repository publishes its tasks as issues yet — turn it on in Settings.";
-"task_import_no_linked" = "None of your tasks are linked to an issue yet.";
 "task_import_up_to_date" = "Tasks are up to date";
 
 /* Voice capture */
@@ -466,7 +463,7 @@
 "idea_column_picker" = "Ideas column";
 "idea_column_none" = "None";
 "idea_column_footer" = "Tasks in this column are treated as ideas: they are never published as GitHub issues and never counted as pending.";
-"duplicates_merged %lld %lld" = "%lld duplicate projects and %lld duplicate accounts merged";
+"duplicates_merged %lld %lld" = "Duplicates merged — projects: %lld · accounts: %lld";
 
 /* Home (redesign) */
 "home_title" = "Repositories";
@@ -577,7 +574,7 @@
 "home_dashboard_pending" = "pending";
 "home_dashboard_done" = "done";
 "home_dashboard_ideas %lld" = "%lld ideas";
-"home_dashboard_done_ratio %lld %lld" = "%lld of %lld tasks done";
+"home_dashboard_done_ratio %lld %lld" = "Tasks done: %lld of %lld";
 "home_dashboard_quiet" = "Nothing needs a hand right now";
 "home_dashboard_rhythm" = "Capture rhythm";
 "home_dashboard_rhythm_caption %lld" = "%lld in 14 days";
@@ -599,7 +596,7 @@
 "home_dashboard_account" = "Account & sync";
 "home_dashboard_plan_free" = "Free";
 "home_dashboard_accounts %lld" = "%lld account(s)";
-"home_dashboard_repos_detail %lld %lld %lld" = "%lld favorites · %lld archived · %lld local";
+"home_dashboard_repos_detail %lld %lld %lld" = "Favorites %lld · Archived %lld · Local %lld";
 "home_dashboard_folders %lld" = "%lld folder(s)";
 "home_dashboard_icloud_ok" = "iCloud in sync";
 "home_dashboard_icloud_last %@" = "last success %@";
@@ -610,7 +607,7 @@
 
 /* Tasks tab */
 "home_tasks_title" = "Tasks";
-"home_tasks_summary %lld %lld %lld" = "%lld pending · %lld done · %lld ideas";
+"home_tasks_summary %lld %lld %lld" = "Pending %lld · Done %lld · Ideas %lld";
 "home_tasks_filter_pending" = "Pending";
 "home_tasks_filter_recent" = "Recent";
 "home_tasks_filter_done" = "Done";
@@ -730,7 +727,7 @@
 "store_save_button" = "Save and read";
 "store_disconnect_button" = "Disconnect";
 "store_footer" = "The address of the store.json that your store-status workflow publishes: which version of each app is published, what is in review, the latest TestFlight build and the downloads. It is read with your GitHub token; the App Store Connect key never leaves GitHub.";
-"store_connected %lld %@" = "Connected: %lld apps, updated %@";
+"store_connected %lld %@" = "Connected apps: %lld · updated %@";
 "store_error_token" = "GitHub rejected the token. Sign in again.";
 "store_error_not_found" = "No store.json at that address. Has the workflow run? A private repo also needs a token that can read it.";
 "store_error_format" = "That file is not an App Store status in the format RepoMind reads.";
@@ -760,3 +757,17 @@
 /* Voice */
 "voice_error_title" = "Voice dictation";
 "voice_live_transcript %@" = "Live transcript: %@";
+
+/* Home tasks: long lists */
+"home_tasks_show_more %lld" = "Show %lld more";
+
+/* Charts: axis names read by VoiceOver's audio graph */
+"chart_axis_day" = "Day";
+"chart_axis_value" = "Value";
+"chart_axis_downloads" = "Downloads";
+"chart_axis_captured" = "Tasks captured";
+
+/* Search on the Tasks tab; biometric prompt */
+"search_tasks_placeholder" = "Search tasks...";
+"biometric_use_token" = "Use Token";
+"biometric_unavailable" = "Biometric authentication unavailable.";

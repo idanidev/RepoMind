@@ -204,12 +204,12 @@ nonisolated final class BiometricAuthManager {
 
     func authenticate() async {
         let context = LAContext()
-        context.localizedCancelTitle = "Use Token"
+        context.localizedCancelTitle = String(localized: "biometric_use_token")
 
         var error: NSError?
         guard context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error)
         else {
-            errorMessage = error?.localizedDescription ?? "Biometric authentication unavailable."
+            errorMessage = error?.localizedDescription ?? String(localized: "biometric_unavailable")
             return
         }
 

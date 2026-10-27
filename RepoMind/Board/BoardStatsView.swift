@@ -135,7 +135,7 @@ struct BoardStatsView: View {
             } label: {
                 Text("stats_configure")
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(HomeTheme.onAccent)
                     .padding(.horizontal, 18)
                     .padding(.vertical, 10)
                     .background(Capsule().fill(HomeTheme.accent))

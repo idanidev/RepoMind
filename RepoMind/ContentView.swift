@@ -116,7 +116,7 @@ struct ContentView: View {
         let repaired = OrphanTaskRepair.run(context: context)
         guard repaired > 0 else { return }
         ToastManager.shared.show(
-            String(format: String(localized: "orphan_tasks_restored %lld"), repaired),
+            String(localized: "orphan_tasks_restored \(repaired)"),
             style: .info
         )
     }

@@ -443,7 +443,7 @@ struct RepoSettingsSheet: View {
                     Task { await enableSync() }
                 }
             } message: {
-                Text(String(format: String(localized: "sync_tasks_confirm_bulk %lld"), repo.tasks?.count ?? 0))
+                Text(String(localized: "sync_tasks_confirm_bulk \(repo.tasks?.count ?? 0)"))
             }
         }
         .presentationDetents([.medium])

@@ -126,6 +126,7 @@ struct KanbanColumnView: View {
                 .font(.caption.weight(.bold))
                 .foregroundStyle(.white.opacity(0.8))
                 .frame(width: 20, height: 20)
+                .homeHitArea(extending: 12)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(column.isCollapsed ? "expand_column" : "collapse_column")

@@ -44,6 +44,7 @@ struct CaptureDraftCard: View {
                         Image(systemName: "trash")
                             .font(.caption)
                             .foregroundStyle(HomeTheme.danger)
+                            .homeHitArea(extending: 15)
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("capture_remove_draft")
@@ -177,7 +178,7 @@ struct CaptureDictateBar: View {
                 Text(recording ? "capture_stop_dictating" : "capture_keep_dictating")
             }
             .font(.subheadline.weight(.semibold))
-            .foregroundStyle(.white)
+            .foregroundStyle(HomeTheme.onAccent)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 12)
             .background(Capsule().fill(recording ? HomeTheme.danger : HomeTheme.accent))

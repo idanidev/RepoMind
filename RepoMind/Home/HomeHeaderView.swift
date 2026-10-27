@@ -72,7 +72,7 @@ struct HomeHeaderView: View {
                 if account.isDemo {
                     Text("demo_mode_badge")
                         .font(.caption2.weight(.bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(HomeTheme.onAccent)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
                         .background(HomeTheme.warning, in: Capsule())
@@ -176,7 +176,7 @@ struct HomeIconButton: View {
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .strokeBorder(HomeTheme.hairline, lineWidth: 0.5)
                 )
-                .contentShape(Rectangle())
+                .homeHitArea(extending: 6)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)

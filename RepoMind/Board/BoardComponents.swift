@@ -18,7 +18,7 @@ struct BoardCircleButton: View {
                     if badge > 0 {
                         Text(badge.formatted())
                             .font(.caption2.bold())
-                            .foregroundStyle(.white)
+                            .foregroundStyle(HomeTheme.onAccent)
                             .padding(.horizontal, 5)
                             .padding(.vertical, 1)
                             .background(HomeTheme.danger, in: Capsule())
@@ -39,7 +39,7 @@ struct BoardCircleButton: View {
             .frame(width: 40, height: 40)
             .background(Circle().fill(HomeTheme.surfaceElevated))
             .overlay(Circle().strokeBorder(HomeTheme.hairline, lineWidth: 0.5))
-            .contentShape(Circle())
+            .homeHitArea(extending: 2)
     }
 }
 
@@ -105,6 +105,7 @@ struct BoardColumnPills: View {
                             .frame(width: 32, height: 32)
                             .background(Circle().fill(HomeTheme.surface))
                             .overlay(Circle().strokeBorder(HomeTheme.hairline, lineWidth: 0.5))
+                            .homeHitArea(extending: 6)
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("add_new_column_button")
@@ -258,7 +259,7 @@ struct BoardTaskCard: View {
                     .font(.title3)
                     .foregroundStyle(isDone ? HomeTheme.success : HomeTheme.textSecondary)
                     .frame(width: 32, height: 32)
-                    .contentShape(Rectangle())
+                    .homeHitArea(extending: 6)
             }
             .buttonStyle(.plain)
             .disabled(isDone)

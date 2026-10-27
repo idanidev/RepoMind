@@ -16,13 +16,14 @@ struct HomeDashboardRhythmCard: View {
                 title: "home_dashboard_rhythm",
                 trailing: String(format: String(localized: "home_dashboard_rhythm_caption %lld"), total))
             Chart(history) { day in
-                BarMark(x: .value("day", day.date, unit: .day), y: .value("count", day.count))
+                BarMark(x: .value("chart_axis_day", day.date, unit: .day), y: .value("chart_axis_captured", day.count))
                     .foregroundStyle(day.count > 0 ? HomeTheme.accent : HomeTheme.surfaceElevated)
                     .cornerRadius(2)
             }
             .chartXAxis(.hidden)
             .chartYAxis(.hidden)
             .frame(height: 56)
+            .accessibilityLabel("home_dashboard_rhythm")
         }
         .padding(HomeTheme.cardPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -58,7 +59,7 @@ struct HomeDashboardGitHubCard: View {
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(HomeTheme.danger)
                             .frame(width: 16)
-                        Text(String(format: String(localized: "home_dashboard_security %lld"), github.securityAlerts))
+                        Text("home_dashboard_security \(github.securityAlerts)")
                             .font(.footnote)
                             .foregroundStyle(HomeTheme.textPrimary)
                     }
@@ -90,26 +91,30 @@ struct HomeDashboardGitHubCard: View {
         }
     }
 
+    /// A number with its label. It is a button only when there is something to open: a disabled button
+    /// is read out as "dimmed" by VoiceOver, for a tile that was never meant to be pressed.
     private func tile(_ value: Int, label: LocalizedStringKey, tint: Color, kind: HomeDigestKind?) -> some View {
-        Button {
-            if let kind { onOpenDigest(kind) }
-        } label: {
-            VStack(alignment: .leading, spacing: 1) {
-                Text(value.formatted())
-                    .font(.title2.weight(.bold))
-                    .monospacedDigit()
-                    .foregroundStyle(tint)
-                Text(label)
-                    .font(.caption2)
-                    .foregroundStyle(HomeTheme.textSecondary)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(Rectangle())
+        let face = VStack(alignment: .leading, spacing: 1) {
+            Text(value.formatted())
+                .font(.title2.weight(.bold))
+                .monospacedDigit()
+                .foregroundStyle(tint)
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(HomeTheme.textSecondary)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .buttonStyle(.plain)
-        .disabled(kind == nil)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        return Group {
+            if let kind {
+                Button { onOpenDigest(kind) } label: { face }
+                    .buttonStyle(.plain)
+            } else {
+                face.accessibilityElement(children: .combine)
+            }
+        }
     }
 
     private var pushes: some View {
@@ -189,7 +194,7 @@ struct HomeDashboardAppCard: View {
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(HomeTheme.textPrimary)
                     Spacer()
-                    Text(String(format: String(localized: "stats_period %lld"), summary.periodDays))
+                    Text("stats_period \(summary.periodDays)")
                         .font(.caption)
                         .foregroundStyle(HomeTheme.textSecondary)
                 }
@@ -215,9 +220,9 @@ struct HomeDashboardAppCard: View {
                 }
                 if points.count > 1 {
                     Chart(points) { point in
-                        AreaMark(x: .value("i", point.id), y: .value("v", point.value))
+                        AreaMark(x: .value("chart_axis_day", point.id), y: .value("chart_axis_value", point.value))
                             .foregroundStyle(HomeTheme.accent.opacity(0.18))
-                        LineMark(x: .value("i", point.id), y: .value("v", point.value))
+                        LineMark(x: .value("chart_axis_day", point.id), y: .value("chart_axis_value", point.value))
                             .foregroundStyle(HomeTheme.accent)
                             .lineStyle(StrokeStyle(lineWidth: 1.5))
                     }
@@ -262,12 +267,12 @@ struct HomeDashboardAccountCard: View {
                 trailing: data.isPro ? "Pro" : String(localized: "home_dashboard_plan_free"))
             line(
                 "person.2", tint: HomeTheme.textSecondary,
-                text: String(format: String(localized: "home_dashboard_accounts %lld"), data.repos.accounts)
+                text: String(localized: "home_dashboard_accounts \(data.repos.accounts)")
                     + (data.accountNames.isEmpty ? "" : " · " + data.accountNames.joined(separator: ", ")))
             Button(action: onShowRepos) {
                 line(
                     "shippingbox", tint: HomeTheme.textSecondary,
-                    text: String(format: String(localized: "home_stat_total %lld"), data.repos.total) + " · " + String(
+                    text: String(localized: "home_stat_total \(data.repos.total)") + " · " + String(
                         format: String(localized: "home_dashboard_repos_detail %lld %lld %lld"),
                         data.repos.favorites, data.repos.archived, data.repos.local),
                     chevron: true)
@@ -275,7 +280,7 @@ struct HomeDashboardAccountCard: View {
             .buttonStyle(.plain)
             line(
                 "folder", tint: HomeTheme.textSecondary,
-                text: String(format: String(localized: "home_dashboard_folders %lld"), data.repos.folders))
+                text: String(localized: "home_dashboard_folders \(data.repos.folders)"))
             if !data.languages.isEmpty {
                 HomeFlowLayout(spacing: 6, rowSpacing: 6) {
                     ForEach(data.languages) { share in

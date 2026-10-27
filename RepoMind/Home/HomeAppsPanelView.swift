@@ -89,7 +89,7 @@ struct HomeAppsPanelView: View {
                     .font(.title3.weight(.bold))
                     .foregroundStyle(HomeTheme.textPrimary)
                 Spacer()
-                Text(String(format: String(localized: "stats_period %lld"), entry.stats.periodDays))
+                Text("stats_period \(entry.stats.periodDays)")
                     .font(.caption)
                     .foregroundStyle(HomeTheme.textSecondary)
             }
@@ -147,7 +147,7 @@ struct HomeAppsPanelView: View {
             Button(action: actions.upgrade) {
                 Text("upgrade_to_pro_button")
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(HomeTheme.onAccent)
                     .padding(.horizontal, 18)
                     .padding(.vertical, 10)
                     .background(Capsule().fill(HomeTheme.accent))

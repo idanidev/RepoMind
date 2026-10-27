@@ -68,7 +68,7 @@ struct PaywallView: View {
                     set: { if !$0 { purchaseError = nil } }
                 )
             ) {
-                Button("OK") { purchaseError = nil }
+                Button("ok") { purchaseError = nil }
             } message: {
                 Text(purchaseError ?? "")
             }

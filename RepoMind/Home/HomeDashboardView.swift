@@ -85,7 +85,7 @@ struct HomeDashboardView: View {
                 if account.isDemo {
                     Text("demo_mode_badge")
                         .font(.caption2.weight(.bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(HomeTheme.onAccent)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
                         .background(HomeTheme.warning, in: Capsule())
@@ -124,7 +124,7 @@ struct HomeDashboardView: View {
                     totals.done, totals.done + totals.pending))
                 Spacer()
                 if totals.ideas > 0 {
-                    Text(String(format: String(localized: "home_dashboard_ideas %lld"), totals.ideas))
+                    Text("home_dashboard_ideas \(totals.ideas)")
                 }
             }
             .font(.caption)

@@ -61,7 +61,7 @@ struct IssueSyncSettingsView: View {
             Button("issue_sync_confirm_enable_all_button") { enableAll() }
         } message: {
             // Publishing cannot be undone from here — say how many issues it will create first.
-            Text(String(format: String(localized: "issue_sync_confirm_enable_all %lld"), unpublishedTaskCount))
+            Text(String(localized: "issue_sync_confirm_enable_all \(unpublishedTaskCount)"))
         }
     }
 

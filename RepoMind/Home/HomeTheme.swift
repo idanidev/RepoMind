@@ -15,6 +15,9 @@ enum HomeTheme {
     static let textPrimary = Color("HomeTextPrimary")
     static let textSecondary = Color("HomeTextSecondary")
     static let accent = Color("HomeAccent")
+    /// Text and glyphs on a filled accent, danger or warning shape. White in light; near-black in dark,
+    /// where those fills are pastel and white on them reads 2.5–3.4:1 against the 4.5:1 text needs.
+    static let onAccent = Color("HomeOnAccent")
     static let success = Color("HomeSuccess")
     static let warning = Color("HomeWarning")
     static let danger = Color("HomeDanger")
@@ -65,6 +68,16 @@ extension Color {
         case "shell", "bash": return Color(hex: "#89E051")
         default: return Color.gray
         }
+    }
+}
+
+// MARK: - Tap targets
+
+extension View {
+    /// Lets a small control be hit up to `inset` points beyond its edges, so a 32 pt button still has
+    /// the 44 pt target Apple asks for. Nothing is laid out or drawn differently.
+    func homeHitArea(extending inset: CGFloat) -> some View {
+        contentShape(Rectangle().inset(by: -inset))
     }
 }
 

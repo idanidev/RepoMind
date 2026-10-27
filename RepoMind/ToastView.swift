@@ -78,6 +78,8 @@ final class ToastManager {
 
         Self.feedbackGenerator.prepare()
         Self.feedbackGenerator.notificationOccurred(style.hapticType)
+        // The banner is silent to VoiceOver until someone swipes to it, and it is gone in three seconds.
+        AccessibilityNotification.Announcement("\(style.localizedLabel): \(message)").post()
 
         withAnimation(.spring(duration: 0.4, bounce: 0.2)) {
             currentToast = ToastItem(style: style, message: message)

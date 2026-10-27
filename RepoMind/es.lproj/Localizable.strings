@@ -90,7 +90,6 @@
 "switch_to_list_hint" = "Cambiar a vista de lista";
 "switch_to_board_hint" = "Cambiar a vista de tablero";
 "column_options_label" = "Opciones de columna";
-"Add task to %@" = "Añadir tarea a %@";
 "task_edit_hint" = "Toca para editar, mantén pulsado para arrastrar";
 
 /* Voice FAB */
@@ -101,8 +100,8 @@
 "voice_start_hint" = "Doble toque para iniciar la grabación";
 "voice_recording_value" = "Grabando";
 "voice_stopped_value" = "Detenido";
-"voice_switch_to_english" = "Switch to English";
-"voice_switch_to_spanish" = "Cambiar a Español";
+"voice_switch_to_english" = "Cambiar a inglés";
+"voice_switch_to_spanish" = "Cambiar a español";
 "permission_required_title" = "Permiso Requerido";
 "open_settings_button" = "Abrir Ajustes";
 
@@ -196,7 +195,6 @@
 /* Pricing */
 "buy_once_button" = "Desbloquear Pro";
 "one_time_payment_label" = "Pago único. Acceso de por vida.";
-"purchase_error" = "Error al procesar la compra. Inténtalo de nuevo.";
 "purchase_success_toast" = "¡Bienvenido a RepoMind Pro!";
 "paywall_already_pro_title" = "¡Ya tienes Pro!";
 "paywall_already_pro_subtitle" = "Todas las funciones están desbloqueadas. Disfruta de RepoMind Pro.";
@@ -450,7 +448,6 @@
 "delete_task_confirm_message_issue" = "También se eliminará su issue de GitHub. Esto no se puede deshacer.";
 "tasks_completed_by_agent %lld" = "%lld tareas completadas en GitHub";
 "task_import_sync_off" = "Ningún repositorio publica sus tareas como issues — actívalo en Ajustes.";
-"task_import_no_linked" = "Ninguna de tus tareas está enlazada todavía a un issue.";
 "task_import_up_to_date" = "Las tareas están al día";
 
 /* Captura de voz */
@@ -465,7 +462,7 @@
 "idea_column_picker" = "Columna de ideas";
 "idea_column_none" = "Ninguna";
 "idea_column_footer" = "Las tareas de esta columna se tratan como ideas: nunca se publican como issues de GitHub ni cuentan como pendientes.";
-"duplicates_merged %lld %lld" = "%lld proyectos y %lld cuentas duplicados unificados";
+"duplicates_merged %lld %lld" = "Duplicados unificados — proyectos: %lld · cuentas: %lld";
 
 /* Inicio (rediseño) */
 "home_title" = "Mis Repositorios";
@@ -482,7 +479,7 @@
 "home_stat_unpublished %lld" = "%lld sin publicar";
 "home_status_inactive" = "Inactivo";
 "home_private_label" = "Privado";
-"home_build_failing" = "build failing";
+"home_build_failing" = "build en rojo";
 "home_last_push %@" = "Último push %@";
 "home_last_activity %@" = "Actualizado %@";
 "home_tasks_pending %lld" = "(%lld pend.)";
@@ -576,7 +573,7 @@
 "home_dashboard_pending" = "pendientes";
 "home_dashboard_done" = "hechas";
 "home_dashboard_ideas %lld" = "%lld ideas";
-"home_dashboard_done_ratio %lld %lld" = "%lld de %lld tareas hechas";
+"home_dashboard_done_ratio %lld %lld" = "Tareas hechas: %lld de %lld";
 "home_dashboard_quiet" = "Nada necesita mano ahora mismo";
 "home_dashboard_rhythm" = "Ritmo de captura";
 "home_dashboard_rhythm_caption %lld" = "%lld en 14 días";
@@ -598,7 +595,7 @@
 "home_dashboard_account" = "Cuenta y sincronización";
 "home_dashboard_plan_free" = "Gratis";
 "home_dashboard_accounts %lld" = "%lld cuenta(s)";
-"home_dashboard_repos_detail %lld %lld %lld" = "%lld favoritos · %lld archivados · %lld locales";
+"home_dashboard_repos_detail %lld %lld %lld" = "Favoritos %lld · Archivados %lld · Locales %lld";
 "home_dashboard_folders %lld" = "%lld carpeta(s)";
 "home_dashboard_icloud_ok" = "iCloud sincronizado";
 "home_dashboard_icloud_last %@" = "último éxito %@";
@@ -609,7 +606,7 @@
 
 /* Pestaña Tareas */
 "home_tasks_title" = "Tareas";
-"home_tasks_summary %lld %lld %lld" = "%lld pendientes · %lld hechas · %lld ideas";
+"home_tasks_summary %lld %lld %lld" = "Pendientes %lld · Hechas %lld · Ideas %lld";
 "home_tasks_filter_pending" = "Pendientes";
 "home_tasks_filter_recent" = "Recientes";
 "home_tasks_filter_done" = "Hechas";
@@ -729,7 +726,7 @@
 "store_save_button" = "Guardar y leer";
 "store_disconnect_button" = "Desconectar";
 "store_footer" = "La dirección del store.json que publica tu workflow de store-status: qué versión de cada app está publicada, qué está en revisión, la última build de TestFlight y las descargas. Se lee con tu token de GitHub; la clave de App Store Connect no sale de GitHub.";
-"store_connected %lld %@" = "Conectado: %lld apps, actualizado %@";
+"store_connected %lld %@" = "Apps conectadas: %lld · actualizado %@";
 "store_error_token" = "GitHub ha rechazado el token. Vuelve a iniciar sesión.";
 "store_error_not_found" = "No hay store.json en esa dirección. ¿Ha corrido el workflow? Un repo privado también necesita un token que pueda leerlo.";
 "store_error_format" = "Ese fichero no es un estado de la App Store en el formato que lee RepoMind.";
@@ -759,3 +756,17 @@
 /* Voice */
 "voice_error_title" = "Dictado por voz";
 "voice_live_transcript %@" = "Transcripción en directo: %@";
+
+/* Home tasks: long lists */
+"home_tasks_show_more %lld" = "Ver %lld más";
+
+/* Charts: axis names read by VoiceOver's audio graph */
+"chart_axis_day" = "Día";
+"chart_axis_value" = "Valor";
+"chart_axis_downloads" = "Descargas";
+"chart_axis_captured" = "Tareas capturadas";
+
+/* Search on the Tasks tab; biometric prompt */
+"search_tasks_placeholder" = "Buscar tareas...";
+"biometric_use_token" = "Usar token";
+"biometric_unavailable" = "La autenticación biométrica no está disponible.";

@@ -289,9 +289,9 @@ final class TaskIssueSyncService {
                 result.completed, result.imported)
         }
         if result.imported > 0 {
-            return String(format: String(localized: "sync_summary_imported %lld"), result.imported)
+            return String(localized: "sync_summary_imported \(result.imported)")
         }
-        return String(format: String(localized: "tasks_completed_by_agent %lld"), result.completed)
+        return String(localized: "tasks_completed_by_agent \(result.completed)")
     }
 
     /// Reconciles a repo's board against its GitHub issues, in both directions.

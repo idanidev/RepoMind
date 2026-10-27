@@ -133,13 +133,15 @@ struct GlobalCaptureSheet: View {
             .foregroundStyle(HomeTheme.textSecondary)
             .multilineTextAlignment(.center)
             .padding(.horizontal, 28)
+            // The words change several times a second; VoiceOver should not read each one out.
+            .accessibilityAddTraits(.updatesFrequently)
             Spacer()
             Button {
                 voice.stopRecording()
             } label: {
                 Label("capture_stop_dictating", systemImage: "stop.fill")
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(HomeTheme.onAccent)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 12)
                     .background(Capsule().fill(HomeTheme.danger))
@@ -162,7 +164,7 @@ struct GlobalCaptureSheet: View {
                 .frame(width: 92, height: 92)
             Image(systemName: "mic.fill")
                 .font(.system(size: 34, weight: .semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(HomeTheme.onAccent)
         }
         .animation(.easeOut(duration: 0.12), value: voice.audioLevel)
         .accessibilityHidden(true)
@@ -186,7 +188,7 @@ struct GlobalCaptureSheet: View {
                         .padding(.horizontal, 18)
                         .padding(.vertical, 10)
                         .background(Capsule().fill(HomeTheme.accent))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(HomeTheme.onAccent)
                 }
                 .buttonStyle(HomeCardButtonStyle())
             } else {

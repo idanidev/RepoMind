@@ -128,17 +128,17 @@ struct HomeDigestCard: View {
         if digest.pullRequests > 0 {
             row(
                 .pullRequests, symbol: "arrow.triangle.pull", tint: HomeTheme.accent,
-                text: String(format: String(localized: "home_digest_prs %lld"), digest.pullRequests))
+                text: String(localized: "home_digest_prs \(digest.pullRequests)"))
         }
         if digest.dormantRepos > 0 {
             row(
                 .dormant, symbol: "moon.zzz.fill", tint: HomeTheme.textSecondary,
-                text: String(format: String(localized: "home_digest_dormant %lld"), digest.dormantRepos))
+                text: String(localized: "home_digest_dormant \(digest.dormantRepos)"))
         }
         if digest.syncErrors > 0 {
             row(
                 .syncErrors, symbol: "exclamationmark.triangle.fill", tint: HomeTheme.warning,
-                text: String(format: String(localized: "home_digest_sync_errors %lld"), digest.syncErrors))
+                text: String(localized: "home_digest_sync_errors \(digest.syncErrors)"))
         }
     }
 

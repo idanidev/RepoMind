@@ -133,7 +133,7 @@ struct HomeRepoCardView: View {
             if let prs = repo.pullRequests, prs > 0 {
                 HomeChip(
                     symbol: "arrow.triangle.pull",
-                    text: format("home_prs_count %lld", prs),
+                    text: String(localized: "home_prs_count \(prs)"),
                     tint: HomeTheme.accent
                 )
             }

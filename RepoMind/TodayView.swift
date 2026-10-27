@@ -64,7 +64,7 @@ struct TodayView: View {
 
         if moved > 0 {
             ToastManager.shared.show(
-                String(format: String(localized: "tasks_completed_by_agent %lld"), moved),
+                String(localized: "tasks_completed_by_agent \(moved)"),
                 style: .success)
         }
     }
