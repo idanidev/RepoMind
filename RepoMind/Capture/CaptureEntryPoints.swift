@@ -15,6 +15,10 @@ final class GlobalCaptureRouter {
     /// Not private so a test can have its own: the shared one is wired to the running interface.
     init() {}
 
+    /// An instance that dies, like the test's, would otherwise abort in the synthesized deinit
+    /// (swiftlang/swift#85663, see CLAUDE.md).
+    nonisolated deinit {}
+
     private var isPending = false
 
     func request() {
