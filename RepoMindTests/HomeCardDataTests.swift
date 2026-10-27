@@ -194,11 +194,14 @@ final class HomeCardDataTests: XCTestCase {
         let favorite = HomeRepoCardData(id: "a", name: "A", isFavorite: true)
         let busy = HomeRepoCardData(id: "b", name: "B", tasksTotal: 2, tasksPending: 1)
         let idle = HomeRepoCardData(id: "c", name: "C", tasksTotal: 2, tasksPending: 0)
-        let all = [favorite, busy, idle]
+        let archived = HomeRepoCardData(
+            id: "d", name: "D", isFavorite: true, isArchived: true, tasksTotal: 1, tasksPending: 1)
+        let all = [favorite, busy, idle, archived]
 
         XCTAssertEqual(HomeFilter.all.apply(to: all).map(\.id), ["a", "b", "c"])
         XCTAssertEqual(HomeFilter.favorites.apply(to: all).map(\.id), ["a"])
         XCTAssertEqual(HomeFilter.tasks.apply(to: all).map(\.id), ["b"])
+        XCTAssertEqual(HomeFilter.archived.apply(to: all).map(\.id), ["d"])
     }
 
     func testStatsSumTheCards() {

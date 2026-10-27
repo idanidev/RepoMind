@@ -54,6 +54,10 @@ private enum BackupDTO {
 // MARK: - Settings View
 
 struct SettingsView: View {
+    /// `true` when shown as a tab of the redesigned home rather than as a sheet: no
+    /// navigation stack of its own, and no Done button to dismiss.
+    var embedded = false
+
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var context
 
@@ -77,238 +81,248 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            List {
-                // MARK: - Subscription
-
-                Section("subscription_header") {
-                    HStack {
-                        Label(
-                            "current_plan_label",
-                            systemImage: subscription.isPro ? "crown.fill" : "person.fill"
-                        )
-                        Spacer()
-                        Text(subscription.currentPlanName)
-                            .foregroundStyle(subscription.isPro ? .purple : .secondary)
-                            .font(.subheadline.weight(.semibold))
-                    }
-
-                    if subscription.isPro && !subscription.isMockPro {
-                        Button("manage_subscription_button") {
-                            showManageSubscription = true
-                        }
-                    } else if !subscription.isPro {
-                        Button {
-                            showPaywall = true
-                        } label: {
-                            Label("upgrade_to_pro_button", systemImage: "crown")
-                                .foregroundStyle(.purple)
-                        }
-                    }
-
-                    Button {
-                        Task {
-                            do {
-                                let restored = try await subscription.restorePurchases()
-                                if restored {
-                                    ToastManager.shared.show(
-                                        String(localized: "restore_success_toast"),
-                                        style: .success
-                                    )
-                                } else {
-                                    ToastManager.shared.show(
-                                        String(localized: "restore_no_purchases_toast"),
-                                        style: .info
-                                    )
-                                }
-                            } catch {
-                                ToastManager.shared.show(error.localizedDescription, style: .error)
-                            }
-                        }
-                    } label: {
-                        if subscription.isRestoring {
-                            HStack {
-                                Text("restore_purchases_button")
-                                Spacer()
-                                ProgressView()
-                                    .controlSize(.small)
-                            }
-                        } else {
-                            Text("restore_purchases_button")
-                        }
-                    }
-                    .disabled(subscription.isRestoring)
-                }
-
-                // MARK: - iCloud sync health
-
-                // Only rendered when something is actually wrong. A silent sync failure used to be
-                // completely invisible, which is how one went unnoticed for months.
-                if syncMonitor.hasSyncProblem {
-                    Section {
-                        HStack(alignment: .top, spacing: 12) {
-                            Image(systemName: "exclamationmark.icloud")
-                                .foregroundStyle(.orange)
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("icloud_sync_problem_title")
-                                    .font(.subheadline.weight(.semibold))
-                                if let detail = syncMonitor.lastErrorDetail {
-                                    Text(detail).font(.caption)
-                                }
-                                if let message = syncMonitor.lastErrorMessage {
-                                    Text(message)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                        }
-                    } header: {
-                        Text("icloud_sync_section")
-                    } footer: {
-                        Text("icloud_sync_problem_footer")
-                    }
-                }
-
-                // MARK: - Task sync
-
-                Section {
-                    NavigationLink {
-                        IssueSyncSettingsView()
-                    } label: {
-                        HStack {
-                            Label(
-                                "issue_sync_settings_title",
-                                systemImage: "arrow.trianglehead.2.clockwise")
-                            Spacer()
-                            Text("\(repos.filter(\.syncTasksToGitHub).count)/\(repos.filter { !$0.isLocal }.count)")
-                                .font(.subheadline)
-                                .monospacedDigit()
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                } header: {
-                    Text("issue_sync_section_header")
-                }
-
-                // MARK: - Backup
-
-                Section {
-                    Button {
-                        exportBackup()
-                    } label: {
-                        Label("export_backup_button", systemImage: "square.and.arrow.up")
-                    }
-                    .disabled(repos.isEmpty)
-
-                    Button {
-                        showImporter = true
-                    } label: {
-                        if isImporting {
-                            HStack {
-                                Text("import_backup_button")
-                                Spacer()
-                                ProgressView().controlSize(.small)
-                            }
-                        } else {
-                            Label("import_backup_button", systemImage: "square.and.arrow.down")
-                        }
-                    }
-                    .disabled(isImporting)
-                } header: {
-                    Text("backup_section_header")
-                } footer: {
-                    Text("backup_footer")
-                }
-
-                // MARK: - Debug (solo en desarrollo)
-
-                #if DEBUG
-                Section {
-                    Toggle(isOn: Binding(
-                        get: { subscription.isMockPro },
-                        set: { subscription.isMockPro = $0 }
-                    )) {
-                        Label("debug_simulate_pro_label", systemImage: "crown.fill")
-                            .foregroundStyle(.purple)
-                    }
-                    .tint(.purple)
-
-                    if subscription.isMockPro {
-                        Text("debug_simulate_pro_hint")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    // Otherwise the only way to see the onboarding again is deleting the app,
-                    // which also throws away the local data you were testing with.
-                    Button {
-                        showOnboardingPreview = true
-                    } label: {
-                        Label("debug_replay_onboarding", systemImage: "sparkles.rectangle.stack")
-                    }
-                } header: {
-                    Text("Debug")
-                } footer: {
-                    Text("debug_only_visible_hint")
-                }
-                #endif
-
-                // MARK: - About
-
-                Section("about_header") {
-                    HStack {
-                        Text("version_label")
-                        Spacer()
-                        Text(appVersion)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Link("privacy_policy", destination: URL(string: "https://idanidev.github.io/RepoMind/privacy")!)
-                    Link("terms_of_use", destination: URL(string: "https://idanidev.github.io/RepoMind/terms")!)
-                }
-            }
-            .navigationTitle("settings_title")
-            #if os(iOS)
-                .navigationBarTitleDisplayMode(.inline)
-            #endif
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("done_button") {
-                        dismiss()
-                    }
-                }
-            }
-            .sheet(isPresented: $showPaywall) {
-                PaywallView()
-            }
-            #if DEBUG
-                .fullScreenCover(isPresented: $showOnboardingPreview) {
-                    // Passing onFinish keeps `hasSeenOnboarding` untouched: this is a preview,
-                    // not a first run.
-                    OnboardingView { showOnboardingPreview = false }
-                }
-            #endif
-            .manageSubscriptionsSheet(isPresented: $showManageSubscription)
-            .fileExporter(
-                isPresented: $showExporter,
-                document: backupDocument,
-                contentType: .json,
-                defaultFilename: "repomind-backup"
-            ) { result in
-                if case .failure(let error) = result {
-                    ToastManager.shared.show(error.localizedDescription, style: .error)
-                }
-            }
-            .fileImporter(
-                isPresented: $showImporter,
-                allowedContentTypes: [.json],
-                allowsMultipleSelection: false
-            ) { result in
-                Task { await handleImport(result) }
+        Group {
+            if embedded {
+                settingsList
+            } else {
+                NavigationStack { settingsList }
             }
         }
         .presentationDetents([.large])
         .frame(idealWidth: 500)
+    }
+
+    /// The list itself, without the stack: the home's Settings tab embeds it under its own
+    /// header, inside the home's navigation stack.
+    private var settingsList: some View {
+        List {
+            // MARK: - Subscription
+
+            Section("subscription_header") {
+                HStack {
+                    Label(
+                        "current_plan_label",
+                        systemImage: subscription.isPro ? "crown.fill" : "person.fill"
+                    )
+                    Spacer()
+                    Text(subscription.currentPlanName)
+                        .foregroundStyle(subscription.isPro ? .purple : .secondary)
+                        .font(.subheadline.weight(.semibold))
+                }
+
+                if subscription.isPro && !subscription.isMockPro {
+                    Button("manage_subscription_button") {
+                        showManageSubscription = true
+                    }
+                } else if !subscription.isPro {
+                    Button {
+                        showPaywall = true
+                    } label: {
+                        Label("upgrade_to_pro_button", systemImage: "crown")
+                            .foregroundStyle(.purple)
+                    }
+                }
+
+                Button {
+                    Task {
+                        do {
+                            let restored = try await subscription.restorePurchases()
+                            if restored {
+                                ToastManager.shared.show(
+                                    String(localized: "restore_success_toast"),
+                                    style: .success
+                                )
+                            } else {
+                                ToastManager.shared.show(
+                                    String(localized: "restore_no_purchases_toast"),
+                                    style: .info
+                                )
+                            }
+                        } catch {
+                            ToastManager.shared.show(error.localizedDescription, style: .error)
+                        }
+                    }
+                } label: {
+                    if subscription.isRestoring {
+                        HStack {
+                            Text("restore_purchases_button")
+                            Spacer()
+                            ProgressView()
+                                .controlSize(.small)
+                        }
+                    } else {
+                        Text("restore_purchases_button")
+                    }
+                }
+                .disabled(subscription.isRestoring)
+            }
+
+            // MARK: - iCloud sync health
+
+            // Only rendered when something is actually wrong. A silent sync failure used to be
+            // completely invisible, which is how one went unnoticed for months.
+            if syncMonitor.hasSyncProblem {
+                Section {
+                    HStack(alignment: .top, spacing: 12) {
+                        Image(systemName: "exclamationmark.icloud")
+                            .foregroundStyle(.orange)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("icloud_sync_problem_title")
+                                .font(.subheadline.weight(.semibold))
+                            if let detail = syncMonitor.lastErrorDetail {
+                                Text(detail).font(.caption)
+                            }
+                            if let message = syncMonitor.lastErrorMessage {
+                                Text(message)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                } header: {
+                    Text("icloud_sync_section")
+                } footer: {
+                    Text("icloud_sync_problem_footer")
+                }
+            }
+
+            // MARK: - Task sync
+
+            Section {
+                NavigationLink {
+                    IssueSyncSettingsView()
+                } label: {
+                    HStack {
+                        Label(
+                            "issue_sync_settings_title",
+                            systemImage: "arrow.trianglehead.2.clockwise")
+                        Spacer()
+                        Text("\(repos.filter(\.syncTasksToGitHub).count)/\(repos.filter { !$0.isLocal }.count)")
+                            .font(.subheadline)
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            } header: {
+                Text("issue_sync_section_header")
+            }
+
+            // MARK: - Backup
+
+            Section {
+                Button {
+                    exportBackup()
+                } label: {
+                    Label("export_backup_button", systemImage: "square.and.arrow.up")
+                }
+                .disabled(repos.isEmpty)
+
+                Button {
+                    showImporter = true
+                } label: {
+                    if isImporting {
+                        HStack {
+                            Text("import_backup_button")
+                            Spacer()
+                            ProgressView().controlSize(.small)
+                        }
+                    } else {
+                        Label("import_backup_button", systemImage: "square.and.arrow.down")
+                    }
+                }
+                .disabled(isImporting)
+            } header: {
+                Text("backup_section_header")
+            } footer: {
+                Text("backup_footer")
+            }
+
+            // MARK: - Debug (solo en desarrollo)
+
+            #if DEBUG
+            Section {
+                Toggle(isOn: Binding(
+                    get: { subscription.isMockPro },
+                    set: { subscription.isMockPro = $0 }
+                )) {
+                    Label("debug_simulate_pro_label", systemImage: "crown.fill")
+                        .foregroundStyle(.purple)
+                }
+                .tint(.purple)
+
+                if subscription.isMockPro {
+                    Text("debug_simulate_pro_hint")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                // Otherwise the only way to see the onboarding again is deleting the app,
+                // which also throws away the local data you were testing with.
+                Button {
+                    showOnboardingPreview = true
+                } label: {
+                    Label("debug_replay_onboarding", systemImage: "sparkles.rectangle.stack")
+                }
+            } header: {
+                Text("Debug")
+            } footer: {
+                Text("debug_only_visible_hint")
+            }
+            #endif
+
+            // MARK: - About
+
+            Section("about_header") {
+                HStack {
+                    Text("version_label")
+                    Spacer()
+                    Text(appVersion)
+                        .foregroundStyle(.secondary)
+                }
+
+                Link("privacy_policy", destination: URL(string: "https://idanidev.github.io/RepoMind/privacy")!)
+                Link("terms_of_use", destination: URL(string: "https://idanidev.github.io/RepoMind/terms")!)
+            }
+        }
+        .navigationTitle("settings_title")
+        #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+        #endif
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button("done_button") {
+                    dismiss()
+                }
+            }
+        }
+        .sheet(isPresented: $showPaywall) {
+            PaywallView()
+        }
+        #if DEBUG
+            .fullScreenCover(isPresented: $showOnboardingPreview) {
+                // Passing onFinish keeps `hasSeenOnboarding` untouched: this is a preview,
+                // not a first run.
+                OnboardingView { showOnboardingPreview = false }
+            }
+        #endif
+        .manageSubscriptionsSheet(isPresented: $showManageSubscription)
+        .fileExporter(
+            isPresented: $showExporter,
+            document: backupDocument,
+            contentType: .json,
+            defaultFilename: "repomind-backup"
+        ) { result in
+            if case .failure(let error) = result {
+                ToastManager.shared.show(error.localizedDescription, style: .error)
+            }
+        }
+        .fileImporter(
+            isPresented: $showImporter,
+            allowedContentTypes: [.json],
+            allowsMultipleSelection: false
+        ) { result in
+            Task { await handleImport(result) }
+        }
     }
 
     // MARK: - Export

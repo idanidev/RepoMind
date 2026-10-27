@@ -1,42 +1,67 @@
 import Foundation
 import SwiftUI
 
+// MARK: - Actions
+
+/// Everything the home can ask its host to do. Defaults are no-ops, so a preview needs nothing.
+struct HomeActions {
+    var selectRepo: (HomeRepoCardData) -> Void = { _ in }
+    var toggleFavorite: (HomeRepoCardData) -> Void = { _ in }
+    var toggleArchive: (HomeRepoCardData) -> Void = { _ in }
+    var delete: (HomeRepoCardData) -> Void = { _ in }
+    var moveToFolder: (HomeRepoCardData) -> Void = { _ in }
+    var configureIcon: (HomeRepoCardData) -> Void = { _ in }
+    var openOnGitHub: (HomeRepoCardData) -> Void = { _ in }
+    var selectAccount: (String?) -> Void = { _ in }
+    var upgrade: () -> Void = {}
+    var signOut: () -> Void = {}
+    var add: () -> Void = {}
+    var notifications: () -> Void = {}
+    var refresh: () async -> Void = {}
+}
+
 // MARK: - Home
 
-/// The redesigned home screen: dense cards on pure black, one accent, hairlines instead of
-/// shadows.
+/// The repositories tab of the redesigned home: dense cards on pure black, one accent, hairlines
+/// instead of shadows.
 ///
-/// Pure presentation. It takes card data and a few callbacks and owns only its own UI state
-/// (filter, search, tab), so the same view renders `HomeMockData` in a preview and real repos
-/// through `HomeLiveView`. Colors follow the system appearance via the `Home*` colorsets; the
-/// dark one is the design, the light one is derived from it.
+/// Pure presentation. It takes card data and `HomeActions` and owns only its own UI state
+/// (filter, search, the delete confirmation), so the same view renders `HomeMockData` in a
+/// preview and real repos through `HomeLiveView`, which also provides the tab bar around it.
 struct HomeView: View {
-    var accountName: String?
+    var account = HomeAccountMenuData()
     let stats: HomeStats
     let repos: [HomeRepoCardData]
-    var onSelectRepo: (HomeRepoCardData) -> Void = { _ in }
-    var onAdd: () -> Void = {}
-    var onNotifications: () -> Void = {}
-    var onRefresh: () async -> Void = {}
-    /// Asked when a tab other than Repos is tapped. Returning `true` means the host handled it
-    /// (pushed a screen, opened a sheet) and the bar stays on Repos; `false` shows the
-    /// placeholder. The preview handles nothing, the live screen handles Tasks and Settings.
-    var onSelectTab: (HomeTab) -> Bool = { _ in false }
+    /// `nil` for Pro. A free account sees at most this many repos per filter, favorites first,
+    /// and a banner says how many are hidden — the same gate `RepoListView` applies.
+    var repoLimit: Int?
+    var actions = HomeActions()
 
     @State private var filter: HomeFilter = .all
-    @State private var tab: HomeTab = .repos
     @State private var isSearching = false
     @State private var searchText = ""
+    @State private var repoToDelete: HomeRepoCardData?
 
     private var query: String { searchText.trimmingCharacters(in: .whitespaces) }
 
-    private var visibleRepos: [HomeRepoCardData] {
+    /// Filter chip and search applied, before the free-tier gate.
+    private var matchingRepos: [HomeRepoCardData] {
         let filtered = filter.apply(to: repos)
         guard isSearching, !query.isEmpty else { return filtered }
         return filtered.filter {
             $0.name.localizedStandardContains(query) || $0.description.localizedStandardContains(query)
         }
     }
+
+    private var visibleRepos: [HomeRepoCardData] {
+        let matching = matchingRepos
+        guard let repoLimit, matching.count > repoLimit else { return matching }
+        let favorites = Array(matching.filter(\.isFavorite).prefix(repoLimit))
+        let rest = matching.filter { !$0.isFavorite }
+        return favorites + Array(rest.prefix(max(0, repoLimit - favorites.count)))
+    }
+
+    private var hiddenCount: Int { matchingRepos.count - visibleRepos.count }
 
     private struct HomeSection: Identifiable {
         let id: String
@@ -70,60 +95,19 @@ struct HomeView: View {
     }
 
     var body: some View {
-        ZStack {
-            HomeTheme.background
-                .ignoresSafeArea()
-            switch tab {
-            case .repos:
-                reposTab
-            case .tasks, .profile, .settings:
-                comingSoon
-            }
-        }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            HomeTabBar(selection: tabSelection)
-                .padding(.horizontal, HomeTheme.gutter)
-                .padding(.top, 8)
-                .padding(.bottom, 4)
-                .background(
-                    LinearGradient(
-                        colors: [HomeTheme.background.opacity(0), HomeTheme.background],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                    .ignoresSafeArea()
-                )
-        }
-        .toolbar(.hidden, for: .navigationBar)
-    }
-
-    /// Routes a tap on Tasks or Settings to the host before switching tabs.
-    private var tabSelection: Binding<HomeTab> {
-        Binding(
-            get: { tab },
-            set: { selected in
-                if selected != .repos, onSelectTab(selected) {
-                    tab = .repos
-                } else {
-                    tab = selected
-                }
-            }
-        )
-    }
-
-    // MARK: Repos
-
-    private var reposTab: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 12) {
                 HomeHeaderView(
-                    accountName: accountName,
+                    account: account,
                     stats: stats,
                     filter: $filter,
                     isSearching: $isSearching,
                     searchText: $searchText,
-                    onAdd: onAdd,
-                    onNotifications: onNotifications
+                    onSelectAccount: actions.selectAccount,
+                    onUpgrade: actions.upgrade,
+                    onSignOut: actions.signOut,
+                    onAdd: actions.add,
+                    onNotifications: actions.notifications
                 )
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.bottom, 2)
@@ -140,25 +124,91 @@ struct HomeView: View {
                         }
                     }
                 }
+
+                if hiddenCount > 0 {
+                    limitBanner
+                }
             }
             .padding(.horizontal, HomeTheme.gutter)
             .padding(.top, 6)
             .padding(.bottom, 12)
             .animation(.smooth(duration: 0.3), value: visibleRepos)
         }
-        .refreshable { await onRefresh() }
+        .refreshable { await actions.refresh() }
         .scrollIndicators(.hidden)
         .scrollDismissesKeyboard(.immediately)
+        .confirmationDialog(
+            "home_delete_repo_title",
+            isPresented: deleteConfirmation,
+            titleVisibility: .visible,
+            presenting: repoToDelete
+        ) { repo in
+            Button("delete_task", role: .destructive) { actions.delete(repo) }
+            Button("cancel_button", role: .cancel) {}
+        } message: { repo in
+            Text("home_delete_repo_message \(repo.name)")
+        }
     }
+
+    private var deleteConfirmation: Binding<Bool> {
+        Binding(get: { repoToDelete != nil }, set: { if !$0 { repoToDelete = nil } })
+    }
+
+    // MARK: Rows
 
     private func card(_ repo: HomeRepoCardData) -> some View {
         Button {
-            onSelectRepo(repo)
+            actions.selectRepo(repo)
         } label: {
             HomeRepoCardView(repo: repo)
         }
         .buttonStyle(HomeCardButtonStyle())
+        .contextMenu { contextMenu(for: repo) }
         .transition(.opacity.combined(with: .scale(scale: 0.98)))
+    }
+
+    /// The classic list's swipe actions, as a long-press menu: cards here are not list rows.
+    @ViewBuilder
+    private func contextMenu(for repo: HomeRepoCardData) -> some View {
+        Button {
+            actions.toggleFavorite(repo)
+        } label: {
+            Label(
+                repo.isFavorite ? "unfavorite" : "favorite",
+                systemImage: repo.isFavorite ? "star.slash" : "star.fill"
+            )
+        }
+        Button {
+            actions.moveToFolder(repo)
+        } label: {
+            Label("move_to_folder", systemImage: "folder")
+        }
+        Button {
+            actions.configureIcon(repo)
+        } label: {
+            Label("icon_configure_button", systemImage: "photo.badge.plus")
+        }
+        if repo.owner != nil {
+            Button {
+                actions.openOnGitHub(repo)
+            } label: {
+                Label("home_open_on_github", systemImage: "arrow.up.right.square")
+            }
+        }
+        Divider()
+        Button {
+            actions.toggleArchive(repo)
+        } label: {
+            Label(
+                repo.isArchived ? "unarchive" : "archive",
+                systemImage: repo.isArchived ? "tray.and.arrow.up" : "archivebox"
+            )
+        }
+        Button(role: .destructive) {
+            repoToDelete = repo
+        } label: {
+            Label("delete_task", systemImage: "trash")
+        }
     }
 
     private func folderHeader(_ folder: HomeFolderInfo) -> some View {
@@ -177,16 +227,54 @@ struct HomeView: View {
         .accessibilityAddTraits(.isHeader)
     }
 
+    /// Shown to a free account with more repos than the tier allows. Tapping opens the paywall.
+    private var limitBanner: some View {
+        Button(action: actions.upgrade) {
+            HStack(spacing: 12) {
+                Image(systemName: "crown.fill")
+                    .font(.title3)
+                    .foregroundStyle(HomeTheme.accent)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("repo_limit_banner_title")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(HomeTheme.textPrimary)
+                    Text(String(format: String(localized: "repo_limit_banner_subtitle"), hiddenCount))
+                        .font(.caption)
+                        .foregroundStyle(HomeTheme.textSecondary)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(HomeTheme.textSecondary)
+            }
+            .padding(HomeTheme.cardPadding)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: HomeTheme.cardRadius, style: .continuous)
+                    .fill(HomeTheme.accent.opacity(0.12))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: HomeTheme.cardRadius, style: .continuous)
+                    .strokeBorder(HomeTheme.accent.opacity(0.35), lineWidth: 0.5)
+            )
+        }
+        .buttonStyle(HomeCardButtonStyle())
+    }
+
     private var emptyState: some View {
         ContentUnavailableView {
             if isSearching && !query.isEmpty {
                 Label("no_results_title", systemImage: "magnifyingglass")
+            } else if filter == .archived {
+                Label("no_archived_title", systemImage: "archivebox")
             } else {
                 Label("no_repos_title", systemImage: "tray")
             }
         } description: {
             if isSearching && !query.isEmpty {
                 Text("no_results_message")
+            } else if filter == .archived {
+                Text("no_archived_message")
             } else {
                 Text("connect_account_prompt")
             }
@@ -194,31 +282,33 @@ struct HomeView: View {
         .frame(maxWidth: .infinity)
         .padding(.top, 40)
     }
-
-    // MARK: Other tabs
-
-    private var comingSoon: some View {
-        ContentUnavailableView {
-            Label(tab.label, systemImage: tab.symbol)
-        } description: {
-            Text("home_tab_coming_soon")
-        }
-    }
 }
 
 // MARK: - Previews
 
 #Preview("Home · dark") {
-    HomeView(accountName: HomeMockData.accountName, stats: HomeMockData.stats, repos: HomeMockData.repos)
-        .preferredColorScheme(.dark)
+    HomeView(
+        account: HomeAccountMenuData(names: [HomeMockData.accountName], isPro: true),
+        stats: HomeMockData.stats,
+        repos: HomeMockData.repos
+    )
+    .background(HomeTheme.background)
+    .preferredColorScheme(.dark)
 }
 
-#Preview("Home · light") {
-    HomeView(accountName: HomeMockData.accountName, stats: HomeMockData.stats, repos: HomeMockData.repos)
-        .preferredColorScheme(.light)
+#Preview("Home · free tier") {
+    HomeView(
+        account: HomeAccountMenuData(names: [HomeMockData.accountName]),
+        stats: HomeMockData.stats,
+        repos: HomeMockData.repos,
+        repoLimit: 3
+    )
+    .background(HomeTheme.background)
+    .preferredColorScheme(.dark)
 }
 
 #Preview("Home · empty") {
-    HomeView(accountName: nil, stats: HomeStats(totalRepos: 0, pendingTasks: 0), repos: [])
-        .preferredColorScheme(.dark)
+    HomeView(stats: HomeStats(totalRepos: 0, pendingTasks: 0), repos: [])
+        .background(HomeTheme.background)
+        .preferredColorScheme(.light)
 }

@@ -498,4 +498,16 @@
 "home_tab_tasks" = "Tareas";
 "home_tab_profile" = "Perfil";
 "home_tab_settings" = "Ajustes";
-"home_tab_coming_soon" = "Próximamente";
+"home_filter_archived" = "Archivados";
+"home_open_on_github" = "Abrir en GitHub";
+"home_delete_repo_title" = "¿Borrar repositorio?";
+"home_delete_repo_message %@" = "“%@” y sus tareas se quitan de la app. El repositorio de GitHub no se toca.";
+"home_sign_out_confirm_title" = "¿Cerrar sesión?";
+"home_sign_out_confirm_message" = "Los repos y tareas locales se borran de este dispositivo. Tus datos de GitHub se quedan.";
+"home_profile_repos %lld" = "%lld repositorios";
+
+/* Tablero (rediseño) */
+"board_progress %lld" = "%lld%% hecho";
+"board_unpublished" = "Sin publicar";
+"board_empty_column" = "Nada por aquí todavía";
+"board_empty_column_hint" = "Añade una tarea abajo o díctala con el micrófono.";

@@ -6,6 +6,7 @@ enum HomeFilter: String, CaseIterable, Identifiable {
     case all
     case favorites
     case tasks
+    case archived
 
     var id: String { rawValue }
 
@@ -14,30 +15,47 @@ enum HomeFilter: String, CaseIterable, Identifiable {
         case .all: "home_filter_all"
         case .favorites: "home_filter_favorites"
         case .tasks: "home_filter_tasks"
+        case .archived: "home_filter_archived"
         }
     }
 
+    /// Archived repos only ever show under their own chip, as in the classic list.
     func apply(to repos: [HomeRepoCardData]) -> [HomeRepoCardData] {
         switch self {
-        case .all: repos
-        case .favorites: repos.filter(\.isFavorite)
-        case .tasks: repos.filter { $0.tasksPending > 0 }
+        case .all: repos.filter { !$0.isArchived }
+        case .favorites: repos.filter { $0.isFavorite && !$0.isArchived }
+        case .tasks: repos.filter { $0.tasksPending > 0 && !$0.isArchived }
+        case .archived: repos.filter(\.isArchived)
         }
     }
 }
 
+// MARK: - Account menu
+
+/// What the account menu shows: the accounts to filter by, the one selected, and the two
+/// facts that decide which entries appear.
+struct HomeAccountMenuData: Hashable {
+    var names: [String] = []
+    var selected: String?
+    var isPro = false
+    var isDemo = false
+}
+
 // MARK: - Header
 
-/// Title, account, the three actions, the stats strip and the filter chips — everything above
-/// the first card. Search is inline: tapping the glass opens a field under the title instead of
-/// pushing the whole screen into a navigation bar it does not otherwise have. Filtering lives
+/// Title, account menu, the three actions, the stats strip and the filter chips — everything
+/// above the first card. Search is inline: tapping the glass opens a field under the title instead
+/// of pushing the whole screen into a navigation bar it does not otherwise have. Filtering lives
 /// in the chips, so there is no separate filter button.
 struct HomeHeaderView: View {
-    var accountName: String?
+    var account = HomeAccountMenuData()
     let stats: HomeStats
     @Binding var filter: HomeFilter
     @Binding var isSearching: Bool
     @Binding var searchText: String
+    var onSelectAccount: (String?) -> Void = { _ in }
+    var onUpgrade: () -> Void = {}
+    var onSignOut: () -> Void = {}
     var onAdd: () -> Void = {}
     var onNotifications: () -> Void = {}
 
@@ -69,21 +87,18 @@ struct HomeHeaderView: View {
                     .foregroundStyle(HomeTheme.textPrimary)
                     .lineLimit(1)
                     .layoutPriority(1)
-                if let accountName {
+                if !account.names.isEmpty {
                     Text(verbatim: "•")
                         .foregroundStyle(HomeTheme.textSecondary)
-                    HStack(spacing: 3) {
-                        Text(accountName)
-                        Image(systemName: "person.fill")
-                            .font(.caption2)
-                        Image(systemName: "chevron.down")
-                            .font(.caption2.weight(.semibold))
-                    }
-                    .font(.subheadline)
-                    .foregroundStyle(HomeTheme.textSecondary)
-                    .lineLimit(1)
-                    .accessibilityLabel("account_menu_label")
-                    .accessibilityValue(accountName)
+                    accountMenu
+                }
+                if account.isDemo {
+                    Text("demo_mode_badge")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(HomeTheme.warning, in: Capsule())
                 }
             }
             Spacer(minLength: 4)
@@ -95,6 +110,58 @@ struct HomeHeaderView: View {
                 iconButton("bell", label: "home_notifications_label", action: onNotifications)
             }
         }
+    }
+
+    /// Filter by account, upgrade, sign out — the same menu the classic list keeps behind the
+    /// person icon, hung from the account name instead.
+    private var accountMenu: some View {
+        Menu {
+            Picker("accounts_filter", selection: accountSelection) {
+                Text("all_accounts").tag(nil as String?)
+                ForEach(account.names, id: \.self) { name in
+                    Text(name).tag(name as String?)
+                }
+            }
+            Divider()
+            if !account.isPro {
+                Button(action: onUpgrade) {
+                    Label("upgrade_to_pro_button", systemImage: "crown")
+                }
+            }
+            Button(role: .destructive, action: onSignOut) {
+                Label("sign_out", systemImage: "rectangle.portrait.and.arrow.right")
+            }
+        } label: {
+            HStack(spacing: 3) {
+                accountTitle
+                if account.isPro {
+                    Image(systemName: "crown.fill")
+                        .font(.caption2)
+                        .foregroundStyle(HomeTheme.accent)
+                }
+                Image(systemName: "chevron.down")
+                    .font(.caption2.weight(.semibold))
+            }
+            .font(.subheadline)
+            .foregroundStyle(HomeTheme.textSecondary)
+            .lineLimit(1)
+        }
+        .accessibilityLabel("account_menu_label")
+    }
+
+    @ViewBuilder
+    private var accountTitle: some View {
+        if let selected = account.selected {
+            Text(selected)
+        } else if account.names.count == 1, let only = account.names.first {
+            Text(only)
+        } else {
+            Text("all_accounts")
+        }
+    }
+
+    private var accountSelection: Binding<String?> {
+        Binding(get: { account.selected }, set: { onSelectAccount($0) })
     }
 
     private var searchField: some View {
@@ -192,40 +259,46 @@ struct HomeStatsStrip: View {
 
 // MARK: - Filter chips
 
-/// Segmented chips with a pill that slides to the selection.
+/// Segmented chips with a pill that slides to the selection. Scrolls sideways if four chips do
+/// not fit at a large Dynamic Type size.
 struct HomeFilterChips: View {
     @Binding var selection: HomeFilter
     @Namespace private var namespace
 
     var body: some View {
-        HStack(spacing: 2) {
-            ForEach(HomeFilter.allCases) { filter in
-                Button {
-                    withAnimation(.snappy(duration: 0.25)) { selection = filter }
-                } label: {
-                    Text(filter.label)
-                        .font(.footnote.weight(selection == filter ? .semibold : .medium))
-                        .foregroundStyle(selection == filter ? HomeTheme.textPrimary : HomeTheme.textSecondary)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background {
-                            if selection == filter {
-                                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                    .fill(HomeTheme.surfaceElevated)
-                                    .matchedGeometryEffect(id: "selection", in: namespace)
+        ScrollView(.horizontal) {
+            HStack(spacing: 2) {
+                ForEach(HomeFilter.allCases) { filter in
+                    Button {
+                        withAnimation(.snappy(duration: 0.25)) { selection = filter }
+                    } label: {
+                        Text(filter.label)
+                            .font(.footnote.weight(selection == filter ? .semibold : .medium))
+                            .foregroundStyle(selection == filter ? HomeTheme.textPrimary : HomeTheme.textSecondary)
+                            .lineLimit(1)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background {
+                                if selection == filter {
+                                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                        .fill(HomeTheme.surfaceElevated)
+                                        .matchedGeometryEffect(id: "selection", in: namespace)
+                                }
                             }
-                        }
-                        .contentShape(Rectangle())
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityAddTraits(selection == filter ? [.isSelected] : [])
                 }
-                .buttonStyle(.plain)
-                .accessibilityAddTraits(selection == filter ? [.isSelected] : [])
             }
+            .padding(3)
+            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(HomeTheme.surface))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(HomeTheme.hairline, lineWidth: 0.5)
+            )
         }
-        .padding(3)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(HomeTheme.surface))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(HomeTheme.hairline, lineWidth: 0.5)
-        )
+        .scrollIndicators(.hidden)
+        .scrollBounceBehavior(.basedOnSize)
     }
 }

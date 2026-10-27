@@ -499,4 +499,16 @@
 "home_tab_tasks" = "Tasks";
 "home_tab_profile" = "Profile";
 "home_tab_settings" = "Settings";
-"home_tab_coming_soon" = "Coming soon";
+"home_filter_archived" = "Archived";
+"home_open_on_github" = "Open on GitHub";
+"home_delete_repo_title" = "Delete repository?";
+"home_delete_repo_message %@" = "“%@” and its tasks are removed from the app. The GitHub repository is not touched.";
+"home_sign_out_confirm_title" = "Sign out?";
+"home_sign_out_confirm_message" = "Local repos and tasks are removed from this device. Your GitHub data stays.";
+"home_profile_repos %lld" = "%lld repositories";
+
+/* Board (redesign) */
+"board_progress %lld" = "%lld%% done";
+"board_unpublished" = "Not published";
+"board_empty_column" = "Nothing here yet";
+"board_empty_column_hint" = "Add a task below, or dictate one with the microphone.";

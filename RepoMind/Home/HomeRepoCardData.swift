@@ -52,6 +52,7 @@ struct HomeRepoCardData: Identifiable, Hashable {
     var owner: String?
     var description = ""
     var isFavorite = false
+    var isArchived = false
     var isPrivate = false
     /// The hero card at the top: larger logo and title, glow, and the task preview.
     var isFeatured = false
@@ -134,6 +135,7 @@ extension HomeRepoCardData {
             owner: owner ?? repo.account?.username,
             description: repo.repoDescription,
             isFavorite: repo.isFavorite,
+            isArchived: repo.isArchived,
             isPrivate: activity?.isPrivate ?? false,
             isInactive: repo.isArchived || quiet,
             folder: repo.folder.map {

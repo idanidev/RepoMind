@@ -8,18 +8,21 @@ enum HomeRoute: Hashable {
 
 // MARK: - Live home
 
-/// The redesigned home fed from SwiftData and the activity cache.
+/// The redesigned home on iPhone: the tab bar, the four tabs, and everything the repos tab
+/// needs from the app.
 ///
 /// `HomeView` knows nothing about models. This is the one place that turns `ProjectRepo` plus
-/// `RepoActivity` into card data, applies the free-tier limit the same way `RepoListView` does,
-/// syncs with GitHub on pull-to-refresh, and pushes the board when a card is tapped. Tasks and
-/// Settings in the tab bar open the existing screens.
+/// `RepoActivity` into card data, syncs with GitHub, answers every `HomeActions` closure, and
+/// pushes the board when a card is tapped. Today, Profile and Settings are the existing screens
+/// embedded under the home's own header, inside the same navigation stack.
 struct HomeLiveView: View {
     @Environment(\.modelContext) private var context
+    @Environment(\.openURL) private var openURL
     @Query(sort: \ProjectRepo.updatedAt, order: .reverse) private var repos: [ProjectRepo]
     @Query private var accounts: [GitHubAccount]
     @Query private var feedbackIssues: [FeedbackIssue]
 
+    @AppStorage("isAuthenticated") private var isAuthenticated = false
     @AppStorage("isDemoMode") private var isDemoMode = false
     @AppStorage("lastSyncTimestamp") private var lastSyncTimestamp: Double = 0
     @AppStorage("lastTaskImportTimestamp") private var lastTaskImport: Double = 0
@@ -27,86 +30,200 @@ struct HomeLiveView: View {
     @State private var subscription = SubscriptionManager.shared
     @State private var activity = RepoActivityStore.shared
     @State private var path = NavigationPath()
-    @State private var showAddLocalProject = false
-    @State private var showSettings = false
+    @State private var tab: HomeTab = .repos
+    @State private var selectedAccount: String?
     @State private var isSyncing = false
+    @State private var showAddLocalProject = false
+    @State private var showPaywall = false
+    @State private var showSignOutConfirm = false
     /// Set when a sync fails with an expired token, so the user can replace it without signing out.
     @State private var expiredTokenAccount: GitHubAccount?
+    @State private var repoToFile: ProjectRepo?
+    @State private var repoToConfigureIcon: ProjectRepo?
+
+    private static let syncSuccessFeedback = UINotificationFeedbackGenerator()
 
     var body: some View {
         NavigationStack(path: $path) {
-            home
+            ZStack {
+                HomeTheme.background
+                    .ignoresSafeArea()
+                switch tab {
+                case .repos:
+                    reposTab
+                case .tasks:
+                    tabPage("today_title") { TodayView() }
+                case .profile:
+                    tabPage("home_tab_profile") {
+                        HomeProfileView(
+                            onUpgrade: { showPaywall = true },
+                            onSignOut: { showSignOutConfirm = true }
+                        )
+                    }
+                case .settings:
+                    tabPage("settings_title") { SettingsView(embedded: true) }
+                }
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                HomeTabBar(selection: $tab)
+                    .padding(.horizontal, HomeTheme.gutter)
+                    .padding(.top, 8)
+                    .padding(.bottom, 4)
+                    .background(
+                        LinearGradient(
+                            colors: [HomeTheme.background.opacity(0), HomeTheme.background],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                        .ignoresSafeArea()
+                    )
+            }
+            .toolbar(.hidden, for: .navigationBar)
+            .navigationDestination(for: ProjectRepo.self) { repo in
+                BoardView(project: repo)
+            }
+            .navigationDestination(for: HomeRoute.self) { route in
+                switch route {
+                case .today: TodayView()
+                }
+            }
+            .sheet(isPresented: $showAddLocalProject) {
+                AddLocalProjectSheet()
+                    .environment(\.modelContext, context)
+            }
+            .sheet(isPresented: $showPaywall) {
+                PaywallView()
+            }
+            .sheet(item: $expiredTokenAccount) { account in
+                ReauthSheet(account: account)
+            }
+            .sheet(item: $repoToFile) { repo in
+                FolderPickerSheet(repo: repo)
+            }
+            .sheet(item: $repoToConfigureIcon) { repo in
+                RepoIconConfigSheet(repo: repo)
+            }
+            .confirmationDialog(
+                "home_sign_out_confirm_title", isPresented: $showSignOutConfirm, titleVisibility: .visible
+            ) {
+                Button("sign_out", role: .destructive) { signOut() }
+                Button("cancel_button", role: .cancel) {}
+            } message: {
+                Text("home_sign_out_confirm_message")
+            }
+            // Once on appear and again whenever repos arrive, as they do from CloudKit on a fresh
+            // device. A first launch with nothing local fetches the repo list; the activity
+            // store's hour-long cache makes the extra runs free.
+            .task(id: repos.count) {
+                if repos.isEmpty {
+                    await syncRepos(silent: true)
+                }
+                await activity.refresh(repos: repos, accounts: accounts)
+            }
         }
     }
 
-    private var home: some View {
+    // MARK: Tabs
+
+    private var reposTab: some View {
         let cards = self.cards
         return HomeView(
-            accountName: accountName,
-            stats: HomeStats(cards: cards),
+            account: HomeAccountMenuData(
+                names: accountNames, selected: selectedAccount,
+                isPro: subscription.isPro, isDemo: isDemoMode),
+            stats: HomeStats(cards: cards.filter { !$0.isArchived }),
             repos: cards,
-            onSelectRepo: open,
-            onAdd: { showAddLocalProject = true },
-            onNotifications: { path.append(HomeRoute.today) },
-            onRefresh: { await refresh(force: true) },
-            onSelectTab: handle
+            repoLimit: subscription.isPro ? nil : subscription.maxFreeRepos,
+            actions: actions
         )
-        .navigationDestination(for: ProjectRepo.self) { repo in
-            KanbanView(project: repo)
-        }
-        .navigationDestination(for: HomeRoute.self) { route in
-            switch route {
-            case .today: TodayView()
-            }
-        }
-        .sheet(isPresented: $showAddLocalProject) {
-            AddLocalProjectSheet()
-                .environment(\.modelContext, context)
-        }
-        .sheet(isPresented: $showSettings) {
-            SettingsView()
-        }
-        .sheet(item: $expiredTokenAccount) { account in
-            ReauthSheet(account: account)
-        }
-        // Once on appear and again whenever repos arrive, as they do from CloudKit on a fresh
-        // device. A first launch with nothing local fetches the repo list; the activity store's
-        // hour-long cache makes the extra runs free.
-        .task(id: repos.count) {
-            if repos.isEmpty {
-                await syncRepos(silent: true)
-            }
-            await activity.refresh(repos: repos, accounts: accounts)
+    }
+
+    private func tabPage<Content: View>(
+        _ title: LocalizedStringKey, @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(title)
+                .font(.title2.weight(.bold))
+                .foregroundStyle(HomeTheme.textPrimary)
+                .padding(.horizontal, HomeTheme.gutter)
+                .padding(.top, 8)
+                .padding(.bottom, 4)
+            content()
+                .scrollContentBackground(.hidden)
         }
     }
 
-    // MARK: Navigation
+    // MARK: Actions
 
-    private func open(_ card: HomeRepoCardData) {
-        guard let repo = visibleRepos.first(where: { $0.homeCardID == card.id }) else { return }
-        path.append(repo)
+    private var actions: HomeActions {
+        HomeActions(
+            selectRepo: { card in withRepo(card) { path.append($0) } },
+            toggleFavorite: { card in withRepo(card) { repo in Task { await toggleFavorite(repo) } } },
+            toggleArchive: { card in withRepo(card) { repo in withAnimation { repo.isArchived.toggle() } } },
+            delete: { card in withRepo(card) { repo in withAnimation { context.delete(repo) } } },
+            moveToFolder: { card in withRepo(card) { repoToFile = $0 } },
+            configureIcon: { card in withRepo(card) { repoToConfigureIcon = $0 } },
+            openOnGitHub: { card in
+                withRepo(card) { repo in
+                    if let url = URL(string: repo.htmlURL) { openURL(url) }
+                }
+            },
+            selectAccount: { selectedAccount = $0 },
+            upgrade: { showPaywall = true },
+            signOut: { showSignOutConfirm = true },
+            add: { showAddLocalProject = true },
+            notifications: { path.append(HomeRoute.today) },
+            refresh: { await refresh() }
+        )
     }
 
-    private func handle(_ tab: HomeTab) -> Bool {
-        switch tab {
-        case .tasks:
-            path.append(HomeRoute.today)
-            return true
-        case .settings:
-            showSettings = true
-            return true
-        case .repos, .profile:
-            return false
+    private func withRepo(_ card: HomeRepoCardData, _ body: (ProjectRepo) -> Void) {
+        guard let repo = repos.first(where: { $0.homeCardID == card.id }) else { return }
+        body(repo)
+    }
+
+    /// Stars or unstars on GitHub as well, and rolls the local flag back if that fails.
+    private func toggleFavorite(_ repo: ProjectRepo) async {
+        let wasStarred = repo.isFavorite
+        repo.isFavorite.toggle()
+        guard let account = repo.account, !repo.isLocal else { return }
+        do {
+            guard let token = try await KeychainManager.shared.retrieveToken(for: account.tokenKey) else { return }
+            if repo.isFavorite {
+                try await GitHubService.shared.starRepo(owner: account.username, repo: repo.name, token: token)
+            } else {
+                try await GitHubService.shared.unstarRepo(owner: account.username, repo: repo.name, token: token)
+            }
+        } catch {
+            repo.isFavorite = wasStarred
+            ToastManager.shared.show(String(localized: "github_sync_error"), style: .error)
+        }
+    }
+
+    /// The classic list's sign-out: accounts, repos and the token go, demo and mock flags reset.
+    private func signOut() {
+        Task {
+            try? context.delete(model: GitHubAccount.self)
+            try? context.delete(model: ProjectRepo.self)
+            if isDemoMode {
+                isDemoMode = false
+                SubscriptionManager.shared.isDemoMode = false
+            } else {
+                try? await KeychainManager.shared.deleteToken()
+            }
+            SubscriptionManager.shared.isMockPro = false
+            lastSyncTimestamp = 0
+            withAnimation { isAuthenticated = false }
         }
     }
 
     // MARK: Sync
 
     /// Pull-to-refresh: the repo list from GitHub, tasks an agent closed, and the activity cache.
-    private func refresh(force: Bool) async {
-        await syncRepos(silent: !force)
-        await importAgentCompletedTasks(force: force)
-        await activity.refresh(repos: repos, accounts: accounts, force: force)
+    private func refresh() async {
+        await syncRepos(silent: false)
+        await importAgentCompletedTasks(force: true)
+        await activity.refresh(repos: repos, accounts: accounts, force: true)
     }
 
     /// The same sync `RepoListView` runs, minus the weekly schedule: here it happens on
@@ -128,6 +245,7 @@ struct HomeLiveView: View {
             lastSyncTimestamp = Date().timeIntervalSince1970
             if !silent {
                 ToastManager.shared.show(String(localized: "repos_synced_toast"), style: .success)
+                Self.syncSuccessFeedback.notificationOccurred(.success)
             }
         } catch GitHubError.invalidToken {
             // Not transient: offer to replace the token in place rather than signing out, which
@@ -166,27 +284,8 @@ struct HomeLiveView: View {
 
     // MARK: Data
 
-    private var accountName: String? {
-        accounts.first { $0.username != "demo-user" }?.username ?? accounts.first?.username
-    }
-
-    /// Archived repos stay out, favorites come first, and a free account sees at most
-    /// `maxFreeRepos` — the same gate as the list it replaces, so switching screens never
-    /// shows a free user more than the tier allows.
-    private var visibleRepos: [ProjectRepo] {
-        var sorted = repos
-            .filter { !$0.isArchived }
-            .sorted { lhs, rhs in
-                if lhs.isFavorite != rhs.isFavorite { return lhs.isFavorite }
-                return lhs.updatedAt > rhs.updatedAt
-            }
-        if !subscription.isPro, sorted.count > subscription.maxFreeRepos {
-            let limit = subscription.maxFreeRepos
-            let favorites = Array(sorted.filter(\.isFavorite).prefix(limit))
-            let nonFavorites = sorted.filter { !$0.isFavorite }
-            sorted = favorites + Array(nonFavorites.prefix(max(0, limit - favorites.count)))
-        }
-        return sorted
+    private var accountNames: [String] {
+        accounts.map(\.username).filter { $0 != "demo-user" || isDemoMode }
     }
 
     private var unreadFeedbackByRepo: [String: Int] {
@@ -195,16 +294,26 @@ struct HomeLiveView: View {
             .reduce(into: [:]) { counts, issue in counts[issue.repoFullName, default: 0] += 1 }
     }
 
+    /// Every repo of the selected account, favorites first, archived included — the filter
+    /// chips decide what shows, and the free-tier gate is applied after them, in `HomeView`.
     private var cards: [HomeRepoCardData] {
         let unread = unreadFeedbackByRepo
-        return visibleRepos.enumerated().map { index, repo in
-            var card = HomeRepoCardData(
+        let sorted = repos
+            .filter { selectedAccount == nil || $0.account?.username == selectedAccount }
+            .sorted { lhs, rhs in
+                if lhs.isFavorite != rhs.isFavorite { return lhs.isFavorite }
+                return lhs.updatedAt > rhs.updatedAt
+            }
+        var cards = sorted.map { repo in
+            HomeRepoCardData(
                 repo: repo,
                 unreadFeedback: unread[repo.fullName] ?? 0,
                 activity: activity.activity(for: repo.repoID)
             )
-            card.isFeatured = index == 0
-            return card
         }
+        if let hero = cards.firstIndex(where: { !$0.isArchived }) {
+            cards[hero].isFeatured = true
+        }
+        return cards
     }
 }
