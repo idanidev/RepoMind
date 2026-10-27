@@ -13,6 +13,7 @@ publica `index.html`, `privacy.html` y `terms.html`, así que este fichero no sa
 | privacy · Voice | "Processed on-device … not transmitted externally" | Reconocimiento en el dispositivo **cuando el idioma lo permite**; si no hay modelo local, Apple lo hace en sus servidores (`VoiceManager.swift:205-211`). |
 | privacy · GitHub Access Tokens | "Stored in your Keychain" | Además son sincronizables: pasan al Llavero de iCloud del usuario si lo tiene activo (`kSecAttrSynchronizable`). |
 | privacy · Third-party services | GitHub, voz de Apple, StoreKit | Faltan: el estado de la App Store (`raw.githubusercontent.com`, con el token de GitHub del usuario) y las estadísticas de cada app, que se leen de la dirección que **el usuario** configura (con un token que guarda en el Llavero). |
+| privacy · todo | No menciona la búsqueda de iconos | Para repos de Swift y Objective-C se busca el nombre del repo en la búsqueda pública de la App Store (`itunes.apple.com`, `GitHubService.swift:474`) para encontrar su icono: **el nombre de un repo privado sale hacia Apple**. Decisión tuya: dejarlo y declararlo, saltarse los repos privados, o ponerlo como opción. |
 | privacy · todo | No menciona que las tareas se publican como issues | Si el usuario lo activa, cada tarea se crea como issue de GitHub (datos del usuario hacia su propio GitHub). |
 | terms · Subscriptions and Payments | "Pro Subscription", "automatically renew", "cancel subscriptions" | Pro es **un pago único** (`com.idanidev.repomind.pro`, no consumible) y la ficha dice "No subscriptions". |
 | ambos | "Last updated: February 2025" | La app es la 1.5.x de agosto de 2026. |
@@ -41,6 +42,8 @@ exista y lo leas.
 >   the repository you chose, and read back. That is your data going to your own GitHub account.
 > - **App statistics (optional).** If you give a board a statistics address, the app asks that address
 >   (an HTTPS endpoint you control) for numbers and keeps the token you entered in your Keychain.
+> - **App icons.** For Swift and Objective-C repositories the app looks up the repository's name in Apple's
+>   public App Store search to find the app's icon. Only the name is sent.
 > - **Preferences and caches.** Stored on the device (UserDefaults) and can be wiped by signing out.
 >
 > **What we do not do.** We do not collect, sell or share personal data. No third-party SDKs or trackers.
