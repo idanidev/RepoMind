@@ -7,8 +7,8 @@
 #   1. La rama con la versión nueva (MARKETING_VERSION) y sus notas tiene que estar ya en main: este
 #      workflow lee la versión del árbol que tiene delante y no deja publicar otra.
 #   2. La build de esa versión tiene que estar procesada en App Store Connect (TestFlight la enseña) y
-#      haber salido firmada con match: las firmadas en la nube solo valen para TestFlight interno y
-#      App Store Connect no las deja enviar a revisión.
+#      haber salido de testflight.yml sin la marca «solo TestFlight interno» (ExportOptions.plist, desde
+#      el 27-oct; las builds anteriores la llevan y App Store Connect no las deja enviar a revisión).
 #   3. fastlane/metadata/en-US/release_notes.txt y es-ES/release_notes.txt escritas para la versión.
 #   4. Si se ha tocado algún @Model, el esquema de CloudKit desplegado (ver CLAUDE.md).
 #   5. Con "Enviar a revisión", pon el número de build que quieres enviar: sin él se envía la más nueva

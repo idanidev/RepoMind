@@ -42,7 +42,8 @@ El orden completo está en CLAUDE.md → "Publicar una versión". Sigue estos pa
    - Con Mac: `ios` → `bundle exec fastlane ios release` y luego `submit`; `mac` →
      `bundle exec fastlane mac release`; `both` → ambos, ios primero
    - Sin Mac: la rama con la versión tiene que estar en main; Actions → Release con el número de build
-     y "Enviar a revisión". Solo vale una build firmada con match (las de la nube son TestFlight interno)
+     y "Enviar a revisión". Vale una build firmada con match, o una de la nube posterior al 27-oct (sin la
+     marca «solo TestFlight interno»; sin probar)
 7. Recuerda verificar en App Store Connect después del upload y actualizar el historial de CLAUDE.md
 
 **No ejecutes fastlane directamente** — muestra el comando y espera confirmación.

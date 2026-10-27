@@ -56,16 +56,18 @@ uno, así que lo que puede ir en Linux va en Linux, y los de macOS solo arrancan
   (`fastlane ios beta`); sin ellos, firma en la nube con `-allowProvisioningUpdates`, que crea un
   certificado "Apple Development" por run: a los siete la cuenta llegó al máximo ("Choose a
   certificate to revoke") y hay que revocar los recientes en el portal de desarrollador antes de
-  relanzar. Las builds firmadas en la nube salen como TestFlight **interno**: no se pueden enviar a revisión
+  relanzar. Hasta el 27-oct las builds firmadas en la nube salían marcadas «solo TestFlight interno»
+  (`testFlightInternalTestingOnly` en `.github/ExportOptions.plist`) y no se podían enviar a revisión; sin
+  esa clave deberían poder (sin probar: si App Store Connect las sigue rechazando, hay que firmar con match)
 - `store-status.yml` — cada día, en Linux, lee App Store Connect con la clave de los secretos y publica
   `store.json` en la rama `store-data`. Opcional `ASC_VENDOR_NUMBER` para las descargas. **El cron solo
   corre cuando el fichero está en `main`** (hasta entonces, solo con un push que toque `scripts/store-status/`);
   la app marca el dato como viejo pasadas 36 horas
 - `release.yml` — a mano, desde main: comprueba que la versión pedida es la `MARKETING_VERSION` del árbol
   y que hay notas en en-US y es-ES, sube metadatos y notas de `fastlane/metadata` y, si se marca, envía a
-  revisión (con `build` se fija cuál; sin él, la más nueva que haya procesado Apple). Solo pueden enviarse
-  las builds firmadas con match. Como todo `workflow_dispatch`, solo aparece en Actions cuando el fichero
-  está en main
+  revisión (con `build` se fija cuál; sin él, la más nueva que haya procesado Apple). Valen las builds
+  firmadas con match y, sin probar, las de la nube posteriores al 27-oct (sin la marca «solo TestFlight
+  interno»). Como todo `workflow_dispatch`, solo aparece en Actions cuando el fichero está en main
 - `docs.yml` — con un push a main que toque `docs/index.html`, `privacy.html` o `terms.html`, publica
   esas tres páginas en GitHub Pages: son la dirección de soporte, la privacidad y las condiciones que enlazan
   la ficha y la app. El resto de `docs/` es de trabajo y no se publica
@@ -131,7 +133,7 @@ uno, así que lo que puede ir en Linux va en Linux, y los de macOS solo arrancan
   en la nube (`testflight.yml` sin secretos de match) Xcode crea solo el App ID y el perfil del widget;
   con match, el App ID y el perfil del widget tienen que estar ya en el repo de certificados
   (`fastlane ios certificates`), y ningún workflow ejecuta ese lane: sin Mac es lo que falta para firmar
-  con match y poder enviar a revisión
+  con match
 - **Estado de la App Store**: `Store/`. RepoMind no habla con Apple, porque la clave de la API (rol
   Admin) no puede vivir en un móvil: el workflow `store-status.yml` (`scripts/store-status/store_status.rb`,
   con pruebas en Ruby) la usa cada día y escribe el JSON de `docs/store-contract.md` en la rama `store-data`;
@@ -225,7 +227,7 @@ los usuarios en silencio. Ya pasó una vez y estuvo meses sin detectarse.
 4. Escribir `fastlane/metadata/*/release_notes.txt` en **en-US y es-ES**
 5. `bundle exec fastlane ios release` y después `submit` — o, sin Mac, con la build que ya subió
    `testflight.yml`: merge a main y Actions → Release con "Enviar a revisión" marcado y el número de
-   build. Solo vale una build firmada con match
+   build. Vale una firmada con match o, sin probar, una de la nube posterior al 27-oct
 6. **Actualizar este CLAUDE.md**: historial de versiones abajo, y arquitectura/convenciones si el
    release ha añadido servicios o reglas nuevas
 
