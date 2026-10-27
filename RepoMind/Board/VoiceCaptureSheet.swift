@@ -107,6 +107,12 @@ struct VoiceCaptureSheet: View {
                 .font(.subheadline)
                 .foregroundStyle(HomeTheme.textPrimary)
                 .lineLimit(1...8)
+            Toggle(isOn: draft.delegate) {
+                Label("capture_delegate", systemImage: "cpu")
+                    .font(.footnote)
+                    .foregroundStyle(HomeTheme.textPrimary)
+            }
+            .tint(HomeTheme.accent)
             HStack(spacing: 8) {
                 kindMenu(draft.kind)
                 columnMenu(draft.columnName)

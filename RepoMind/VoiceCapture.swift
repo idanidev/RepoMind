@@ -8,7 +8,7 @@ import Foundation
 
 /// What a dictated note is about. Decides the default column (an idea goes to the ideas column)
 /// and, later, the label the issue gets.
-enum CaptureKind: String, CaseIterable, Identifiable {
+nonisolated enum CaptureKind: String, CaseIterable, Identifiable {
     case bug
     case feature
     case idea
@@ -35,6 +35,10 @@ struct CaptureDraft: Identifiable, Hashable {
     /// The exact name of a column of the board, when the dictation named one or the kind
     /// implies one; nil means the column the board is showing.
     var columnName: String?
+    /// Goes to the agent: the issue gets the `agent` label and the repo's workflow picks it up.
+    var delegate = false
+
+    var labels: TaskLabels { TaskLabels(kind: kind, delegated: delegate) }
 
     /// What goes into `TaskItem.content`: the title on the first line, which is what becomes the
     /// issue's title, and the details after a blank line, which the issue body carries whole.
@@ -45,7 +49,7 @@ struct CaptureDraft: Identifiable, Hashable {
 
     /// The dictation as it came, when nothing could give it shape.
     static func fallback(transcript: String, columnName: String?) -> CaptureDraft {
-        CaptureDraft(title: transcript, columnName: columnName)
+        CaptureDraft(title: transcript, columnName: columnName, delegate: TaskLabelStore.delegatesNewTasks)
     }
 
     /// From what the model answered, normalized: the kind parsed, the column matched to a real
@@ -67,17 +71,20 @@ struct CaptureDraft: Identifiable, Hashable {
             matched = ideaColumn
         }
         self.columnName = matched
+        // An idea is not work yet: it never goes to the agent on its own.
+        self.delegate = self.kind != .idea && TaskLabelStore.delegatesNewTasks
     }
 
     init(
         id: UUID = UUID(), title: String, details: String = "", kind: CaptureKind = .feature,
-        columnName: String? = nil
+        columnName: String? = nil, delegate: Bool = false
     ) {
         self.id = id
         self.title = title
         self.details = details
         self.kind = kind
         self.columnName = columnName
+        self.delegate = delegate
     }
 }
 
@@ -281,7 +288,7 @@ extension KanbanViewModel {
                 ?? currentColumn
                 ?? ordered.first
             guard let column else { continue }
-            createTask(content: draft.content, column: column)
+            createTask(content: draft.content, column: column, labels: draft.labels)
         }
         pendingCapture = nil
     }

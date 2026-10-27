@@ -67,6 +67,7 @@ struct SettingsView: View {
     @AppStorage("alerts_releases") private var alertsReleases = true
     @AppStorage("alerts_security") private var alertsSecurity = true
     @AppStorage("alerts_crashes") private var alertsCrashes = true
+    @AppStorage("delegateNewTasks") private var delegateNewTasks = false
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var context
@@ -314,6 +315,16 @@ struct SettingsView: View {
                 Text("voice_section_header")
             } footer: {
                 Text("voice_ai_footer")
+            }
+
+            // MARK: - Agent
+
+            Section {
+                Toggle("agent_delegate_toggle", isOn: $delegateNewTasks)
+            } header: {
+                Text("agent_section_header")
+            } footer: {
+                Text("agent_footer")
             }
 
             // MARK: - Alerts (Pro)

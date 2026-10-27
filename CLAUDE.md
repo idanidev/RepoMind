@@ -76,6 +76,11 @@ Sin Mac, lo mismo desde GitHub Actions (`.github/workflows`), con los secretos `
   seguridad (`vulnerabilityAlerts` en la query de actividad) y cierres nuevos. Las reglas son puras
   (`RepoAlertRules`) y la primera vez que ve algo solo lo apunta. Interruptores en Ajustes → Alertas
 - **Panel de apps (Pro)**: `HomeAppsPanelView` junta todas las apps con estadísticas; desde Inicio
+- **Etiquetas y agente**: `TaskLabels.swift`. La captura detecta el tipo (bug, enhancement, idea, chore)
+  y si la tarea va al agente; `TaskLabelStore` lo guarda en `UserDefaults` por id de tarea, porque un
+  campo nuevo en `TaskItem` exige desplegar el esquema de CloudKit y hoy no hay Mac para sembrarlo
+  (pasarlo al modelo con el siguiente despliegue). `TaskIssueSyncService.createIssue` añade esas
+  etiquetas; `agent` dispara en el repo el workflow de Claude Code (en InSync, `agent.yml`)
 - **Bridge MCP**: `bridge/` (TypeScript) expone las tareas a agentes de código vía GitHub Issues
 
 ## Estructura de carpetas

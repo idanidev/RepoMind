@@ -109,10 +109,11 @@ final class TaskIssueSyncService {
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         applyHeaders(&req, token: token)
+        let extra = TaskLabelStore.labels(for: task.id)?.gitHubLabels ?? []
         let body: [String: Any] = [
             "title": issueTitle(for: task),
             "body": issueBody(for: task),
-            "labels": [Self.taskLabel, Self.columnLabel(for: column)]
+            "labels": [Self.taskLabel, Self.columnLabel(for: column)] + extra
         ]
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
 

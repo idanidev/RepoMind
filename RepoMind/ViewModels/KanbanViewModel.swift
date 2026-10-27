@@ -277,9 +277,12 @@ final class KanbanViewModel {
         showAddTaskSheet = true
     }
 
-    func createTask(content: String, column: KanbanColumn, imageData: Data? = nil) {
+    @discardableResult
+    func createTask(
+        content: String, column: KanbanColumn, imageData: Data? = nil, labels: TaskLabels? = nil
+    ) -> TaskItem? {
         let trimmedContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedContent.isEmpty else { return }
+        guard !trimmedContent.isEmpty else { return nil }
 
         // Calcular el siguiente orderIndex
         let maxOrder = (column.tasks ?? []).map(\.orderIndex).max() ?? -1
@@ -294,6 +297,10 @@ final class KanbanViewModel {
             orderIndex: newOrder
         )
         task.imageData = imageData
+        // Before the sync below reads them.
+        if let labels {
+            TaskLabelStore.set(labels, for: task.id)
+        }
 
         withAnimation(.snappy) {
             modelContext.insert(task)
@@ -304,6 +311,7 @@ final class KanbanViewModel {
         runSync(task) { token in
             try await TaskIssueSyncService.shared.createIssue(for: task, repo: self.project, token: token)
         }
+        return task
     }
 
     func deleteTask(_ task: TaskItem) {

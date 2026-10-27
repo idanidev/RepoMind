@@ -682,3 +682,10 @@
 "apps_panel_empty_title" = "Ninguna app conectada";
 "apps_panel_pro_title" = "Tus apps, en un panel";
 "apps_panel_pro_message" = "Todas las apps conectadas con sus cifras, gráficas y cierres en una pantalla. Parte de Pro.";
+
+/* Agente */
+"capture_delegate" = "Delegar al agente";
+"agent_section_header" = "Agente";
+"agent_delegate_toggle" = "Delegar al agente las tareas nuevas";
+"agent_footer" = "Una tarea delegada se publica con la etiqueta `agent`. Un repo con el workflow del agente la recoge: Claude Code la implementa en GitHub Actions y abre una pull request que la cierra. El tipo que detecta la captura (fallo, mejora, idea, tarea) va también como etiqueta.";
+"home_tasks_delegated_badge" = "agente";

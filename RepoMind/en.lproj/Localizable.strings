@@ -683,3 +683,10 @@
 "apps_panel_empty_title" = "No apps connected";
 "apps_panel_pro_title" = "Your apps, in one panel";
 "apps_panel_pro_message" = "Every connected app with its numbers, charts and crashes on one screen. Part of Pro.";
+
+/* Agent */
+"capture_delegate" = "Delegate to the agent";
+"agent_section_header" = "Agent";
+"agent_delegate_toggle" = "Delegate new tasks to the agent";
+"agent_footer" = "A delegated task is published with the `agent` label. A repo with the agent workflow picks it up: Claude Code implements it in GitHub Actions and opens a pull request that closes it. The kind the capture detects (bug, enhancement, idea, chore) goes as a label too.";
+"home_tasks_delegated_badge" = "agent";

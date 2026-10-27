@@ -20,6 +20,8 @@ struct HomeTaskRow: Hashable, Identifiable {
     let issueNumber: Int?
     let needsIssueSync: Bool
     let state: HomeTaskState
+    var kind: CaptureKind?
+    var delegated = false
 }
 
 enum HomeTaskFilter: String, CaseIterable, Identifiable, HomeChipOption {
@@ -214,7 +216,7 @@ struct HomeTasksView: View {
             actions.openRepo(repoCardID)
         } label: {
             HStack(alignment: .top, spacing: 8) {
-                Image(systemName: symbol(for: row.state))
+                Image(systemName: symbol(for: row))
                     .font(.caption)
                     .foregroundStyle(tint(for: row.state))
                     .padding(.top, 2)
@@ -242,6 +244,7 @@ struct HomeTasksView: View {
         parts.append(row.createdAt.formatted(.relative(presentation: .named)))
         if let issue = row.issueNumber { parts.append("#\(issue)") }
         if row.needsIssueSync { parts.append(String(localized: "home_tasks_unpublished_badge")) }
+        if row.delegated { parts.append(String(localized: "home_tasks_delegated_badge")) }
         return parts.joined(separator: " · ")
     }
 
@@ -251,6 +254,11 @@ struct HomeTasksView: View {
         case .done: "checkmark.circle.fill"
         case .idea: "lightbulb"
         }
+    }
+
+    private func symbol(for row: HomeTaskRow) -> String {
+        if row.state == .pending, let kind = row.kind, kind != .idea { return kind.symbol }
+        return symbol(for: row.state)
     }
 
     private func tint(for state: HomeTaskState) -> Color {
@@ -284,10 +292,12 @@ extension HomeTaskRow {
             return (repo.tasks ?? []).compactMap { task -> HomeTaskRow? in
                 guard let column = task.column else { return nil }
                 let state: HomeTaskState = repo.isIdea(task) ? .idea : (column.id == doneID ? .done : .pending)
+                let labels = TaskLabelStore.labels(for: task.id)
                 return HomeTaskRow(
                     id: task.id, title: task.content, repoName: repo.name, repoCardID: repo.homeCardID,
                     columnName: column.name, createdAt: task.createdAt, issueNumber: task.issueNumber,
-                    needsIssueSync: task.needsIssueSync, state: state)
+                    needsIssueSync: task.needsIssueSync, state: state,
+                    kind: labels?.kind, delegated: labels?.delegated ?? false)
             }
         }
         .sorted { $0.createdAt > $1.createdAt }
