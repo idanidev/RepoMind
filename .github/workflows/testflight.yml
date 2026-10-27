@@ -20,6 +20,14 @@ on:
     branches:
       - redesign/home-oled
       - claude/testflight
+    # Un cambio solo de documentación, metadatos o de los otros workflows no merece una build.
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "fastlane/**"
+      - ".github/workflows/tests.yml"
+      - ".github/workflows/release.yml"
+      - ".github/workflows/docs.yml"
   workflow_dispatch:
 
 concurrency:

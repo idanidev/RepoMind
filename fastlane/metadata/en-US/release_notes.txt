@@ -1,11 +1,9 @@
-Fixes:
+A new home and a new board on iPhone.
 
-• Projects no longer appear duplicated. The cause was a GitHub account registered twice, which made every sync insert fresh copies of all your repositories
-• Icons no longer vanish on refresh. They were never lost: what you saw were those new copies, which never had an icon in the first place
-• Opening a project no longer means waiting to see what your agent closed
+• The home is now a dark, dense list of cards: pending tasks, unread reports, tasks not yet published as issues, open pull requests, the latest release and a failing build — each only when there is something to say
+• Folders are sections, favorites come first, and a long press on a repo offers favorite, folder, icon, archive and delete
+• The board shows one column at a time, with the columns as pills above and the add bar and the microphone below
+• Pull down to refresh: your repos, the tasks your agent closed on GitHub, and what GitHub knows about each repo, fetched in a single request that leaves your rate limit alone
+• A Profile tab with your accounts, plan and purchases
 
-New:
-
-• An ideas column: pick it in each project's settings and its tasks stop being published as issues and stop counting as pending. A half-formed idea is not a task
-• A notification when an issue opened outside the app arrives, grouped by repository
-• On Mac, configuring a project's icon is now in the context menu — with no swipe gesture, it was the one action you could not reach
+iPad and Mac keep the classic layout for now.

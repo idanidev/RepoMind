@@ -1,0 +1,73 @@
+# Publicación sin Mac. No compila nada: toma la build que testflight.yml ya subió a App Store
+# Connect para la versión del proyecto, sube los metadatos y las notas de la versión desde
+# fastlane/metadata y, si se marca, la envía a revisión. Solo a mano (Actions → Release → Run
+# workflow), y solo cuando el fichero esté en main, que es la rama que GitHub indexa.
+#
+# Antes de lanzarlo:
+#   1. La build de esa versión tiene que estar procesada en App Store Connect (TestFlight la enseña).
+#   2. fastlane/metadata/en-US/release_notes.txt y es-ES/release_notes.txt escritas para la versión.
+#   3. Si se ha tocado algún @Model, el esquema de CloudKit desplegado (ver CLAUDE.md).
+# Usa los mismos secretos que testflight.yml.
+
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Versión a publicar (vacío = la MARKETING_VERSION del proyecto)"
+        required: false
+        default: ""
+      submit:
+        description: "Enviar a revisión. Sin marcar, solo sube metadatos y notas"
+        type: boolean
+        default: false
+
+jobs:
+  release:
+    name: Metadatos y envío a revisión
+    runs-on: macos-26
+    timeout-minutes: 30
+    env:
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      ASC_KEY_FILEPATH: ${{ runner.temp }}/asc/AuthKey.p8
+      FASTLANE_SKIP_UPDATE_CHECK: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+          bundler-cache: true
+
+      - name: Clave de App Store Connect
+        env:
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          if [ -z "$ASC_KEY_ID" ] || [ -z "$ASC_ISSUER_ID" ] || [ -z "$ASC_KEY_P8" ]; then
+            echo "::error::Faltan secretos: ASC_KEY_ID, ASC_ISSUER_ID y ASC_KEY_P8 (Settings → Secrets → Actions)"; exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/asc"
+          printf '%s\n' "$ASC_KEY_P8" > "$ASC_KEY_FILEPATH"
+          chmod 600 "$ASC_KEY_FILEPATH"
+
+      - name: Versión
+        id: ver
+        run: |
+          version="${{ github.event.inputs.version }}"
+          if [ -z "$version" ]; then
+            version=$(grep -m1 'MARKETING_VERSION = ' RepoMind.xcodeproj/project.pbxproj | sed -E 's/.*= ([0-9.]+);/\1/')
+          fi
+          if [ -z "$version" ]; then
+            echo "::error::No se ha podido leer la versión del proyecto"; exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Versión: $version"
+
+      - name: Metadatos y notas de la versión
+        run: bundle exec fastlane ios upload_metadata version:${{ steps.ver.outputs.version }}
+
+      - name: Enviar a revisión
+        if: ${{ github.event.inputs.submit == 'true' }}
+        run: bundle exec fastlane ios submit version:${{ steps.ver.outputs.version }}

@@ -1,11 +1,9 @@
-Correcciones:
+Nueva home y nuevo tablero en iPhone.
 
-• Arreglados los proyectos que aparecían duplicados. La causa era una cuenta de GitHub registrada dos veces: cada sincronización volvía a insertar copias de todos tus repositorios
-• Los iconos ya no desaparecen al refrescar. No se perdían: lo que veías eran esas copias recién creadas, que nunca llegaron a tener icono
-• Al abrir un proyecto ya no hace falta esperar para ver lo que tu agente ha cerrado
+• La home es ahora una lista oscura y densa de tarjetas: tareas pendientes, informes sin leer, tareas sin publicar como issue, PRs abiertas, último release y build en rojo, cada dato solo cuando hay algo que decir
+• Las carpetas son secciones, los favoritos van primero, y mantener pulsado un repo ofrece favorito, carpeta, icono, archivar y borrar
+• El tablero enseña una columna cada vez, con las columnas como píldoras arriba y la barra de añadir y el micrófono abajo
+• Tira hacia abajo para refrescar: tus repos, las tareas que tu agente cerró en GitHub y lo que GitHub sabe de cada repo, en una sola petición que no toca tu límite de uso
+• Pestaña Perfil con tus cuentas, plan y compras
 
-Novedades:
-
-• Columna de ideas: elígela en los ajustes de cada proyecto y sus tareas dejan de publicarse como issues y de contar como pendientes. Una idea a medias no es una tarea
-• Aviso cuando llega un issue creado fuera de la app, agrupado por repositorio
-• En Mac, configurar el icono de un proyecto ya está en el menú contextual: sin gesto de deslizar, era la única acción a la que no se podía llegar
+iPad y Mac conservan de momento el diseño clásico.

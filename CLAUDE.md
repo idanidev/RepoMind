@@ -31,6 +31,14 @@ bundle exec fastlane ios upload_screenshots
 bundle exec fastlane ios upload_metadata
 ```
 
+Sin Mac, lo mismo desde GitHub Actions (`.github/workflows`), con los secretos `ASC_KEY_ID`,
+`ASC_ISSUER_ID` y `ASC_KEY_P8` (clave de rol Admin de la API de App Store Connect):
+
+- `tests.yml` — tests unitarios en simulador, con cada push a las ramas de trabajo y cada PR a main
+- `testflight.yml` — archive firmado en la nube y subida a TestFlight con cada push a las ramas de trabajo
+- `release.yml` — a mano: sube metadatos y notas de `fastlane/metadata` y, si se marca, envía a revisión
+  la build ya subida. Como todo `workflow_dispatch`, solo aparece en Actions cuando el fichero está en main
+
 ## Arquitectura
 
 - **UI**: SwiftUI puro (sin UIKit salvo Mac Catalyst helpers)
@@ -91,7 +99,8 @@ los usuarios en silencio. Ya pasó una vez y estuvo meses sin detectarse.
    En Production un tipo de registro desconocido **se rechaza**, no se crea: publicar sin este
    paso rompe la sincronización de esa entidad para todos los usuarios, en silencio.
 4. Escribir `fastlane/metadata/*/release_notes.txt` en **en-US y es-ES**
-5. `bundle exec fastlane ios release` y después `submit`
+5. `bundle exec fastlane ios release` y después `submit` — o, sin Mac, con la build que ya subió
+   `testflight.yml`: Actions → Release con "Enviar a revisión" marcado
 6. **Actualizar este CLAUDE.md**: historial de versiones abajo, y arquitectura/convenciones si el
    release ha añadido servicios o reglas nuevas
 
