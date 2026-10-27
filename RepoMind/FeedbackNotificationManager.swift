@@ -109,17 +109,35 @@ final class FeedbackNotificationManager {
 
     // MARK: - Foreground Sync
 
-    /// Triggered on app launch / foreground. Polls all non-local repos and notifies on new issues.
+    /// Triggered on app launch / foreground. The alerts, then the feedback poll of every non-local repo.
     func syncAllInForeground(container: ModelContainer) async {
+        if SubscriptionManager.shared.isPro, !RepoAlertCenter.shared.enabledKinds.isEmpty {
+            // Asked here, while the app is open and a prompt can show: the first alert would otherwise
+            // be the first time anyone asks, from a background refresh where no prompt appears.
+            _ = await requestAuthorizationIfNeeded()
+        }
+        await runFullPass(container: container)
+    }
+
+    /// The alerts first — what the user is waiting for, and a few requests — then the feedback poll,
+    /// which costs one request per repo and, offline, up to thirty seconds each. Checks for
+    /// cancellation between steps: a background refresh that overruns its time is cancelled, and what
+    /// is half done is simply done again at the next one.
+    private func runFullPass(container: ModelContainer) async {
         let context = container.mainContext
         let descriptor = FetchDescriptor<ProjectRepo>(
             predicate: #Predicate { !$0.isLocal && !$0.isArchived }
         )
         guard let repos = try? context.fetch(descriptor), !repos.isEmpty else { return }
 
+        await RepoAlertCenter.shared.check(repos: repos)
+        if Task.isCancelled { return }
+
+        // Group by account, only process repos with a token in keychain.
         let accountGroups = Dictionary(grouping: repos) { $0.account?.id }
         var allNew: [FeedbackIssue] = []
         for (_, group) in accountGroups {
+            if Task.isCancelled { break }
             guard let account = group.first?.account else { continue }
             let token: String? = try? await KeychainManager.shared.retrieveToken(for: account.tokenKey)
             guard let token else { continue }
@@ -127,7 +145,6 @@ final class FeedbackNotificationManager {
             allNew.append(contentsOf: new)
         }
         await notify(for: allNew)
-        await RepoAlertCenter.shared.check(repos: repos)
     }
 
     // MARK: - Background Refresh
@@ -156,32 +173,19 @@ final class FeedbackNotificationManager {
     }
 
     #if canImport(UIKit) && !targetEnvironment(macCatalyst)
+        /// The system gives a refresh about thirty seconds. Work that outlives them is cut off without
+        /// anyone telling the scheduler, which then throttles the refreshes that follow: so the pass runs
+        /// as a task the expiration handler can cancel, and the task is always reported as completed.
         private func handleBackgroundRefresh(task: BGAppRefreshTask, container: ModelContainer) async {
             scheduleNextRefresh()
 
-            let context = container.mainContext
-            let descriptor = FetchDescriptor<ProjectRepo>(
-                predicate: #Predicate { !$0.isLocal && !$0.isArchived }
-            )
-            guard let repos = try? context.fetch(descriptor), !repos.isEmpty else {
-                task.setTaskCompleted(success: true)
-                return
+            let work = Task { @MainActor in
+                await self.runFullPass(container: container)
             }
-
-            // Group by account, only process repos with a token in keychain.
-            let accountGroups = Dictionary(grouping: repos) { $0.account?.id }
-            var allNew: [FeedbackIssue] = []
-            for (_, group) in accountGroups {
-                guard let account = group.first?.account else { continue }
-                let token: String? = try? await KeychainManager.shared.retrieveToken(for: account.tokenKey)
-                guard let token else { continue }
-                let new = await FeedbackService.shared.syncAll(repos: group, token: token, into: context)
-                allNew.append(contentsOf: new)
-            }
-
-            await notify(for: allNew)
-            await RepoAlertCenter.shared.check(repos: repos)
-            task.setTaskCompleted(success: true)
+            // The system calls this from its own queue: not a closure that belongs to the main actor.
+            task.expirationHandler = { @Sendable in work.cancel() }
+            await work.value
+            task.setTaskCompleted(success: !work.isCancelled)
         }
     #endif
 }

@@ -45,9 +45,11 @@ estadísticas de cada app. Quien quiera lo mismo con otras apps copia el script 
 - `repo`: el nombre del repo de GitHub al que corresponde la app, si se ha dado en
   `scripts/store-status/apps.json`. Sin él, RepoMind lo adivina por el nombre y el bundle id.
 - `versions`: las seis más recientes por fecha de creación, de todas las plataformas. `state` es el
-  `appStoreState` (o `appVersionState`) de Apple tal cual: `READY_FOR_SALE` es la publicada;
+  `appVersionState` de Apple tal cual (o el `appStoreState` antiguo si no viene, y `null` si no viene
+  ninguno): `READY_FOR_DISTRIBUTION` (antes `READY_FOR_SALE`) es la publicada;
   `PREPARE_FOR_SUBMISSION`, `WAITING_FOR_REVIEW`, `IN_REVIEW`, `PENDING_DEVELOPER_RELEASE`,
-  `REJECTED`, `METADATA_REJECTED`… son pendientes. RepoMind decide qué es cada cosa, no el script.
+  `REJECTED`, `METADATA_REJECTED`… son pendientes. RepoMind decide qué es cada cosa, no el script, y
+  entiende las dos grafías de la publicada; un estado que no conoce es "otro", no un error.
 - `builds`: las cinco últimas, con la versión de marketing (`version`) y el número de build.
 - `sales`: ausente cuando no hay `ASC_VENDOR_NUMBER` o la clave no puede ver ventas. `daily` tiene un
   día por fecha hasta `through`, con ceros donde Apple no informa ventas. Las fechas son las de Apple,

@@ -29,6 +29,13 @@ nonisolated enum NotificationTarget: Hashable, Sendable {
     /// A page on GitHub, where the answer to a red build or a security alert lives.
     case web(URL)
 
+    /// Whether the target can only be resolved once the repos are in the store. A page on GitHub needs
+    /// none, and a tap on a red-build alert made before CloudKit delivered them waited for no reason.
+    var needsRepos: Bool {
+        if case .web = self { return false }
+        return true
+    }
+
     private enum Key {
         static let target = "target"
         static let repoID = "repoID"

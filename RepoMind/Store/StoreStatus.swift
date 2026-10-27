@@ -15,6 +15,19 @@ nonisolated struct StoreStatus: Codable, Hashable, Sendable {
     var generatedAt: Date
     var apps: [StoreApp] = []
 
+    /// The workflow runs once a day. A file older than this has stopped being written (the schedule only
+    /// fires from the default branch, a key expired, the quota ran out), and everything on the card is
+    /// that old too: it is said so, instead of a calm "published" that may no longer be true.
+    static let staleAfter: TimeInterval = 36 * 60 * 60
+
+    func isStale(now: Date = .now) -> Bool {
+        now.timeIntervalSince(generatedAt) > Self.staleAfter
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case schema, generatedAt, apps
+    }
+
     nonisolated struct StoreApp: Codable, Hashable, Sendable, Identifiable {
         /// The app's Apple ID.
         var id: String
@@ -48,9 +61,9 @@ nonisolated struct StoreStatus: Codable, Hashable, Sendable {
             name = try container.decode(String.self, forKey: .name)
             bundleId = try container.decode(String.self, forKey: .bundleId)
             repo = try container.decodeIfPresent(String.self, forKey: .repo)
-            versions = try container.decodeIfPresent([Version].self, forKey: .versions) ?? []
-            builds = try container.decodeIfPresent([Build].self, forKey: .builds) ?? []
-            sales = try container.decodeIfPresent(Sales.self, forKey: .sales)
+            versions = container.decodeLossyArray(.versions)
+            builds = container.decodeLossyArray(.builds)
+            sales = try? container.decode(Sales.self, forKey: .sales)
         }
     }
 
@@ -64,6 +77,10 @@ nonisolated struct StoreStatus: Codable, Hashable, Sendable {
 
         var id: String { "\(platform ?? "")-\(version)" }
         var kind: StoreVersionState { StoreVersionState(raw: state) }
+
+        private enum CodingKeys: String, CodingKey {
+            case platform, version, state, createdAt
+        }
     }
 
     nonisolated struct Build: Codable, Hashable, Sendable, Identifiable {
@@ -76,6 +93,10 @@ nonisolated struct StoreStatus: Codable, Hashable, Sendable {
 
         var id: String { build }
         var isUsable: Bool { !expired && (state == nil || state == "VALID") }
+
+        private enum CodingKeys: String, CodingKey {
+            case version, build, uploadedAt, state, expired
+        }
     }
 
     nonisolated struct Sales: Codable, Hashable, Sendable {
@@ -83,6 +104,10 @@ nonisolated struct StoreStatus: Codable, Hashable, Sendable {
         var through: String
         /// Oldest first, one entry per day.
         var daily: [Day] = []
+
+        private enum CodingKeys: String, CodingKey {
+            case through, daily
+        }
     }
 
     nonisolated struct Day: Codable, Hashable, Sendable, Identifiable {
@@ -126,9 +151,10 @@ nonisolated struct StoreStatus: Codable, Hashable, Sendable {
 
 // MARK: - Version state
 
-/// What Apple's `appStoreState` means for the developer, in the handful of cases the app tells apart.
+/// What Apple's `appVersionState` (or the older `appStoreState`) means for the developer, in the handful of
+/// cases the app tells apart.
 nonisolated enum StoreVersionState: Hashable, Sendable {
-    /// `READY_FOR_SALE`: the one users download.
+    /// `READY_FOR_SALE` (or `READY_FOR_DISTRIBUTION`): the one users download.
     case live
     case waitingForReview
     case inReview
@@ -144,10 +170,13 @@ nonisolated enum StoreVersionState: Hashable, Sendable {
 
     init(raw: String) {
         switch raw {
-        case "READY_FOR_SALE": self = .live
+        // `appVersionState`, which the workflow prefers, calls it READY_FOR_DISTRIBUTION; the older
+        // `appStoreState` called the same thing READY_FOR_SALE.
+        case "READY_FOR_SALE", "READY_FOR_DISTRIBUTION": self = .live
         case "WAITING_FOR_REVIEW": self = .waitingForReview
         case "IN_REVIEW": self = .inReview
-        case "PENDING_DEVELOPER_RELEASE", "PENDING_APPLE_RELEASE", "APPROVED": self = .approved
+        case "PENDING_DEVELOPER_RELEASE", "PENDING_APPLE_RELEASE", "APPROVED", "PREORDER_READY_FOR_SALE":
+            self = .approved
         case "REJECTED", "METADATA_REJECTED", "DEVELOPER_REJECTED", "INVALID_BINARY": self = .rejected
         case "PREPARE_FOR_SUBMISSION", "READY_FOR_REVIEW", "WAITING_FOR_EXPORT_COMPLIANCE", "ACCEPTED": self = .draft
         case "PROCESSING_FOR_APP_STORE", "PROCESSING_FOR_DISTRIBUTION": self = .processing
@@ -237,6 +266,13 @@ nonisolated extension StoreStatus.StoreApp {
         return [name, bundleId].contains { CaptureRepoResolver.squash($0).contains(wanted) }
     }
 
+    /// Of these repo names, the one this app is built from. The longest that fits wins, so a repo called
+    /// "Repo" does not take "RepoMind: Kanban for GitHub" away from the repo called "RepoMind".
+    func bestRepoName(in names: [String]) -> String? {
+        names.filter { matches(repoName: $0) }
+            .max { CaptureRepoResolver.squash($0).count < CaptureRepoResolver.squash($1).count }
+    }
+
     var downloads: StoreDownloads? {
         sales.map { StoreDownloads(sales: $0) }
     }
@@ -266,4 +302,47 @@ nonisolated struct StoreDownloads: Hashable, Sendable {
     var sparkline: [Int] { days.map(\.downloads) }
     /// Whether anything at all happened in the window, so a brand-new app is not drawn as a flat line.
     var hasActivity: Bool { days.contains { $0.downloads + $0.updates + $0.purchases > 0 } }
+}
+
+// MARK: - Lenient decoding
+
+/// One odd element, or a missing optional, must not make the whole file undecodable: the workflow writes
+/// `state: null` when Apple sends neither attribute, and a synthesized decoder ignores the `= false`
+/// default of `expired`. In extensions so the memberwise initializers stay.
+nonisolated extension StoreStatus {
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        schema = try container.decode(Int.self, forKey: .schema)
+        generatedAt = try container.decode(Date.self, forKey: .generatedAt)
+        apps = container.decodeLossyArray(.apps)
+    }
+}
+
+nonisolated extension StoreStatus.Version {
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        platform = try? container.decode(String.self, forKey: .platform)
+        version = try container.decode(String.self, forKey: .version)
+        state = (try? container.decode(String.self, forKey: .state)) ?? ""
+        createdAt = try? container.decode(Date.self, forKey: .createdAt)
+    }
+}
+
+nonisolated extension StoreStatus.Build {
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        version = try? container.decode(String.self, forKey: .version)
+        build = try container.decode(String.self, forKey: .build)
+        uploadedAt = try? container.decode(Date.self, forKey: .uploadedAt)
+        state = try? container.decode(String.self, forKey: .state)
+        expired = (try? container.decode(Bool.self, forKey: .expired)) ?? false
+    }
+}
+
+nonisolated extension StoreStatus.Sales {
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        through = try container.decode(String.self, forKey: .through)
+        daily = container.decodeLossyArray(.daily)
+    }
 }

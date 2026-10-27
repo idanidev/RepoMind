@@ -213,7 +213,9 @@ actor GitHubService {
     /// token is valid rather than for the minutes a `download_url` query token lasts.
     func download(_ url: URL, token: String?) async throws -> Data {
         var request = URLRequest(url: url)
-        if let token {
+        // Checked here and not left to the callers: whatever URL ends up in this function, the token
+        // only goes to GitHub's raw file host, over https.
+        if let token, Self.sendsToken(to: url) {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
         let (data, response) = try await performRequestWithRetry(request)
@@ -228,6 +230,10 @@ actor GitHubService {
         default:
             throw GitHubError.invalidResponse(http.statusCode)
         }
+    }
+
+    nonisolated static func sendsToken(to url: URL) -> Bool {
+        url.scheme == "https" && url.host == "raw.githubusercontent.com"
     }
 
     // MARK: - Fetch Repo Contents (File Browser)

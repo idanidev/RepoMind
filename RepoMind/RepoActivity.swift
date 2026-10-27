@@ -54,9 +54,14 @@ nonisolated enum RepoActivityQuery {
     }
 
     /// Repos GitHub could not resolve come back as `null` with an entry in `errors`; they are
-    /// skipped, and the rest of the batch is still used.
+    /// skipped, and the rest of the batch is still used. An answer that has errors and no data at all
+    /// (a rate limit, bad credentials, a timeout) is a failure and throws: GitHub sends those with a
+    /// 200, and taking one for "no repo has any activity" would stamp the refresh as done.
     static func parse(_ data: Data, fetchedAt: Date = .now) throws -> [RepoActivity] {
         let response = try JSONDecoder().decode(Response.self, from: data)
+        if response.data == nil, let message = response.errors?.first?.message {
+            throw QueryError.rejected(message)
+        }
         let formatter = ISO8601DateFormatter()
         return (response.data ?? [:]).values.compactMap { node -> RepoActivity? in
             guard let node, let repoID = node.databaseId else { return nil }
@@ -81,10 +86,25 @@ nonisolated enum RepoActivityQuery {
         }
     }
 
+    enum QueryError: LocalizedError {
+        case rejected(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .rejected(let message): message
+            }
+        }
+    }
+
     // MARK: Wire format
 
     nonisolated private struct Response: Decodable {
         let data: [String: Node?]?
+        let errors: [Failure]?
+    }
+
+    nonisolated private struct Failure: Decodable {
+        let message: String?
     }
 
     nonisolated private struct Node: Decodable {

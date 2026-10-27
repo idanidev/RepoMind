@@ -107,6 +107,8 @@ final class StoreStatusStore {
         }
         do {
             let data = try await download(url, token)
+            // Disconnected while the request was in the air: do not bring the status back.
+            guard endpoint != nil else { return }
             let decoded = try StoreStatus.decode(data)
             status = decoded
             fetchedAt = .now
@@ -114,6 +116,9 @@ final class StoreStatusStore {
             defaults.set(data, forKey: Self.cacheKey)
             defaults.set(Date.now.timeIntervalSince1970, forKey: Self.fetchedKey)
         } catch {
+            // Cancelled (the home restarts its task whenever CloudKit adds repos) is not a failure of
+            // the file, and was being shown in red in Settings.
+            if Task.isCancelled || (error as? URLError)?.code == .cancelled { return }
             failure = Self.message(for: error)
         }
     }

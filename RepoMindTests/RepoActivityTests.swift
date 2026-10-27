@@ -60,11 +60,26 @@ final class RepoActivityQueryTests: XCTestCase {
         XCTAssertFalse(activity.isBuildFailing)
     }
 
-    func testParseReturnsNothingWhenDataIsMissing() throws {
+    func testParseThrowsWhenGitHubRejectsTheWholeQuery() {
+        // GitHub sends a rate limit or bad credentials as a 200 with `errors` and no `data`. Reading
+        // that as "no repo has activity" would stamp the refresh as done and mute the next hour.
         let json = """
         {"errors":[{"message":"Bad credentials"}]}
         """
-        XCTAssertTrue(try RepoActivityQuery.parse(Data(json.utf8)).isEmpty)
+        XCTAssertThrowsError(try RepoActivityQuery.parse(Data(json.utf8)))
+    }
+
+    func testParseKeepsTheRestOfABatchWhenOneRepoCannotBeResolved() throws {
+        let json = """
+        {"data":{"r0":null,"r1":{"databaseId":9,"pushedAt":null,"isPrivate":true,"pullRequests":{"totalCount":1},
+        "latestRelease":null,"defaultBranchRef":null}},"errors":[{"message":"Could not resolve to a Repository"}]}
+        """
+        let parsed = try RepoActivityQuery.parse(Data(json.utf8))
+        XCTAssertEqual(parsed.map(\.repoID), [9])
+    }
+
+    func testParseOfAnEmptyObjectIsNotAFailure() throws {
+        XCTAssertTrue(try RepoActivityQuery.parse(Data("{}".utf8)).isEmpty)
     }
 
     func testBuildFailingCoversErrorToo() {

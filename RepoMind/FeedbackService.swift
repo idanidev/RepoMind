@@ -76,6 +76,9 @@ final class FeedbackService {
               !owner.isEmpty
         else { return [] }
         let fullName = "\(owner)/\(repo.name)"
+        // Taken before the request, so an issue updated while it is in the air is asked for again.
+        let startedAt = Date.now
+        let isFirstPoll = lastCheck(for: fullName) == nil
 
         var components = URLComponents(string: "https://api.github.com/repos/\(owner)/\(repo.name)/issues")!
         var items: [URLQueryItem] = [
@@ -147,11 +150,22 @@ final class FeedbackService {
                     isRead: false
                 )
                 context.insert(issue)
-                newOnes.append(issue)
+                // The first poll of a repo finds its whole history, and none of that is news: eighty
+                // banners for one connected repo are worse than none. A closed issue never is either.
+                if !isFirstPoll, gh.state == "open" {
+                    newOnes.append(issue)
+                }
             }
         }
-        try? context.save()
-        setLastCheck(for: fullName, date: .now)
+        do {
+            try context.save()
+            setLastCheck(for: fullName, date: startedAt)
+        } catch {
+            // Not recorded as polled: the next poll asks for the same window again instead of skipping it.
+            #if DEBUG
+                print("[Feedback] \(fullName) could not be saved: \(error)")
+            #endif
+        }
         return newOnes
     }
 

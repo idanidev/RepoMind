@@ -747,3 +747,12 @@
 /* Launch errors */
 "db_error_title" = "Database Error";
 "db_error_hint" = "Try reinstalling the app or contact support.";
+
+/* Statistics */
+"stats_issue_untitled" = "Untitled report";
+
+/* Store status freshness */
+"home_store_stale" = "Not updated for over a day. Is the store-status workflow still running?";
+
+/* Task sync */
+"sync_tasks_error_rate_limited" = "GitHub is limiting requests for a while. The rest will be published later.";

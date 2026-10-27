@@ -28,6 +28,8 @@ final class TaskIssueSyncService {
         case noColumn
         case noPermission
         case notFound
+        /// GitHub is limiting requests for a while. Not a verdict on the token: nothing is switched off.
+        case rateLimited
         case http(Int, String)
 
         var errorDescription: String? {
@@ -36,6 +38,7 @@ final class TaskIssueSyncService {
             case .noColumn: return String(localized: "sync_tasks_error_no_column")
             case .noPermission: return String(localized: "sync_tasks_disabled_no_permission")
             case .notFound: return String(localized: "sync_tasks_error_not_found")
+            case .rateLimited: return String(localized: "sync_tasks_error_rate_limited")
             case .http(let code, _): return String(format: String(localized: "feedback_error_http %lld"), code)
             }
         }
@@ -134,16 +137,38 @@ final class TaskIssueSyncService {
         guard let (owner, name) = repoOwnerAndName(repo) else { throw SyncError.noOwner }
         guard let column = task.column else { throw SyncError.noColumn }
 
+        // PUT replaces every label on the issue, so it has to carry the ones that are not ours: the kind and
+        // `agent` that `createIssue` set, and whatever the developer added on GitHub. The first drag of a
+        // card used to wipe them, and with `agent` gone the workflow could no longer be told apart.
+        let kept = try await fetchIssueLabelNames(owner: owner, name: name, issueNumber: issueNumber, token: token)
+            .filter { !$0.hasPrefix("col:") && $0 != Self.taskLabel }
         let url = URL(string: "https://api.github.com/repos/\(owner)/\(name)/issues/\(issueNumber)/labels")!
         var req = URLRequest(url: url)
         req.httpMethod = "PUT"
         applyHeaders(&req, token: token)
-        req.httpBody = try JSONSerialization.data(withJSONObject: ["labels": [Self.taskLabel, Self.columnLabel(for: column)]])
+        req.httpBody = try JSONSerialization.data(withJSONObject: [
+            "labels": [Self.taskLabel, Self.columnLabel(for: column)] + kept
+        ])
 
         let (data, resp) = try await session.data(for: req)
         try throwIfNeeded(resp, data: data)
         task.needsIssueSync = false
         task.lastSyncError = nil
+    }
+
+    private func fetchIssueLabelNames(
+        owner: String, name: String, issueNumber: Int, token: String
+    ) async throws -> [String] {
+        let url = URL(string: "https://api.github.com/repos/\(owner)/\(name)/issues/\(issueNumber)")!
+        var req = URLRequest(url: url)
+        applyHeaders(&req, token: token)
+        let (data, resp) = try await session.data(for: req)
+        try throwIfNeeded(resp, data: data)
+        struct Issue: Decodable {
+            struct Label: Decodable { let name: String }
+            let labels: [Label]
+        }
+        return try JSONDecoder().decode(Issue.self, from: data).labels.map(\.name)
     }
 
     // MARK: - Close / Reopen
@@ -286,8 +311,7 @@ final class TaskIssueSyncService {
     func syncIssues(repo: ProjectRepo, context: ModelContext, token: String) async -> ImportOutcome {
         guard repo.syncTasksToGitHub, repo.syncTasksDisabledReason == nil else { return .syncDisabled }
         guard let (owner, name) = repoOwnerAndName(repo) else { return .syncDisabled }
-        let columns = (repo.columns ?? []).sorted { $0.orderIndex < $1.orderIndex }
-        guard let done = repo.doneColumn, let inbox = columns.first else { return .syncDisabled }
+        guard repo.doneColumn != nil else { return .syncDisabled }
 
         let url = URL(
             string: "https://api.github.com/repos/\(owner)/\(name)/issues"
@@ -315,9 +339,10 @@ final class TaskIssueSyncService {
             let state: String
             let labels: [Label]
             let pullRequest: PullRequest?
+            let body: String?
 
             enum CodingKeys: String, CodingKey {
-                case number, title, state, labels
+                case number, title, state, labels, body
                 case pullRequest = "pull_request"
             }
         }
@@ -325,11 +350,18 @@ final class TaskIssueSyncService {
             return .requestFailed(SyncError.http(0, "").localizedDescription)
         }
 
+        // Read now, not before the request: it can take thirty seconds, and a column deleted meanwhile
+        // (by the user, or by CloudKit removing a duplicate) leaves a model that traps when it is read.
+        let columns = (repo.columns ?? []).sorted { $0.orderIndex < $1.orderIndex }
+        guard let done = repo.doneColumn, let inbox = columns.first else { return .syncDisabled }
+
         var result = ImportResult()
+        var healed = 0
         let tasks = repo.tasks ?? []
         let linked = Dictionary(
             tasks.compactMap { task in task.issueNumber.map { ($0, task) } },
             uniquingKeysWith: { first, _ in first })
+        let byID = Dictionary(tasks.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
 
         for issue in issues {
             // The issues endpoint returns pull requests too, and they are not tasks.
@@ -339,10 +371,22 @@ final class TaskIssueSyncService {
             if labels.contains(Self.feedbackLabel) { continue }
 
             if let task = linked[issue.number] {
-                if issue.state == "closed", task.column?.id != done.id {
+                // Not while a local change is waiting to be published: a card dragged out of Done whose
+                // reopen failed (`needsIssueSync`) was pulled straight back by the issue that was still
+                // closed on GitHub, and the move the user made disappeared.
+                if issue.state == "closed", !task.needsIssueSync, task.column?.id != done.id {
                     task.column = done
                     task.orderIndex = ((done.tasks ?? []).map(\.orderIndex).max() ?? -1) + 1
                     result.completed += 1
+                }
+            } else if let published = Self.taskMarker(in: issue.body).flatMap({ byID[$0] }) {
+                // This app published it and the number is not recorded here yet: a sync round ran while
+                // the POST was in the air, or this is the CloudKit copy of a task on another device whose
+                // issue number has not arrived. Linking it instead of importing a copy matters: deleting
+                // the copy would close the real issue as not planned.
+                if published.issueNumber == nil {
+                    published.issueNumber = issue.number
+                    healed += 1
                 }
             } else if issue.state == "open" {
                 // Opened straight on GitHub — by the developer, a teammate or an agent. Without
@@ -363,6 +407,9 @@ final class TaskIssueSyncService {
             }
         }
 
+        if healed > 0, result.changed == 0 {
+            try? context.save()
+        }
         if result.changed > 0 {
             try? context.save()
             // Only the imported ones are worth a banner: tasks moving to done are the result of
@@ -459,6 +506,10 @@ final class TaskIssueSyncService {
                 repo.syncTasksToGitHub = false
                 repo.syncTasksDisabledReason = String(localized: "sync_tasks_disabled_no_permission")
                 break
+            } catch SyncError.rateLimited {
+                // The rest wait for the next round: more requests now only extend the wait.
+                task.lastSyncError = SyncError.rateLimited.localizedDescription
+                break
             } catch {
                 // Leave needsIssueSync = true so the next reconcile retries, and record why on the
                 // task itself. This used to be a DEBUG-only print, which meant a stuck task was
@@ -521,8 +572,28 @@ final class TaskIssueSyncService {
         req.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
     }
 
+    nonisolated static func isRateLimited(_ response: HTTPURLResponse, data: Data) -> Bool {
+        if response.value(forHTTPHeaderField: "Retry-After") != nil { return true }
+        if response.value(forHTTPHeaderField: "x-ratelimit-remaining") == "0" { return true }
+        let text = String(data: data, encoding: .utf8)?.lowercased() ?? ""
+        return text.contains("rate limit")
+    }
+
+    /// The task id a RepoMind-published issue carries in its body (`<!-- repomind-task:UUID -->`).
+    nonisolated static func taskMarker(in body: String?) -> UUID? {
+        guard let body, let range = body.range(of: "repomind-task:") else { return nil }
+        return UUID(uuidString: String(body[range.upperBound...].prefix(36)))
+    }
+
     private func throwIfNeeded(_ response: URLResponse, data: Data) throws {
         guard let http = response as? HTTPURLResponse else { return }
+        // A rate limit answers 403 too (the primary one with `x-ratelimit-remaining: 0`, the secondary one
+        // with `Retry-After`). It used to be read as "no permission", which switched syncing off for the
+        // whole repo — a setting that travels through CloudKit — over a wait of a few minutes after
+        // `reconcile` published twenty issues back to back.
+        if http.statusCode == 403 || http.statusCode == 429, Self.isRateLimited(http, data: data) {
+            throw SyncError.rateLimited
+        }
         switch http.statusCode {
         case 200..<300: return
         case 403, 410: throw SyncError.noPermission

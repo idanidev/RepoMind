@@ -28,6 +28,17 @@ final class SafeLinkTests: XCTestCase {
         XCTAssertNil(SafeLink.web(nil as String?))
     }
 
+    func testTheGitHubTokenOnlyGoesToTheRawFileHostOverHttps() throws {
+        func goes(_ text: String) throws -> Bool {
+            GitHubService.sendsToken(to: try XCTUnwrap(URL(string: text), text))
+        }
+        XCTAssertTrue(try goes("https://raw.githubusercontent.com/a/b/main/x.png"))
+        XCTAssertFalse(try goes("http://raw.githubusercontent.com/a/b/main/x.png"))
+        XCTAssertFalse(try goes("https://raw.githubusercontent.com.evil.example/x"))
+        XCTAssertFalse(try goes("https://example.com/x"))
+        XCTAssertFalse(try goes("https://avatars.githubusercontent.com/u/1"))
+    }
+
     func testANotificationNeverCarriesAUrlTheAppWouldNotOpen() {
         XCTAssertNil(NotificationTarget.parse(["target": "web", "url": "javascript:alert(1)"]))
         XCTAssertNil(NotificationTarget.parse(["target": "web", "url": "http://example.com"]))

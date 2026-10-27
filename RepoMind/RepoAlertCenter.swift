@@ -160,8 +160,10 @@ nonisolated enum RepoAlertRules {
         let signature = String(newest.at.timeIntervalSince1970)
         var alert: Alert?
         if enabled.contains(.crashes), let known = seen.crashSignature, let knownDate = TimeInterval(known) {
-            let fresh = crashes.filter { $0.at.timeIntervalSince1970 > knownDate }
-            let count = fresh.reduce(0) { $0 + max($1.count, 1) }
+            // One per crash that has news since, not the sum of their `count`: that is how many times
+            // the crash happened in all, so a loop seen forty times would announce "40 crashes" on the
+            // next hit of a crash already known.
+            let count = crashes.filter { $0.at.timeIntervalSince1970 > knownDate }.count
             if count > 0 {
                 alert = Alert(
                     kind: .crashes, repoID: repoID,
@@ -190,6 +192,7 @@ final class RepoAlertCenter {
 
     private let defaults: UserDefaults
     private var seen: [Int: RepoAlertRules.Seen]
+    private var isChecking = false
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -217,47 +220,84 @@ final class RepoAlertCenter {
         Set(RepoAlertRules.Kind.allCases.filter(Self.isEnabled))
     }
 
+    /// What one key of `seen` becomes, and what has to be announced to get there.
+    private struct Outcome {
+        var seen: RepoAlertRules.Seen
+        var alerts: [RepoAlertRules.Alert]
+    }
+
+    /// A repo as plain values: the models can be deleted while the requests are in the air (a sign-out,
+    /// CloudKit removing a duplicate), and reading a deleted model is a fatal error.
+    private struct RepoRef {
+        let id: Int
+        let name: String
+        let htmlURL: String
+    }
+
     /// Refreshes and compares. Call after a sync, from the foreground or the background task.
+    ///
+    /// Nothing is recorded as seen until it has been announced: a kill between the two, a notification
+    /// permission that is off, or a failed `add` used to lose the alert for good while `seen` had
+    /// already moved on. Keys with nothing to say are recorded at once; the others once the system has
+    /// accepted every notification of that key. Stops quietly when its task is cancelled — the
+    /// background refresh is cancelled when its time is up.
     func check(repos: [ProjectRepo]) async {
-        guard SubscriptionManager.shared.isPro else { return }
+        guard SubscriptionManager.shared.isPro, !isChecking else { return }
         let enabled = enabledKinds
         guard !enabled.isEmpty else { return }
+        isChecking = true
+        defer { isChecking = false }
 
         let live = repos.filter { !$0.isArchived && !$0.isLocal }
+        let refs = live.map { RepoRef(id: $0.repoID, name: $0.name, htmlURL: $0.htmlURL) }
         let accounts = Array(Dictionary(grouping: live.compactMap(\.account)) { $0.id }.compactMap { $0.value.first })
         let activity = RepoActivityStore.shared
+        await activity.waitUntilIdle()
         await activity.refresh(repos: live, accounts: accounts, force: true)
 
-        var alerts: [RepoAlertRules.Alert] = []
-        for repo in live {
-            if let facts = activity.activity(for: repo.repoID) {
+        var outcomes: [Int: Outcome] = [:]
+        for repo in refs {
+            if Task.isCancelled { return }
+            var current = seen[repo.id]
+            var alerts: [RepoAlertRules.Alert] = []
+            if let facts = activity.activity(for: repo.id) {
                 let result = RepoAlertRules.gitHubAlerts(
-                    previous: seen[repo.repoID], activity: facts, repoName: repo.name, enabled: enabled)
+                    previous: current, activity: facts, repoName: repo.name, enabled: enabled)
                 alerts.append(contentsOf: result.alerts)
-                seen[repo.repoID] = result.seen
+                current = result.seen
             }
             let stats = RepoStatsStore.shared
-            if stats.isConfigured(repo.repoID) {
-                await stats.refresh(repoID: repo.repoID, force: true)
-                if let data = stats.stats(for: repo.repoID) {
+            if stats.isConfigured(repo.id) {
+                await stats.refresh(repoID: repo.id, force: true)
+                if let data = stats.stats(for: repo.id) {
                     let result = RepoAlertRules.crashAlert(
-                        previous: seen[repo.repoID], stats: data, repoID: repo.repoID,
-                        repoName: repo.name, enabled: enabled)
+                        previous: current, stats: data, repoID: repo.id, repoName: repo.name, enabled: enabled)
                     if let alert = result.alert { alerts.append(alert) }
-                    seen[repo.repoID] = result.seen
+                    current = result.seen
                 }
             }
+            if let current { outcomes[repo.id] = Outcome(seen: current, alerts: alerts) }
         }
-        await checkStore(live: live, accounts: accounts, alerts: &alerts)
+        if Task.isCancelled { return }
+        await checkStore(refs: refs, accounts: accounts, outcomes: &outcomes)
+        if Task.isCancelled { return }
+
+        let htmlURLs = Dictionary(refs.map { ($0.id, $0.htmlURL) }, uniquingKeysWith: { first, _ in first })
+        let pending = outcomes.filter { !$0.value.alerts.isEmpty }
+        for (key, outcome) in outcomes where outcome.alerts.isEmpty {
+            seen[key] = outcome.seen
+        }
+        let delivered = await post(pending.values.flatMap(\.alerts), htmlURLs: htmlURLs)
+        for (key, outcome) in pending where outcome.alerts.allSatisfy(delivered.contains) {
+            seen[key] = outcome.seen
+        }
         save()
-        let htmlURLs = Dictionary(live.map { ($0.repoID, $0.htmlURL) }, uniquingKeysWith: { first, _ in first })
-        await post(alerts, htmlURLs: htmlURLs)
     }
 
     /// The App Store status, read again and compared like the rest. Its keys in `seen` are negative, so
     /// an Apple ID can never collide with a GitHub repo id.
     private func checkStore(
-        live: [ProjectRepo], accounts: [GitHubAccount], alerts: inout [RepoAlertRules.Alert]
+        refs: [RepoRef], accounts: [GitHubAccount], outcomes: inout [Int: Outcome]
     ) async {
         let store = StoreStatusStore.shared
         guard store.isConfigured else { return }
@@ -266,17 +306,25 @@ final class RepoAlertCenter {
         guard let status = store.status else { return }
         let enabled = enabledKinds
         for app in status.apps {
-            let key = -(Int(app.id) ?? 0)
-            let name = live.first { app.matches(repoName: $0.name) }?.name ?? app.name
+            // An id that is not a number cannot be told apart from the next one: skip it.
+            guard let appleID = Int(app.id), appleID > 0 else { continue }
+            let key = -appleID
+            let name = app.bestRepoName(in: refs.map(\.name)) ?? app.name
             let result = RepoAlertRules.storeAlert(previous: seen[key], app: app, name: name, enabled: enabled)
-            if let alert = result.alert { alerts.append(alert) }
-            seen[key] = result.seen
+            outcomes[key] = Outcome(seen: result.seen, alerts: result.alert.map { [$0] } ?? [])
         }
     }
 
-    private func post(_ alerts: [RepoAlertRules.Alert], htmlURLs: [Int: String]) async {
-        guard !alerts.isEmpty, await FeedbackNotificationManager.shared.requestAuthorizationIfNeeded() else { return }
+    /// The alerts the system accepted. Asks for the permission when it was never asked; with it off, or
+    /// with `add` failing, an alert stays unseen and is worked out again at the next check.
+    private func post(
+        _ alerts: [RepoAlertRules.Alert], htmlURLs: [Int: String]
+    ) async -> Set<RepoAlertRules.Alert> {
+        guard !alerts.isEmpty, await FeedbackNotificationManager.shared.requestAuthorizationIfNeeded() else {
+            return []
+        }
         let center = UNUserNotificationCenter.current()
+        var delivered: Set<RepoAlertRules.Alert> = []
         for alert in alerts {
             let content = UNMutableNotificationContent()
             content.title = alert.title
@@ -286,8 +334,14 @@ final class RepoAlertCenter {
             content.userInfo = RepoAlertRules.target(for: alert, htmlURL: htmlURLs[alert.repoID] ?? "").userInfo
             let request = UNNotificationRequest(
                 identifier: "alert-\(alert.kind.rawValue)-\(alert.repoID)", content: content, trigger: nil)
-            try? await center.add(request)
+            do {
+                try await center.add(request)
+                delivered.insert(alert)
+            } catch {
+                continue
+            }
         }
+        return delivered
     }
 
     private func save() {

@@ -9,6 +9,8 @@ import Foundation
 /// the header is optional, so an app without subscriptions or crash reports simply says less.
 nonisolated struct RepoStats: Codable, Hashable, Sendable {
     static let supportedSchema = 1
+    /// What an answer without `periodDays` is taken to cover: the contract's default window.
+    static let defaultPeriodDays = 30
 
     var schema: Int
     var app: String
@@ -20,6 +22,10 @@ nonisolated struct RepoStats: Codable, Hashable, Sendable {
     var series: [Series] = []
     var versions: [Version] = []
     var issues: [Issue] = []
+
+    private enum CodingKeys: String, CodingKey {
+        case schema, app, generatedAt, periodDays, headline, signals, features, series, versions, issues
+    }
 
     /// A number for the top of the page, with an optional previous value for the arrow.
     nonisolated struct Headline: Codable, Hashable, Sendable, Identifiable {
@@ -59,8 +65,17 @@ nonisolated struct RepoStats: Codable, Hashable, Sendable {
         var key: String
         var label: String
         var points: [Point] = []
+        /// `counter` (each point is what happened that day, so the period total is their sum) or `gauge`
+        /// (each point is a level, such as paying subscribers, and the figure to show is the last one).
+        /// Absent on the first version of the contract, where every series is a counter.
+        var kind: String?
 
         var id: String { key }
+        var isGauge: Bool { kind == "gauge" }
+
+        private enum CodingKeys: String, CodingKey {
+            case key, label, points, kind
+        }
     }
 
     /// `date` is a calendar day as `YYYY-MM-DD`, with no time or zone.
@@ -87,6 +102,10 @@ nonisolated struct RepoStats: Codable, Hashable, Sendable {
 
         var id: String { "\(kind)-\(at.timeIntervalSince1970)-\(title)" }
         var isCrash: Bool { kind == "crash" }
+
+        private enum CodingKeys: String, CodingKey {
+            case kind, title, at, count, version, url, status
+        }
     }
 
     /// The signals of one family, `pantalla.*`, most used first.
@@ -98,6 +117,8 @@ nonisolated struct RepoStats: Codable, Hashable, Sendable {
     }
 
     // MARK: Derived
+
+    // The lenient `init(from:)` of each type is in the extensions at the end of the file.
 
     /// The headline marked `primary`, or the first one, for the repo card.
     var primaryHeadline: Headline? {
@@ -180,4 +201,53 @@ nonisolated struct RepoStats: Codable, Hashable, Sendable {
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter
     }()
+}
+
+// MARK: - Lenient decoding
+
+/// `docs/stats-contract.md` promises that everything but `schema`, `app` and `generatedAt` may be
+/// missing, and a synthesized `Decodable` keeps neither half of that: it ignores the `= []` defaults,
+/// and it throws on the first element it cannot read. This one keeps what it can read: an app without
+/// crash reports sends no `issues`, and a malformed row costs the row, not the page. In extensions so
+/// the memberwise initializers stay.
+nonisolated extension RepoStats {
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        schema = try container.decode(Int.self, forKey: .schema)
+        app = try container.decode(String.self, forKey: .app)
+        generatedAt = try container.decode(Date.self, forKey: .generatedAt)
+        periodDays = (try? container.decode(Int.self, forKey: .periodDays)) ?? Self.defaultPeriodDays
+        headline = container.decodeLossyArray(.headline)
+        signals = container.decodeLossyArray(.signals)
+        features = container.decodeLossyArray(.features)
+        series = container.decodeLossyArray(.series)
+        versions = container.decodeLossyArray(.versions)
+        issues = container.decodeLossyArray(.issues)
+    }
+}
+
+nonisolated extension RepoStats.Series {
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        key = try container.decode(String.self, forKey: .key)
+        label = try container.decode(String.self, forKey: .label)
+        points = container.decodeLossyArray(.points)
+        kind = try? container.decode(String.self, forKey: .kind)
+    }
+}
+
+nonisolated extension RepoStats.Issue {
+    /// A report or crash with no title still tells the developer that something happened; the page
+    /// shows a stand-in rather than losing the row, and a `null` there used to lose the whole payload.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        kind = (try? container.decode(String.self, forKey: .kind)) ?? "report"
+        let text = (try? container.decode(String.self, forKey: .title)) ?? ""
+        title = text.isEmpty ? String(localized: "stats_issue_untitled") : text
+        at = try container.decode(Date.self, forKey: .at)
+        count = (try? container.decode(Int.self, forKey: .count)) ?? 1
+        version = try? container.decode(String.self, forKey: .version)
+        url = try? container.decode(String.self, forKey: .url)
+        status = try? container.decode(String.self, forKey: .status)
+    }
 }

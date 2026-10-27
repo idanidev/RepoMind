@@ -136,6 +136,15 @@ module StoreStatus
   # ── Cliente de la API ───────────────────────────────────────────────────────────────────────
 
   class Client
+    TOKEN_LIFETIME = 900
+    # Un corte de red o un 429/5xx de Apple en una de las 30+ consultas no debe tirar la ejecución del día.
+    RETRYABLE_STATUS = [429, 500, 502, 503, 504].freeze
+    RETRYABLE_ERRORS = [
+      Errno::ECONNRESET, Errno::ECONNREFUSED, Errno::ETIMEDOUT, Errno::EHOSTUNREACH, Errno::EPIPE,
+      Net::ReadTimeout, Net::OpenTimeout, Net::HTTPBadResponse, OpenSSL::SSL::SSLError, SocketError, EOFError,
+    ].freeze
+    MAX_ATTEMPTS = 4
+
     def initialize(key_id:, issuer_id:, key_pem:)
       require "jwt"
       @key_id = key_id
@@ -148,9 +157,10 @@ module StoreStatus
     def token
       return @token if @token && Time.now < @token_expires - 60
 
+      # Apple admite hasta 20 minutos y rechaza lo que pase de ahí contando con SU reloj: 15 dejan margen.
       now = Time.now.to_i
-      @token_expires = Time.at(now + 1200)
-      payload = { iss: @issuer_id, iat: now, exp: now + 1200, aud: "appstoreconnect-v1" }
+      @token_expires = Time.at(now + TOKEN_LIFETIME)
+      payload = { iss: @issuer_id, iat: now, exp: now + TOKEN_LIFETIME, aud: "appstoreconnect-v1" }
       @token = JWT.encode(payload, @key, "ES256", { kid: @key_id, typ: "JWT" })
     end
 
@@ -175,7 +185,8 @@ module StoreStatus
 
     private
 
-    # [estado HTTP, cuerpo]. Reintenta dos veces los cortes de red, no las respuestas de error.
+    # [estado HTTP, cuerpo]. Reintenta con espera creciente los cortes de red y los 429/5xx; el resto de
+    # respuestas (401, 403, 404...) se devuelven tal cual para que quien llama decida.
     def perform(path, params)
       uri = URI("#{API}#{path}")
       uri.query = URI.encode_www_form(params) unless params.empty?
@@ -188,11 +199,27 @@ module StoreStatus
         response = Net::HTTP.start(uri.host, uri.port, use_ssl: true, read_timeout: 60) do |http|
           http.request(req)
         end
-        [response.code.to_i, response.body]
-      rescue Errno::ECONNRESET, Net::ReadTimeout, Net::OpenTimeout, OpenSSL::SSL::SSLError
-        retry if attempts < 3
-        raise
+        status = response.code.to_i
+        if RETRYABLE_STATUS.include?(status) && attempts < MAX_ATTEMPTS
+          pause(attempts, response["Retry-After"])
+          raise Retry
+        end
+        [status, response.body]
+      rescue Retry
+        retry
+      rescue *RETRYABLE_ERRORS
+        raise if attempts >= MAX_ATTEMPTS
+
+        pause(attempts)
+        retry
       end
+    end
+
+    class Retry < StandardError; end
+
+    def pause(attempts, retry_after = nil)
+      seconds = Integer(retry_after, exception: false) || (2**attempts)
+      sleep([seconds, 30].min)
     end
   end
 

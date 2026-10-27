@@ -67,6 +67,48 @@ final class StoreStatusTests: XCTestCase {
         XCTAssertNotNil(app.versions.first?.createdAt)
     }
 
+    func testAVersionWithoutAStateAndABuildWithoutExpiredStillDecode() throws {
+        // The workflow writes `state: null` when Apple sends neither attribute, and a build may not say
+        // `expired`: both used to refuse the whole file.
+        let json = """
+            {"schema":1,"generatedAt":"2026-10-27T09:00:00Z","apps":[
+              {"id":"1","name":"A","bundleId":"x.y","versions":[
+                 {"platform":"IOS","version":"1.0","state":null,"createdAt":"2026-10-01T09:00:00Z"},
+                 {"platform":"IOS","version":"1.1","state":"READY_FOR_DISTRIBUTION"},
+                 {"platform":"IOS"}],
+               "builds":[{"version":"1.1","build":"202610270821","state":"VALID"}]},
+              {"broken":true}]}
+            """
+        let status = try StoreStatus.decode(Data(json.utf8))
+
+        XCTAssertEqual(status.apps.count, 1, "the app that is not an app is dropped, not the file")
+        let app = try XCTUnwrap(status.apps.first)
+        XCTAssertEqual(app.versions.map(\.kind), [.other, .live])
+        XCTAssertEqual(app.builds.first?.expired, false)
+        XCTAssertNotNil(app.latestBuild)
+    }
+
+    func testBothNamesOfThePublishedStateMeanLive() {
+        XCTAssertEqual(StoreVersionState(raw: "READY_FOR_SALE"), .live)
+        // What `appVersionState`, which the workflow prefers, calls it.
+        XCTAssertEqual(StoreVersionState(raw: "READY_FOR_DISTRIBUTION"), .live)
+        XCTAssertEqual(StoreVersionState(raw: "PREORDER_READY_FOR_SALE"), .approved)
+        XCTAssertEqual(StoreVersionState(raw: ""), .other)
+    }
+
+    func testAFileThatStoppedBeingWrittenIsStale() {
+        let now = Date.now
+        XCTAssertFalse(StoreStatus(schema: 1, generatedAt: now.addingTimeInterval(-20 * 3600)).isStale(now: now))
+        XCTAssertTrue(StoreStatus(schema: 1, generatedAt: now.addingTimeInterval(-37 * 3600)).isStale(now: now))
+    }
+
+    func testTheLongestRepoNameThatFitsIsTheAppsRepo() {
+        let app = StoreStatus.StoreApp(id: "1", name: "RepoMind: Kanban for GitHub", bundleId: "idanidev.RepoMind")
+        XCTAssertEqual(app.bestRepoName(in: ["Repo", "RepoMind", "InSync"]), "RepoMind")
+        XCTAssertEqual(app.bestRepoName(in: ["InSync"]), nil)
+        XCTAssertEqual(app.bestRepoName(in: []), nil)
+    }
+
     func testAnUnknownSchemaIsRefusedWhole() {
         let future = sample.replacingOccurrences(of: "\"schema\": 1", with: "\"schema\": 2")
         XCTAssertThrowsError(try StoreStatus.decode(Data(future.utf8)))

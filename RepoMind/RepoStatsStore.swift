@@ -116,6 +116,9 @@ final class RepoStatsStore {
 
         do {
             let (data, response) = try await session.data(for: request)
+            // Disconnected while the request was in the air: an answer that lands now must not bring
+            // the numbers, and their cache on disk, back.
+            guard self.endpoint(for: repoID) != nil else { return }
             guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
             guard http.statusCode == 200 else {
                 failures[repoID] = String(format: String(localized: "stats_error_status %lld"), http.statusCode)
@@ -127,6 +130,9 @@ final class RepoStatsStore {
             failures[repoID] = nil
             saveSnapshot(repoID, fresh)
         } catch {
+            // A refresh that was cancelled (the screen went away, the background time ran out) says
+            // nothing about the endpoint, and was being shown to the user as its failure.
+            if Task.isCancelled || (error as? URLError)?.code == .cancelled { return }
             failures[repoID] = error.localizedDescription
         }
     }

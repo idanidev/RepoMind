@@ -99,6 +99,73 @@ final class RepoStatsTests: XCTestCase {
         XCTAssertThrowsError(try RepoStats.decode(Data(other.utf8)))
     }
 
+    // MARK: Lenient decoding
+
+    func testAnAnswerWithOnlyTheHeaderDecodesWithEmptyLists() throws {
+        // `docs/stats-contract.md`: everything but schema, app and generatedAt may be missing.
+        let json = #"{"schema":1,"app":"X","generatedAt":"2026-10-27T01:30:00Z"}"#
+        let stats = try RepoStats.decode(Data(json.utf8))
+
+        XCTAssertTrue(stats.headline.isEmpty)
+        XCTAssertTrue(stats.signals.isEmpty)
+        XCTAssertTrue(stats.series.isEmpty)
+        XCTAssertTrue(stats.issues.isEmpty)
+        XCTAssertEqual(stats.periodDays, RepoStats.defaultPeriodDays)
+    }
+
+    func testOneMalformedRowCostsTheRowNotThePage() throws {
+        let json = """
+        {"schema":1,"app":"X","generatedAt":"2026-10-27T01:30:00Z","periodDays":7,
+         "signals":[{"key":"a.b","current":1,"previous":0},{"key":"broken"},{"key":"c.d","current":2,"previous":1}],
+         "versions":[{"version":"1.0","current":3},"not an object",null]}
+        """
+        let stats = try RepoStats.decode(Data(json.utf8))
+
+        XCTAssertEqual(stats.periodDays, 7)
+        XCTAssertEqual(stats.signals.map(\.key), ["a.b", "c.d"])
+        XCTAssertEqual(stats.versions.map(\.version), ["1.0"])
+    }
+
+    func testAListThatIsNotAListIsEmptyNotAnError() throws {
+        let json = #"{"schema":1,"app":"X","generatedAt":"2026-10-27T01:30:00Z","issues":{"oops":true},"signals":null}"#
+        let stats = try RepoStats.decode(Data(json.utf8))
+        XCTAssertTrue(stats.issues.isEmpty)
+        XCTAssertTrue(stats.signals.isEmpty)
+    }
+
+    func testACrashWithoutATitleKeepsItsRowWithAStandIn() throws {
+        // A `null` title used to make the whole payload undecodable.
+        let json = """
+        {"schema":1,"app":"X","generatedAt":"2026-10-27T01:30:00Z",
+         "issues":[{"kind":"crash","title":null,"at":"2026-10-26T20:11:00+00:00","count":2}]}
+        """
+        let issue = try XCTUnwrap(RepoStats.decode(Data(json.utf8)).issues.first)
+
+        XCTAssertEqual(issue.title, String(localized: "stats_issue_untitled"))
+        XCTAssertTrue(issue.isCrash)
+        XCTAssertEqual(issue.count, 2)
+    }
+
+    func testAGaugeSeriesIsToldApartFromACounter() throws {
+        let json = """
+        {"schema":1,"app":"X","generatedAt":"2026-10-27T01:30:00Z","series":[
+          {"key":"app.abierta","label":"Aperturas","kind":"counter","points":[{"date":"2026-10-01","value":40}]},
+          {"key":"suscripciones.de_pago","label":"De pago","kind":"gauge","points":[{"date":"2026-10-01","value":4}]},
+          {"key":"old","label":"From a backend that does not say"}]}
+        """
+        let series = try RepoStats.decode(Data(json.utf8)).series
+
+        XCTAssertEqual(series.map(\.isGauge), [false, true, false])
+        XCTAssertEqual(series[2].points.count, 0)
+    }
+
+    func testWhatIsCachedDecodesBackTheSame() throws {
+        // The snapshot on disk is written with the default encoder and read with the default decoder.
+        let stats = try RepoStats.decode(Data(fixture.utf8))
+        let data = try JSONEncoder().encode(stats)
+        XCTAssertEqual(try JSONDecoder().decode(RepoStats.self, from: data), stats)
+    }
+
     func testDayParsesCalendarDates() {
         XCTAssertNotNil(RepoStats.day(from: "2026-10-01"))
         XCTAssertNil(RepoStats.day(from: "yesterday"))

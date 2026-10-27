@@ -17,6 +17,10 @@ final class RepoIconStore {
     static let shared = RepoIconStore()
 
     private var inFlight: [URL: Task<UIImage?, Never>] = [:]
+    /// When each icon last failed to load. A broken `logoURL` was asked for again every time its card
+    /// appeared, which on a long list is a request per scroll; now it waits a few minutes.
+    private var failures: [URL: Date] = [:]
+    private static let retryAfterFailure: TimeInterval = 5 * 60
 
     private init() {}
 
@@ -27,6 +31,7 @@ final class RepoIconStore {
         let key = Self.canonical(url)
         if let cached = ImageCache.shared.image(for: key) { return cached }
         if let running = inFlight[key] { return await running.value }
+        if let failed = failures[key], Date.now.timeIntervalSince(failed) < Self.retryAfterFailure { return nil }
 
         let task = Task<UIImage?, Never> { await self.load(key, tokenKey: tokenKey) }
         inFlight[key] = task
@@ -34,6 +39,9 @@ final class RepoIconStore {
         inFlight[key] = nil
         if let image {
             ImageCache.shared.insert(image, for: key)
+            failures[key] = nil
+        } else if !Task.isCancelled {
+            failures[key] = .now
         }
         return image
     }

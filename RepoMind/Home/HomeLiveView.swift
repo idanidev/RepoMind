@@ -162,7 +162,7 @@ struct HomeLiveView: View {
     /// button leads home and not through whatever was open. A target that no longer resolves (the
     /// report was deleted, the repo removed) is dropped rather than kept for ever.
     private func openPendingNotification() {
-        guard let target = notifications.pending, !repos.isEmpty else { return }
+        guard let target = notifications.pending, !repos.isEmpty || !target.needsRepos else { return }
         notifications.clear()
         guard let destination = target.destination(repos: repos, feedback: feedbackIssues) else { return }
         switch destination {
@@ -371,7 +371,9 @@ struct HomeLiveView: View {
                 activityRefreshedAt: activity.lastRefresh),
             isPro: subscription.isPro,
             store: storeStore.status,
-            storeUpdatedAt: storeStore.fetchedAt
+            // When the file was written, not when it was fetched: a workflow that stopped running
+            // leaves a file that looks freshly downloaded every hour.
+            storeUpdatedAt: storeStore.status?.generatedAt
         )
     }
 

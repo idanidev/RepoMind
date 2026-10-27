@@ -21,6 +21,16 @@ class StoreStatusTest < Minitest::Test
     assert_equal ["IOS"], versions.map { |v| v["platform"] }.uniq
   end
 
+  def test_the_newer_state_name_wins_when_apple_sends_both_and_null_is_kept_when_it_sends_neither
+    versions = StoreStatus.parse_versions(JSON.parse(fixture("versions_both_states.json")))
+    assert_equal %w[1.6.1 1.6.0], versions.map { |v| v["version"] }
+    # `appVersionState` says READY_FOR_DISTRIBUTION where the older `appStoreState` said READY_FOR_SALE;
+    # the app maps both to "published". With neither attribute the state is null, and the app reads it
+    # as an unknown state instead of refusing the whole file.
+    assert_nil versions[0]["state"]
+    assert_equal "READY_FOR_DISTRIBUTION", versions[1]["state"]
+  end
+
   def test_a_version_without_a_number_is_dropped_and_the_list_is_capped
     json = JSON.parse(fixture("versions.json"))
     assert_equal 3, StoreStatus.parse_versions(json).size # the MAC_OS draft has no versionString
@@ -144,6 +154,57 @@ class StoreStatusTest < Minitest::Test
     refute apps.first.key?("sales")
   end
 
+  FakeResponse = Struct.new(:code, :body, :headers) do
+    def [](name)
+      (headers || {})[name]
+    end
+  end
+
+  # `perform` es privado: se prueba a través de `send`, con Net::HTTP.start y el sleep sustituidos.
+  def with_responses(responses)
+    require "jwt"
+    require "minitest/mock"
+    key = OpenSSL::PKey::EC.generate("prime256v1")
+    client = StoreStatus::Client.new(key_id: "K", issuer_id: "I", key_pem: key.to_pem)
+    pauses = []
+    client.define_singleton_method(:sleep) { |seconds| pauses << seconds }
+    calls = 0
+    Net::HTTP.stub :start, lambda { |*_args, **_options, &_block|
+      calls += 1
+      response = responses.shift
+      raise response if response.is_a?(Class) && response <= Exception
+
+      response
+    } do
+      yield client, pauses
+    end
+    calls
+  end
+
+  def test_a_transient_failure_is_retried_with_a_pause_and_then_answers
+    responses = [FakeResponse.new("503", "busy"), Errno::ECONNRESET, FakeResponse.new("200", "{}")]
+    calls = with_responses(responses) do |client, pauses|
+      assert_equal [200, "{}"], client.send(:perform, "/v1/apps", {})
+      assert_equal [2, 4], pauses
+    end
+    assert_equal 3, calls
+  end
+
+  def test_retry_after_is_honoured_and_a_404_is_not_retried
+    calls = with_responses([FakeResponse.new("429", "", { "Retry-After" => "7" }), FakeResponse.new("404", "none")]) do |client, pauses|
+      assert_equal [404, "none"], client.send(:perform, "/v1/apps", {})
+      assert_equal [7], pauses
+    end
+    assert_equal 2, calls
+  end
+
+  def test_a_failure_that_does_not_go_away_is_reported_after_the_last_attempt
+    responses = Array.new(StoreStatus::Client::MAX_ATTEMPTS) { FakeResponse.new("503", "busy") }
+    with_responses(responses) do |client, _pauses|
+      assert_equal [503, "busy"], client.send(:perform, "/v1/apps", {})
+    end
+  end
+
   def test_the_token_is_a_signed_es256_jwt_for_the_app_store_api
     require "jwt"
     key = OpenSSL::PKey::EC.generate("prime256v1")
@@ -153,7 +214,7 @@ class StoreStatusTest < Minitest::Test
     assert_equal "ES256", header["alg"]
     assert_equal "issuer-uuid", payload["iss"]
     assert_equal "appstoreconnect-v1", payload["aud"]
-    assert_operator payload["exp"] - payload["iat"], :<=, 1200
+    assert_operator payload["exp"] - payload["iat"], :<=, 900
     assert_equal client.token, client.token # cached
   end
 end

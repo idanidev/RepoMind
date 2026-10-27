@@ -46,7 +46,7 @@ final class RepoAlertRulesTests: XCTestCase {
         XCTAssertEqual(muted.alerts.map(\.kind), [.releases])
     }
 
-    func testCrashesNewerThanTheLastSeenOneCount() {
+    func testCrashesNewerThanTheLastSeenOneAreCountedOnceEach() {
         func stats(_ dates: [TimeInterval]) -> RepoStats {
             RepoStats(
                 schema: 1, app: "InSync", generatedAt: now, periodDays: 30,
@@ -64,7 +64,8 @@ final class RepoAlertRulesTests: XCTestCase {
         let later = RepoAlertRules.crashAlert(
             previous: first.seen, stats: stats([200, 300, 400]), repoID: 1, repoName: "InSync", enabled: all)
         XCTAssertEqual(later.alert?.kind, .crashes)
-        XCTAssertTrue(later.alert?.body.contains("4") == true, "two new crashes, counted twice each")
+        // Each of the two has `count: 2` lifetime hits; the alert says how many crashes are news.
+        XCTAssertEqual(later.alert?.body, String(format: String(localized: "alert_crash_body_other %lld"), 2))
         XCTAssertEqual(later.seen.crashSignature, String(TimeInterval(400)))
 
         let same = RepoAlertRules.crashAlert(

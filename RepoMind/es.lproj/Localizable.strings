@@ -746,3 +746,12 @@
 /* Launch errors */
 "db_error_title" = "Error de base de datos";
 "db_error_hint" = "Prueba a reinstalar la app o contacta con soporte.";
+
+/* Statistics */
+"stats_issue_untitled" = "Informe sin título";
+
+/* Store status freshness */
+"home_store_stale" = "Sin actualizar desde hace más de un día. ¿Sigue funcionando el workflow store-status?";
+
+/* Task sync */
+"sync_tasks_error_rate_limited" = "GitHub está limitando las peticiones un rato. El resto se publicará más tarde.";

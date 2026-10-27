@@ -25,7 +25,11 @@ final class RepoActivityStore {
 
     private static let defaultsKey = "repoActivityCache"
 
-    typealias Target = (account: GitHubAccount, repos: [(owner: String, name: String)])
+    typealias Target = (account: GitHubAccount, repos: [(owner: String, name: String)], ids: [Int])
+
+    /// Repos the last answer did not include: deleted, renamed or out of the token's reach. They are
+    /// not asked for again on every appearance of the home, only when the user pulls or the hour ends.
+    private var unresolved: Set<Int> = []
 
     init(defaults: UserDefaults = .standard, maxAge: TimeInterval = 60 * 60) {
         self.defaults = defaults
@@ -58,32 +62,65 @@ final class RepoActivityStore {
         return Date.now.timeIntervalSince(lastRefresh) > maxAge
     }
 
+    /// Whether a non-forced refresh has something to do: the hour is up, or a repo has no facts yet and
+    /// GitHub has not said it cannot resolve it. Repos arrive from iCloud in batches, and the ones that
+    /// come after a refresh must not wait an hour for their first numbers.
+    func needsRefresh(for repos: [ProjectRepo]) -> Bool {
+        if isStale { return true }
+        return repos.contains { !$0.isLocal && activities[$0.repoID] == nil && !unresolved.contains($0.repoID) }
+    }
+
+    /// Returns when no refresh is running, or after `timeout`. A forced refresh asked for while another
+    /// one is in the air returns at once, so whoever needs fresh numbers waits for the running one first.
+    func waitUntilIdle(timeout: Duration = .seconds(15)) async {
+        let deadline = ContinuousClock.now + timeout
+        while isRefreshing, ContinuousClock.now < deadline, !Task.isCancelled {
+            try? await Task.sleep(for: .milliseconds(200))
+        }
+    }
+
     /// Refreshes every GitHub repo of every account, in one request per account.
     ///
-    /// Skips silently when nothing is stale, when a refresh is already running, or when there is
-    /// nothing to ask about yet (repos still arriving from CloudKit): marking an empty run as a
-    /// refresh would mute the next hour. A failed request keeps what was cached — the repo sync
-    /// is where token problems get reported to the user.
+    /// Skips silently when nothing needs it, when a refresh is already running, or when there is
+    /// nothing to ask about yet (repos still arriving from CloudKit). The refresh is only stamped as
+    /// done when GitHub actually answered for at least one account: a failed request, an expired token,
+    /// a locked Keychain or a task cancelled halfway (the home restarts its `.task` every time CloudKit
+    /// adds repos) used to be recorded as a success, which muted the next hour and put "refreshed just
+    /// now" on a screen that had nothing new. A failure keeps what was cached, account by account — the
+    /// repo sync is where token problems get reported to the user. What GitHub no longer resolves for
+    /// an account that did answer is dropped, so a deleted repo does not keep a red build forever.
     func refresh(repos: [ProjectRepo], accounts: [GitHubAccount], force: Bool = false) async {
-        guard force || isStale, !isRefreshing else { return }
+        guard !isRefreshing, force || needsRefresh(for: repos) else { return }
         let targets = Self.targets(repos: repos, accounts: accounts)
         guard !targets.isEmpty else { return }
+        // Plain values: the models can go away while the requests are in the air (a sign-out, CloudKit).
+        let jobs = targets.map { (tokenKey: $0.account.tokenKey, repos: $0.repos, ids: $0.ids) }
 
         isRefreshing = true
         defer { isRefreshing = false }
 
         var merged = activities
-        for target in targets {
-            guard let token = try? await KeychainManager.shared.retrieveToken(for: target.account.tokenKey),
+        var answered = false
+        for job in jobs {
+            guard let token = try? await KeychainManager.shared.retrieveToken(for: job.tokenKey),
                   !token.hasPrefix("mock")
             else { continue }
-            guard let fetched = try? await GitHubService.shared.fetchRepoActivity(
-                for: target.repos, token: token)
-            else { continue }
+            let fetched = try? await GitHubService.shared.fetchRepoActivity(for: job.repos, token: token)
+            if Task.isCancelled { return }
+            guard let fetched else { continue }
+
+            answered = true
+            let returned = Set(fetched.map(\.repoID))
+            for id in job.ids where !returned.contains(id) {
+                merged[id] = nil
+            }
+            unresolved.subtract(returned)
+            unresolved.formUnion(job.ids.filter { !returned.contains($0) })
             for activity in fetched {
                 merged[activity.repoID] = activity
             }
         }
+        guard answered else { return }
         activities = merged
         lastRefresh = .now
         save()
@@ -94,12 +131,17 @@ final class RepoActivityStore {
         accounts.compactMap { account -> Target? in
             let mine = repos
                 .filter { !$0.isLocal && $0.account?.id == account.id }
-                .compactMap { repo -> (owner: String, name: String)? in
+                .compactMap { repo -> (id: Int, owner: String, name: String)? in
                     let parts = repo.fullName.split(separator: "/", maxSplits: 1)
                     guard parts.count == 2 else { return nil }
-                    return (owner: String(parts[0]), name: String(parts[1]))
+                    return (id: repo.repoID, owner: String(parts[0]), name: String(parts[1]))
                 }
-            return mine.isEmpty ? nil : (account: account, repos: mine)
+            guard !mine.isEmpty else { return nil }
+            return (
+                account: account,
+                repos: mine.map { (owner: $0.owner, name: $0.name) },
+                ids: mine.map(\.id)
+            )
         }
     }
 

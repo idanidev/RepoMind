@@ -30,6 +30,15 @@ final class NotificationTargetTests: XCTestCase {
         }
     }
 
+    func testOnlyAPageOnGitHubCanBeOpenedBeforeTheReposArrive() throws {
+        let page = try XCTUnwrap(URL(string: "https://github.com/idanidev/InSync/actions"))
+        XCTAssertFalse(NotificationTarget.web(page).needsRepos)
+        XCTAssertTrue(NotificationTarget.board(repoID: 1).needsRepos)
+        XCTAssertTrue(NotificationTarget.stats(repoID: 1).needsRepos)
+        XCTAssertTrue(NotificationTarget.feedback(issueID: UUID()).needsRepos)
+        XCTAssertTrue(NotificationTarget.tasks(repoID: 1, taskIDs: []).needsRepos)
+    }
+
     func testTheFirstVersionsFeedbackNotificationStillOpensTheReport() {
         let id = UUID()
         let legacy: [AnyHashable: Any] = ["feedbackIssueID": id.uuidString, "htmlURL": "https://github.com/x/y/1"]

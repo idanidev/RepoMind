@@ -50,7 +50,9 @@ struct BoardStatsSeriesCard: View {
 
     var body: some View {
         let points = self.points
-        let total = points.reduce(0) { $0 + $1.value }
+        // A counter adds up over the period; a gauge (paying subscribers) is a level, and adding the
+        // days up said 120 "paying" for four people.
+        let total = series.isGauge ? (points.last?.value ?? 0) : points.reduce(0) { $0 + $1.value }
         VStack(alignment: .leading, spacing: 8) {
             BoardStatsSectionTitle(title: series.label, trailing: total.formatted())
             if points.isEmpty {

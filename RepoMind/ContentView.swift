@@ -1961,7 +1961,7 @@ struct AdaptiveRepoListView: View {
     /// A tap on a notification: select the repo and, for a task or a report, open it. The iPad and
     /// Mac list has no statistics screen, so those taps land on the board.
     private func openPendingNotification() {
-        guard let target = notifications.pending, !repos.isEmpty else { return }
+        guard let target = notifications.pending, !repos.isEmpty || !target.needsRepos else { return }
         notifications.clear()
         guard let destination = target.destination(repos: repos, feedback: feedbackIssues) else { return }
         switch destination {

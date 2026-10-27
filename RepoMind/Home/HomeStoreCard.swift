@@ -21,7 +21,8 @@ struct HomeStoreApp: Hashable, Identifiable {
 
 extension HomeStoreApp {
     init(app: StoreStatus.StoreApp, repos: [ProjectRepo]) {
-        let repo = repos.first { app.matches(repoName: $0.name) }
+        let best = app.bestRepoName(in: repos.map(\.name))
+        let repo = best.flatMap { name in repos.first { $0.name == name } }
         self.init(
             id: app.id, name: repo?.name ?? app.name, repoCardID: repo?.homeCardID, releases: app.releases,
             build: app.latestBuild, unsubmitted: app.unsubmittedBuild, downloads: app.downloads)
@@ -41,6 +42,11 @@ struct HomeStoreCard: View {
             HomeDashboardSectionTitle(
                 title: "home_store_title",
                 trailing: updatedAt.map { $0.formatted(.relative(presentation: .named)) })
+            if let updatedAt, Date.now.timeIntervalSince(updatedAt) > StoreStatus.staleAfter {
+                HomeChip(
+                    symbol: "clock.badge.exclamationmark", text: String(localized: "home_store_stale"),
+                    tint: HomeTheme.warning)
+            }
             ForEach(Array(apps.enumerated()), id: \.element.id) { index, app in
                 if index > 0 {
                     Divider().overlay(HomeTheme.hairline)
