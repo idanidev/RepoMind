@@ -3,27 +3,27 @@ import SwiftUI
 // MARK: - Tabs
 
 enum HomeTab: String, CaseIterable, Identifiable {
+    case start
     case repos
     case tasks
-    case profile
     case settings
 
     var id: String { rawValue }
 
     var label: LocalizedStringKey {
         switch self {
+        case .start: "home_tab_start"
         case .repos: "home_tab_repos"
         case .tasks: "home_tab_tasks"
-        case .profile: "home_tab_profile"
         case .settings: "home_tab_settings"
         }
     }
 
     var symbol: String {
         switch self {
+        case .start: "house"
         case .repos: "shippingbox"
         case .tasks: "checklist"
-        case .profile: "person.crop.circle"
         case .settings: "gearshape"
         }
     }

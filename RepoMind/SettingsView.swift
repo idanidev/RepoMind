@@ -57,6 +57,8 @@ struct SettingsView: View {
     /// `true` when shown as a tab of the redesigned home rather than as a sheet: no
     /// navigation stack of its own, and no Done button to dismiss.
     var embedded = false
+    /// Set by the home, which keeps Profile behind Settings: a row at the top opens it.
+    var onOpenProfile: (() -> Void)?
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var context
@@ -96,6 +98,21 @@ struct SettingsView: View {
     /// header, inside the home's navigation stack.
     private var settingsList: some View {
         List {
+            if let onOpenProfile {
+                Section {
+                    Button(action: onOpenProfile) {
+                        HStack {
+                            Label("home_tab_profile", systemImage: "person.crop.circle")
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .foregroundStyle(.primary)
+                }
+            }
+
             // MARK: - Subscription
 
             Section("subscription_header") {

@@ -4,6 +4,7 @@ import SwiftUI
 /// Where the user can go from the home screen besides a board.
 enum HomeRoute: Hashable {
     case today
+    case profile
     case digest(HomeDigestKind)
     case stats(ProjectRepo)
 }
@@ -23,6 +24,7 @@ struct HomeLiveView: View {
     @Query(sort: \ProjectRepo.updatedAt, order: .reverse) private var repos: [ProjectRepo]
     @Query private var accounts: [GitHubAccount]
     @Query private var feedbackIssues: [FeedbackIssue]
+    @Query private var folders: [RepoFolder]
 
     @AppStorage("isAuthenticated") private var isAuthenticated = false
     @AppStorage("isDemoMode") private var isDemoMode = false
@@ -33,7 +35,7 @@ struct HomeLiveView: View {
     @State private var activity = RepoActivityStore.shared
     @State private var statsStore = RepoStatsStore.shared
     @State private var path = NavigationPath()
-    @State private var tab: HomeTab = .repos
+    @State private var tab: HomeTab = .start
     @State private var selectedAccount: String?
     @State private var isSearching = false
     @State private var searchText = ""
@@ -47,6 +49,8 @@ struct HomeLiveView: View {
     @State private var repoToFile: ProjectRepo?
     @State private var repoToConfigureIcon: ProjectRepo?
 
+    private let syncMonitor = CloudKitSyncMonitor.shared
+
     private static let syncSuccessFeedback = UINotificationFeedbackGenerator()
 
     var body: some View {
@@ -55,19 +59,16 @@ struct HomeLiveView: View {
                 HomeTheme.background
                     .ignoresSafeArea()
                 switch tab {
+                case .start:
+                    HomeDashboardView(data: dashboard, actions: dashboardActions)
                 case .repos:
                     reposTab
                 case .tasks:
                     tabPage("today_title") { TodayView() }
-                case .profile:
-                    tabPage("home_tab_profile") {
-                        HomeProfileView(
-                            onUpgrade: { showPaywall = true },
-                            onSignOut: { showSignOutConfirm = true }
-                        )
-                    }
                 case .settings:
-                    tabPage("settings_title") { SettingsView(embedded: true) }
+                    tabPage("settings_title") {
+                        SettingsView(embedded: true, onOpenProfile: { path.append(HomeRoute.profile) })
+                    }
                 }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -80,6 +81,7 @@ struct HomeLiveView: View {
             .navigationDestination(for: HomeRoute.self) { route in
                 switch route {
                 case .today: TodayView()
+                case .profile: profilePage
                 case .digest(let kind): HomeDigestView(kind: kind)
                 case .stats(let repo): BoardStatsView(project: repo)
                 }
@@ -133,7 +135,6 @@ struct HomeLiveView: View {
                 names: accountNames, selected: selectedAccount,
                 isPro: subscription.isPro, isDemo: isDemoMode),
             stats: HomeStats(cards: cards.filter { !$0.isArchived }),
-            digest: digest,
             repos: cards,
             repoLimit: subscription.isPro ? nil : subscription.maxFreeRepos,
             searchText: searchText,
@@ -259,7 +260,54 @@ struct HomeLiveView: View {
             signOut: { showSignOutConfirm = true },
             add: { showAddLocalProject = true },
             notifications: { path.append(HomeRoute.today) },
-            refresh: { await refresh() },
+            refresh: { await refresh() }
+        )
+    }
+
+    // MARK: Start screen
+
+    /// Profile, pushed from Settings: the accounts, the plan and the way out.
+    private var profilePage: some View {
+        ZStack {
+            HomeTheme.background
+                .ignoresSafeArea()
+            HomeProfileView(
+                onUpgrade: { showPaywall = true },
+                onSignOut: { showSignOutConfirm = true }
+            )
+        }
+        .navigationTitle("home_tab_profile")
+    }
+
+    /// The same repos the list shows: the selected account, archived counted apart.
+    private var dashboard: HomeDashboardData {
+        let mine = repos.filter { selectedAccount == nil || $0.account?.username == selectedAccount }
+        let names = Set(mine.map(\.fullName))
+        let unread = feedbackIssues.filter {
+            !$0.isRead && !$0.isSnoozed && $0.state == "open" && names.contains($0.repoFullName)
+        }
+        return HomeDashboardData(
+            repos: mine,
+            accounts: accounts,
+            folders: folders.count,
+            unreadFeedback: unread.count,
+            activity: activity.activity(for:),
+            stats: statsStore.stats(for:),
+            sync: HomeSyncStatus(
+                iCloudProblem: syncMonitor.hasSyncProblem
+                    ? (syncMonitor.lastErrorDetail ?? syncMonitor.lastErrorMessage) : nil,
+                iCloudLastSuccess: syncMonitor.lastSuccessDate,
+                lastGitHubSync: lastSyncTimestamp > 0 ? Date(timeIntervalSince1970: lastSyncTimestamp) : nil,
+                activityRefreshedAt: activity.lastRefresh),
+            isPro: subscription.isPro
+        )
+    }
+
+    private var dashboardActions: HomeDashboardActions {
+        HomeDashboardActions(
+            openRepo: { id in
+                if let repo = repos.first(where: { $0.homeCardID == id }) { path.append(repo) }
+            },
             openDigest: { kind in
                 // Today already lists these two, with the retry button; no second screen.
                 switch kind {
@@ -268,23 +316,11 @@ struct HomeLiveView: View {
                 }
             },
             openStats: { repoID in
-                if let repo = repos.first(where: { $0.repoID == repoID }) {
-                    path.append(HomeRoute.stats(repo))
-                }
-            }
-        )
-    }
-
-    /// The same repos the strip counts: the selected account, archived left out.
-    private var digest: HomeDigest {
-        let mine = repos.filter { selectedAccount == nil || $0.account?.username == selectedAccount }
-        let unread = feedbackIssues.filter { !$0.isRead && !$0.isSnoozed && $0.state == "open" }
-        let names = Set(mine.map(\.fullName))
-        return HomeDigest(
-            repos: mine,
-            unreadFeedback: unread.filter { names.contains($0.repoFullName) }.count,
-            activity: activity.activity(for:),
-            stats: statsStore.stats(for:)
+                if let repo = repos.first(where: { $0.repoID == repoID }) { path.append(HomeRoute.stats(repo)) }
+            },
+            openToday: { path.append(HomeRoute.today) },
+            showRepos: { withAnimation(.snappy(duration: 0.25)) { tab = .repos } },
+            refresh: { await refresh() }
         )
     }
 

@@ -28,6 +28,71 @@ enum HomeMockData {
         [focvs, inSync, repoMind, rentalManagerIOS, clarity, rentalManagerWeb]
     }
 
+    static var dashboard: HomeDashboardData {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: .now)
+        let perDay = [2, 0, 1, 3, 0, 0, 4, 1, 2, 0, 1, 5, 2, 3]
+        let history = (0..<HomeDashboardData.historyDays).reversed().map { offset in
+            HomeDayCount(
+                date: calendar.date(byAdding: .day, value: -offset, to: today) ?? today,
+                count: perDay[offset % perDay.count])
+        }
+        return HomeDashboardData(
+            accountNames: [accountName],
+            isPro: true,
+            digest: digest,
+            tasks: HomeTaskTotals(total: 214, pending: 46, done: 150, ideas: 18, capturedToday: 3, capturedWeek: 11),
+            captureHistory: history,
+            recent: [
+                HomeRecentTask(
+                    id: UUID(), title: "Android: un solo canal de realtime por grupo", repoName: "InSync",
+                    repoCardID: "mock-insync", createdAt: hoursAgo(1), isDone: false),
+                HomeRecentTask(
+                    id: UUID(), title: "Pantalla de sesión salta con el teclado", repoName: "FOCVS",
+                    repoCardID: "mock-focvs", createdAt: hoursAgo(5), isDone: true),
+                HomeRecentTask(
+                    id: UUID(), title: "Exportar gastos a CSV", repoName: "Clarity",
+                    repoCardID: "mock-clarity", createdAt: hoursAgo(28), isDone: false)
+            ],
+            busiest: [
+                HomeRepoLoad(id: "mock-insync", name: "InSync", pending: 18, total: 96),
+                HomeRepoLoad(id: "mock-rental-ios", name: "RentalMngr-iOS", pending: 9, total: 33),
+                HomeRepoLoad(id: "mock-clarity", name: "Clarity", pending: 3, total: 68)
+            ],
+            github: HomeGitHubSummary(
+                known: 6, pushedToday: 2, pushedWeek: 4, openPullRequests: 3, failing: ["RentalMngr-Web"],
+                privateRepos: 2, publicRepos: 4,
+                recentPushes: [
+                    HomeRepoPush(id: "mock-focvs", name: "FOCVS", pushedAt: hoursAgo(2)),
+                    HomeRepoPush(id: "mock-clarity", name: "Clarity", pushedAt: hoursAgo(3)),
+                    HomeRepoPush(id: "mock-insync", name: "InSync", pushedAt: hoursAgo(26))
+                ],
+                releases: [HomeRepoRelease(id: "mock-focvs", name: "FOCVS", tag: "v1.2.0")]),
+            apps: [
+                HomeAppSummary(
+                    app: HomeDigestApp(
+                        repoID: -2, name: "InSync", headline: "31 Activas 7 días", change: 0.12,
+                        crashes: 2, reports: 1),
+                    headlines: [
+                        HomeHeadlineValue(id: "accounts", label: "Cuentas", value: 128),
+                        HomeHeadlineValue(id: "couples", label: "Parejas", value: 41),
+                        HomeHeadlineValue(id: "paying", label: "De pago", value: 9)
+                    ],
+                    sparkline: [3, 5, 4, 6, 8, 7, 9, 6, 10, 12, 9, 11, 13, 12],
+                    periodDays: 30)
+            ],
+            languages: [
+                HomeLanguageShare(id: "Swift", count: 4),
+                HomeLanguageShare(id: "HTML", count: 1),
+                HomeLanguageShare(id: "TypeScript", count: 1)
+            ],
+            sync: HomeSyncStatus(
+                iCloudProblem: nil, iCloudLastSuccess: hoursAgo(0.2), lastGitHubSync: hoursAgo(1),
+                activityRefreshedAt: hoursAgo(0.5)),
+            repos: HomeRepoCounts(total: 6, favorites: 3, archived: 1, local: 0, folders: 1, accounts: 1)
+        )
+    }
+
     static let webFolder = HomeFolderInfo(id: "mock-folder-web", name: "Web", colorHex: "#5B6CFF", orderIndex: 0)
 
     static var focvs: HomeRepoCardData {
