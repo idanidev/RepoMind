@@ -251,9 +251,13 @@ final class RepoAlertCenter {
         let live = repos.filter { !$0.isArchived && !$0.isLocal }
         let refs = live.map { RepoRef(id: $0.repoID, name: $0.name, htmlURL: $0.htmlURL) }
         let accounts = Array(Dictionary(grouping: live.compactMap(\.account)) { $0.id }.compactMap { $0.value.first })
+        // Plain values too, before anything is awaited: see `RepoRef`.
+        let storeAccounts = accounts.map { StoreAccount(username: $0.username, tokenKey: $0.tokenKey) }
         let activity = RepoActivityStore.shared
-        await activity.waitUntilIdle()
+        // Asked first and then waited for: a forced refresh while another one is running returns at once,
+        // and waiting before asking would read the models again up to fifteen seconds later.
         await activity.refresh(repos: live, accounts: accounts, force: true)
+        await activity.waitUntilIdle()
 
         var outcomes: [Int: Outcome] = [:]
         for repo in refs {
@@ -279,7 +283,7 @@ final class RepoAlertCenter {
             if let current { outcomes[repo.id] = Outcome(seen: current, alerts: alerts) }
         }
         if Task.isCancelled { return }
-        await checkStore(refs: refs, accounts: accounts, outcomes: &outcomes)
+        await checkStore(refs: refs, accounts: storeAccounts, outcomes: &outcomes)
         if Task.isCancelled { return }
 
         let htmlURLs = Dictionary(refs.map { ($0.id, $0.htmlURL) }, uniquingKeysWith: { first, _ in first })
@@ -297,12 +301,11 @@ final class RepoAlertCenter {
     /// The App Store status, read again and compared like the rest. Its keys in `seen` are negative, so
     /// an Apple ID can never collide with a GitHub repo id.
     private func checkStore(
-        refs: [RepoRef], accounts: [GitHubAccount], outcomes: inout [Int: Outcome]
+        refs: [RepoRef], accounts: [StoreAccount], outcomes: inout [Int: Outcome]
     ) async {
         let store = StoreStatusStore.shared
         guard store.isConfigured else { return }
-        await store.refresh(
-            accounts: accounts.map { StoreAccount(username: $0.username, tokenKey: $0.tokenKey) }, force: true)
+        await store.refresh(accounts: accounts, force: true)
         guard let status = store.status else { return }
         let enabled = enabledKinds
         for app in status.apps {

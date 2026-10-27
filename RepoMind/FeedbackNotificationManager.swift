@@ -128,10 +128,14 @@ final class FeedbackNotificationManager {
         let descriptor = FetchDescriptor<ProjectRepo>(
             predicate: #Predicate { !$0.isLocal && !$0.isArchived }
         )
-        guard let repos = try? context.fetch(descriptor), !repos.isEmpty else { return }
+        guard let checked = try? context.fetch(descriptor), !checked.isEmpty else { return }
 
-        await RepoAlertCenter.shared.check(repos: repos)
+        await RepoAlertCenter.shared.check(repos: checked)
         if Task.isCancelled { return }
+
+        // Fetched again: the alerts' requests take a while, and a sign-out or CloudKit removing a duplicate
+        // in the meantime deletes models of the first fetch, which must not be read afterwards.
+        guard let repos = try? context.fetch(descriptor), !repos.isEmpty else { return }
 
         // Group by account, only process repos with a token in keychain.
         let accountGroups = Dictionary(grouping: repos) { $0.account?.id }

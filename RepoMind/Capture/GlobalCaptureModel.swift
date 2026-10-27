@@ -116,7 +116,7 @@ final class GlobalCaptureModel {
 
     /// "…, añadir a InSync" was taken out of the text before the model saw it, so the app it named is put
     /// back here, over the model's own guess. Failing that, the one the raw draft found.
-    nonisolated static func settingApp(
+    static func settingApp(
         _ draft: CaptureDraft, named hinted: String?, fallback: String?
     ) -> CaptureDraft {
         var draft = draft
