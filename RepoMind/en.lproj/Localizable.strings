@@ -648,3 +648,38 @@
 "voice_section_header" = "Voice";
 "voice_ai_toggle" = "Shape captures with on-device intelligence";
 "voice_ai_footer" = "Turns what you dictate into a clean title and details, splits distinct subjects into separate tasks and picks the column you name. Needs iOS 26 and Apple Intelligence; nothing leaves the device. Off, the dictation is saved as it came.";
+
+/* Voice settings */
+"voice_silence_picker" = "Stop after a pause of";
+"voice_silence_2" = "2 seconds";
+"voice_silence_3" = "3 seconds";
+"voice_silence_5" = "5 seconds";
+"voice_silence_never" = "Never, only the button";
+"voice_vocabulary_placeholder" = "Words it should know: app names, terms… (comma-separated)";
+
+/* Alerts */
+"alerts_section_header" = "Alerts (Pro)";
+"alerts_footer" = "Checked in the background and on launch, with the same requests the home makes. Nothing leaves the device.";
+"alerts_ci_toggle" = "Build turns red";
+"alerts_releases_toggle" = "New release";
+"alerts_security_toggle" = "New security alerts";
+"alerts_crashes_toggle" = "New crashes in a connected app";
+"alerts_pro_button" = "Unlock alerts with Pro";
+"alert_ci_title %@" = "Build failing: %@";
+"alert_ci_body" = "The default branch is red on CI.";
+"alert_release_title %@" = "Release out: %@";
+"alert_release_body %@" = "%@ is the latest release.";
+"alert_security_title %@" = "Security: %@";
+"alert_security_body %lld" = "%lld new security alert(s).";
+"alert_crash_title %@" = "Crashes: %@";
+"alert_crash_body %lld" = "%lld new crash(es) reported.";
+"home_dashboard_security %lld" = "%lld open security alert(s)";
+
+/* Apps panel */
+"apps_panel_title" = "Apps";
+"apps_panel_open" = "Open the apps panel";
+"apps_panel_count" = "apps connected";
+"apps_panel_crashes" = "crashes this period";
+"apps_panel_empty_title" = "No apps connected";
+"apps_panel_pro_title" = "Your apps, in one panel";
+"apps_panel_pro_message" = "Every connected app with its numbers, charts and crashes on one screen. Part of Pro.";

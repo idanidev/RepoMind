@@ -5,6 +5,7 @@ import SwiftUI
 enum HomeRoute: Hashable {
     case today
     case profile
+    case apps
     case digest(HomeDigestKind)
     case stats(ProjectRepo)
 }
@@ -87,6 +88,13 @@ struct HomeLiveView: View {
                 switch route {
                 case .today: onBlack { TodayView() }
                 case .profile: profilePage
+                case .apps:
+                    HomeAppsPanelView(
+                        entries: appEntries, isPro: subscription.isPro,
+                        actions: HomeAppsPanelActions(
+                            openStats: dashboardActions.openStats,
+                            upgrade: { showPaywall = true },
+                            refresh: { await refresh() }))
                 case .digest(let kind): onBlack { HomeDigestView(kind: kind) }
                 case .stats(let repo): BoardStatsView(project: repo)
                 }
@@ -327,6 +335,18 @@ struct HomeLiveView: View {
         )
     }
 
+    /// Every connected app of the selected account with what its backend last said.
+    private var appEntries: [HomeAppPanelEntry] {
+        repos
+            .filter { !$0.isArchived && (selectedAccount == nil || $0.account?.username == selectedAccount) }
+            .compactMap { repo in
+                statsStore.stats(for: repo.repoID).map {
+                    HomeAppPanelEntry(
+                        repoID: repo.repoID, name: repo.name, stats: $0, fetchedAt: statsStore.fetchedAt[repo.repoID])
+                }
+            }
+    }
+
     /// Every task of the selected account's live repos, newest first.
     private var taskRows: [HomeTaskRow] {
         HomeTaskRow.rows(in: repos.filter {
@@ -359,6 +379,7 @@ struct HomeLiveView: View {
                 if let repo = repos.first(where: { $0.repoID == repoID }) { path.append(HomeRoute.stats(repo)) }
             },
             openToday: { path.append(HomeRoute.today) },
+            openApps: { path.append(HomeRoute.apps) },
             showRepos: { withAnimation(.snappy(duration: 0.25)) { tab = .repos } },
             refresh: { await refresh() }
         )

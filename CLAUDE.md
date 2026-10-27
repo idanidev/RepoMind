@@ -70,6 +70,12 @@ Sin Mac, lo mismo desde GitHub Actions (`.github/workflows`), con los secretos `
   contrato de `docs/stats-contract.md`; `RepoStatsStore.swift` guarda la URL en `UserDefaults`, el
   token en el Keychain y la última respuesta en caché una hora, y `BoardStatsView` la pinta desde el
   menú del tablero. La primera app que lo sirve es InSync (`supabase/functions/repomind-stats`)
+- **Alertas (Pro)**: `RepoAlertCenter.swift` vuelve a preguntar a GitHub y a los backends de las apps
+  en el refresco en segundo plano de `FeedbackNotificationManager` y al abrir, compara con lo visto
+  (`repoAlertsSeen` en `UserDefaults`) y notifica en local: build en rojo, release nueva, alertas de
+  seguridad (`vulnerabilityAlerts` en la query de actividad) y cierres nuevos. Las reglas son puras
+  (`RepoAlertRules`) y la primera vez que ve algo solo lo apunta. Interruptores en Ajustes → Alertas
+- **Panel de apps (Pro)**: `HomeAppsPanelView` junta todas las apps con estadísticas; desde Inicio
 - **Bridge MCP**: `bridge/` (TypeScript) expone las tareas a agentes de código vía GitHub Issues
 
 ## Estructura de carpetas

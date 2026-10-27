@@ -62,7 +62,11 @@ final class VoiceManager {
     /// deliberately: it is only ever mutated from main-actor code.
     nonisolated(unsafe) private var silenceTimer: Timer?
     private var silenceThreshold: Float = 0.05       // Updated dynamically after calibration
-    private let silenceDuration: TimeInterval = 1.5
+    /// Seconds of silence that stop a recording. Settings → Voice; 0 means only the button
+    /// stops it. 1.5 s cut people off mid-thought, so the default is 3.
+    private var silenceDuration: TimeInterval {
+        UserDefaults.standard.object(forKey: "voiceSilenceSeconds") as? Double ?? 3
+    }
     private var lastAudioDetectedTime: Date = .now
 
     // Noise floor calibration
@@ -482,7 +486,7 @@ final class VoiceManager {
 
                 // Si ya llevamos suficiente silencio cuando llega el texto, parar de inmediato
                 let silentSinceLastAudio = Date.now.timeIntervalSince(self.lastAudioDetectedTime)
-                if silentSinceLastAudio > self.silenceDuration {
+                if self.silenceDuration > 0, silentSinceLastAudio > self.silenceDuration {
                     self.stopRecording()
                     return
                 }
@@ -711,7 +715,8 @@ final class VoiceManager {
                 guard let self, self.isRecording else { return }
 
                 let silentDuration = Date.now.timeIntervalSince(self.lastAudioDetectedTime)
-                if silentDuration > self.silenceDuration && !self.transcribedText.isEmpty {
+                let pause = self.silenceDuration
+                if pause > 0, silentDuration > pause, !self.transcribedText.isEmpty {
                     self.stopRecording()
                 }
             }

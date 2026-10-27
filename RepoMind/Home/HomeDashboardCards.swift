@@ -52,6 +52,17 @@ struct HomeDashboardGitHubCard: View {
                     .foregroundStyle(HomeTheme.textSecondary)
             } else {
                 tiles
+                if github.securityAlerts > 0 {
+                    HStack(spacing: 8) {
+                        Image(systemName: "shield.lefthalf.filled")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(HomeTheme.danger)
+                            .frame(width: 16)
+                        Text(String(format: String(localized: "home_dashboard_security %lld"), github.securityAlerts))
+                            .font(.footnote)
+                            .foregroundStyle(HomeTheme.textPrimary)
+                    }
+                }
                 if !github.recentPushes.isEmpty {
                     pushes
                 }

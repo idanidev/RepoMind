@@ -92,6 +92,44 @@ struct VoiceCapture: Identifiable {
     var composedByAI = false
 }
 
+// MARK: - Vocabulary
+
+/// Words the recognizer would otherwise mangle: the names of the user's repos and apps, the
+/// developer's everyday terms, and whatever they add in Settings → Voice. Handed to the speech
+/// recognizer as contextual strings and to the model so it keeps the spelling.
+enum VoiceVocabulary {
+    static let developerTerms = [
+        "RepoMind", "GitHub", "TestFlight", "App Store", "App Store Connect", "Xcode", "SwiftUI", "SwiftData",
+        "CloudKit", "iCloud", "Supabase", "Firebase", "widget", "commit", "pull request", "merge", "release",
+        "backend", "frontend", "API", "token", "login", "onboarding", "paywall", "Face ID", "Catalyst",
+    ]
+
+    /// Comma- or newline-separated, from Settings.
+    static var customTerms: [String] {
+        let raw = UserDefaults.standard.string(forKey: "voiceCustomVocabulary") ?? ""
+        return raw.split(whereSeparator: { $0 == "," || $0.isNewline })
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+    }
+
+    /// The repos of the same account first: those are the names most likely to be said.
+    static func names(for project: ProjectRepo) -> [String] {
+        var names = [project.name]
+        names.append(contentsOf: (project.account?.repos ?? []).map(\.name))
+        names.append(contentsOf: customTerms)
+        return unique(names)
+    }
+
+    static func terms(for project: ProjectRepo) -> [String] {
+        Array(unique(names(for: project) + developerTerms).prefix(120))
+    }
+
+    private static func unique(_ terms: [String]) -> [String] {
+        var seen = Set<String>()
+        return terms.filter { !$0.isEmpty && seen.insert($0.lowercased()).inserted }
+    }
+}
+
 // MARK: - Composer
 
 /// Gives a dictation its shape with the on-device model, on iOS 26 and a device that has it.
@@ -107,11 +145,13 @@ enum VoiceComposer {
     }
 
     /// nil when the model is unavailable or failed: the caller keeps the fallback draft.
-    static func compose(transcript: String, columns: [String], ideaColumn: String?) async -> [CaptureDraft]? {
+    static func compose(
+        transcript: String, columns: [String], ideaColumn: String?, names: [String]
+    ) async -> [CaptureDraft]? {
         #if canImport(FoundationModels)
             if #available(iOS 26.0, macCatalyst 26.0, macOS 26.0, *) {
                 return try? await AICaptureComposer.compose(
-                    transcript: transcript, columns: columns, ideaColumn: ideaColumn)
+                    transcript: transcript, columns: columns, ideaColumn: ideaColumn, names: names)
             }
         #endif
         return nil
@@ -152,8 +192,10 @@ enum VoiceComposer {
             return false
         }
 
-        static func compose(transcript: String, columns: [String], ideaColumn: String?) async throws -> [CaptureDraft] {
-            let session = LanguageModelSession(instructions: instructions(columns: columns))
+        static func compose(
+            transcript: String, columns: [String], ideaColumn: String?, names: [String]
+        ) async throws -> [CaptureDraft] {
+            let session = LanguageModelSession(instructions: instructions(columns: columns, names: names))
             let response = try await session.respond(to: transcript, generating: ComposedCapture.self)
             return response.content.tasks
                 .map {
@@ -165,7 +207,7 @@ enum VoiceComposer {
         }
 
         /// The model gets the board's columns and the rules; the dictation itself is the prompt.
-        private static func instructions(columns: [String]) -> String {
+        private static func instructions(columns: [String], names: [String]) -> String {
             """
             You turn a developer's dictated note about their own app into tasks for a kanban board.
             The note was transcribed from speech: it may have filler words, repetitions, self-corrections \
@@ -173,6 +215,8 @@ enum VoiceComposer {
             Usually the note is one task. Split it only when it clearly covers distinct subjects.
             The board's columns are: \(columns.joined(separator: ", ")). Phrases like "add to X" or \
             "move to X" name a column; put its exact name in `column` and leave it out of the title.
+            Product and repository names that may appear, spelled right: \(names.joined(separator: ", ")). \
+            The transcription may have misheard them; use these spellings.
             Kind: bug for something broken, feature for something to build or improve, idea for a \
             loose thought that is not yet work, chore for maintenance.
             """
@@ -214,8 +258,10 @@ extension KanbanViewModel {
 
         let columns = columnNames
         let idea = project.ideaColumn?.name
+        let names = VoiceVocabulary.names(for: project)
         composeTask = Task { [weak self] in
-            let drafts = await VoiceComposer.compose(transcript: transcript, columns: columns, ideaColumn: idea)
+            let drafts = await VoiceComposer.compose(
+                transcript: transcript, columns: columns, ideaColumn: idea, names: names)
             guard let self, !Task.isCancelled, pendingCapture?.id == capture.id else { return }
             if let drafts, !drafts.isEmpty {
                 pendingCapture?.drafts = drafts

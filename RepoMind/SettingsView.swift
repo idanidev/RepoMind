@@ -61,6 +61,12 @@ struct SettingsView: View {
     var onOpenProfile: (() -> Void)?
 
     @AppStorage("voiceAIEnabled") private var voiceAIEnabled = true
+    @AppStorage("voiceSilenceSeconds") private var voiceSilenceSeconds = 3.0
+    @AppStorage("voiceCustomVocabulary") private var voiceCustomVocabulary = ""
+    @AppStorage("alerts_ci") private var alertsCI = true
+    @AppStorage("alerts_releases") private var alertsReleases = true
+    @AppStorage("alerts_security") private var alertsSecurity = true
+    @AppStorage("alerts_crashes") private var alertsCrashes = true
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var context
@@ -295,10 +301,48 @@ struct SettingsView: View {
 
             Section {
                 Toggle("voice_ai_toggle", isOn: $voiceAIEnabled)
+                Picker("voice_silence_picker", selection: $voiceSilenceSeconds) {
+                    Text("voice_silence_2").tag(2.0)
+                    Text("voice_silence_3").tag(3.0)
+                    Text("voice_silence_5").tag(5.0)
+                    Text("voice_silence_never").tag(0.0)
+                }
+                TextField("voice_vocabulary_placeholder", text: $voiceCustomVocabulary, axis: .vertical)
+                    .lineLimit(1...4)
+                    .autocorrectionDisabled()
             } header: {
                 Text("voice_section_header")
             } footer: {
                 Text("voice_ai_footer")
+            }
+
+            // MARK: - Alerts (Pro)
+
+            Section {
+                Group {
+                    Toggle("alerts_ci_toggle", isOn: $alertsCI)
+                    Toggle("alerts_releases_toggle", isOn: $alertsReleases)
+                    Toggle("alerts_security_toggle", isOn: $alertsSecurity)
+                    Toggle("alerts_crashes_toggle", isOn: $alertsCrashes)
+                }
+                .disabled(!subscription.isPro)
+                if !subscription.isPro {
+                    Button {
+                        showPaywall = true
+                    } label: {
+                        Label("alerts_pro_button", systemImage: "crown")
+                            .foregroundStyle(.purple)
+                    }
+                }
+            } header: {
+                Text("alerts_section_header")
+            } footer: {
+                Text("alerts_footer")
+            }
+            .onChange(of: [alertsCI, alertsReleases, alertsSecurity, alertsCrashes]) { _, now in
+                if now.contains(true) {
+                    Task { _ = await FeedbackNotificationManager.shared.requestAuthorizationIfNeeded() }
+                }
             }
 
             Section("about_header") {

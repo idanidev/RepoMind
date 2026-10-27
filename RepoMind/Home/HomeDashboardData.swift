@@ -83,6 +83,8 @@ struct HomeGitHubSummary: Hashable {
     var pushedWeek = 0
     var openPullRequests = 0
     var failing: [String] = []
+    /// Open Dependabot alerts across the repos the token can see them for.
+    var securityAlerts = 0
     var privateRepos = 0
     var publicRepos = 0
     /// Newest first.
@@ -269,6 +271,7 @@ extension HomeDashboardData {
             summary.known += 1
             summary.openPullRequests += facts.openPullRequests
             if facts.isBuildFailing { summary.failing.append(repo.name) }
+            summary.securityAlerts += facts.securityAlerts ?? 0
             if facts.isPrivate { summary.privateRepos += 1 } else { summary.publicRepos += 1 }
             if let pushed = facts.pushedAt {
                 pushes.append(HomeRepoPush(id: repo.homeCardID, name: repo.name, pushedAt: pushed))

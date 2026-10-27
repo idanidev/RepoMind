@@ -647,3 +647,38 @@
 "voice_section_header" = "Voz";
 "voice_ai_toggle" = "Dar forma a las capturas con la inteligencia del dispositivo";
 "voice_ai_footer" = "Convierte lo que dictas en un título limpio y unos detalles, separa asuntos distintos en tareas distintas y elige la columna que nombres. Necesita iOS 26 y Apple Intelligence; nada sale del dispositivo. Apagado, el dictado se guarda tal cual.";
+
+/* Ajustes de voz */
+"voice_silence_picker" = "Parar tras una pausa de";
+"voice_silence_2" = "2 segundos";
+"voice_silence_3" = "3 segundos";
+"voice_silence_5" = "5 segundos";
+"voice_silence_never" = "Nunca, solo el botón";
+"voice_vocabulary_placeholder" = "Palabras que debe conocer: nombres de apps, términos… (separadas por comas)";
+
+/* Alertas */
+"alerts_section_header" = "Alertas (Pro)";
+"alerts_footer" = "Se comprueban en segundo plano y al abrir, con las mismas peticiones que hace la home. Nada sale del dispositivo.";
+"alerts_ci_toggle" = "La build se pone en rojo";
+"alerts_releases_toggle" = "Release nueva";
+"alerts_security_toggle" = "Alertas de seguridad nuevas";
+"alerts_crashes_toggle" = "Cierres nuevos en una app conectada";
+"alerts_pro_button" = "Desbloquear las alertas con Pro";
+"alert_ci_title %@" = "Build en rojo: %@";
+"alert_ci_body" = "La rama principal está en rojo en CI.";
+"alert_release_title %@" = "Release publicada: %@";
+"alert_release_body %@" = "%@ es la última release.";
+"alert_security_title %@" = "Seguridad: %@";
+"alert_security_body %lld" = "%lld alerta(s) de seguridad nueva(s).";
+"alert_crash_title %@" = "Cierres: %@";
+"alert_crash_body %lld" = "%lld cierre(s) nuevo(s).";
+"home_dashboard_security %lld" = "%lld alerta(s) de seguridad abierta(s)";
+
+/* Panel de apps */
+"apps_panel_title" = "Apps";
+"apps_panel_open" = "Abrir el panel de apps";
+"apps_panel_count" = "apps conectadas";
+"apps_panel_crashes" = "cierres en el periodo";
+"apps_panel_empty_title" = "Ninguna app conectada";
+"apps_panel_pro_title" = "Tus apps, en un panel";
+"apps_panel_pro_message" = "Todas las apps conectadas con sus cifras, gráficas y cierres en una pantalla. Parte de Pro.";

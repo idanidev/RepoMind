@@ -13,6 +13,9 @@ nonisolated struct RepoActivity: Codable, Hashable, Sendable {
     /// GitHub's rollup of the default branch's last commit: `SUCCESS`, `FAILURE`, `ERROR`,
     /// `PENDING` or `EXPECTED`. `nil` when nothing runs checks on the repo.
     var checksState: String?
+    /// Open Dependabot alerts. `nil` when the token cannot see them, which GitHub answers with
+    /// a null field rather than an error for the whole repo.
+    var securityAlerts: Int?
     var fetchedAt: Date
 
     var isBuildFailing: Bool { checksState == "FAILURE" || checksState == "ERROR" }
@@ -44,6 +47,7 @@ nonisolated enum RepoActivityQuery {
           isPrivate
           pullRequests(states: OPEN) { totalCount }
           latestRelease { tagName }
+          vulnerabilityAlerts(states: OPEN) { totalCount }
           defaultBranchRef { target { ... on Commit { statusCheckRollup { state } } } }
         }
         """
@@ -63,6 +67,7 @@ nonisolated enum RepoActivityQuery {
                 openPullRequests: node.pullRequests?.totalCount ?? 0,
                 latestReleaseTag: node.latestRelease?.tagName,
                 checksState: node.defaultBranchRef?.target?.statusCheckRollup?.state,
+                securityAlerts: node.vulnerabilityAlerts?.totalCount,
                 fetchedAt: fetchedAt
             )
         }
@@ -88,6 +93,7 @@ nonisolated enum RepoActivityQuery {
         let isPrivate: Bool?
         let pullRequests: Count?
         let latestRelease: Release?
+        let vulnerabilityAlerts: Count?
         let defaultBranchRef: BranchRef?
     }
 

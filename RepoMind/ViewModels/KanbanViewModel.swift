@@ -162,7 +162,7 @@ final class KanbanViewModel {
     func updateVoiceContextualStrings() {
         let columnNames = (project.columns ?? []).map(\.name)
         let commands = ["añadir a", "mover a", "add to", "move to"]
-        voiceManager.contextualStrings = columnNames + commands
+        voiceManager.contextualStrings = columnNames + commands + VoiceVocabulary.terms(for: project)
     }
 
     func createTaskFromVoice() {

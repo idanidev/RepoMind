@@ -115,6 +115,7 @@ final class FeedbackNotificationManager {
             allNew.append(contentsOf: new)
         }
         await notify(for: allNew)
+        await RepoAlertCenter.shared.check(repos: repos)
     }
 
     // MARK: - Background Refresh
@@ -167,6 +168,7 @@ final class FeedbackNotificationManager {
             }
 
             await notify(for: allNew)
+            await RepoAlertCenter.shared.check(repos: repos)
             task.setTaskCompleted(success: true)
         }
     #endif

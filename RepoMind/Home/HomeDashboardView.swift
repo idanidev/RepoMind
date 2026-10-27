@@ -12,6 +12,7 @@ struct HomeDashboardActions {
     var openDigest: (HomeDigestKind) -> Void = { _ in }
     var openStats: (Int) -> Void = { _ in }
     var openToday: () -> Void = {}
+    var openApps: () -> Void = {}
     var showRepos: () -> Void = {}
     var refresh: () async -> Void = {}
 }
@@ -49,6 +50,7 @@ struct HomeDashboardView: View {
                         HomeDashboardAppCard(summary: app, onOpenStats: actions.openStats)
                     }
                 }
+                appsPanelLink
                 HomeDashboardAccountCard(data: data, onShowRepos: actions.showRepos)
             }
             .padding(.horizontal, HomeTheme.gutter)
@@ -227,6 +229,27 @@ struct HomeDashboardView: View {
         .padding(HomeTheme.cardPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(HomeDashboardCardBackground())
+    }
+
+    private var appsPanelLink: some View {
+        Button(action: actions.openApps) {
+            HStack(spacing: 8) {
+                Image(systemName: "square.grid.2x2.fill")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(HomeTheme.info)
+                    .frame(width: 16)
+                Text("apps_panel_open")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(HomeTheme.textPrimary)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(HomeTheme.textSecondary)
+            }
+            .padding(HomeTheme.cardPadding)
+            .background(HomeDashboardCardBackground())
+        }
+        .buttonStyle(HomeCardButtonStyle())
     }
 
     private var appsHint: some View {
