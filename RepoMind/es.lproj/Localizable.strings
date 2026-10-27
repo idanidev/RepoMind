@@ -200,7 +200,7 @@
 "paywall_already_pro_subtitle" = "Todas las funciones están desbloqueadas. Disfruta de RepoMind Pro.";
 "purchase_pending_toast" = "Compra pendiente de aprobación. Te avisaremos cuando esté aprobada.";
 "restore_success_toast" = "¡Compras restauradas! Bienvenido a Pro.";
-"restore_no_purchases_toast" = "No se encontraron suscripciones activas.";
+"restore_no_purchases_toast" = "No hay ninguna compra anterior en esta cuenta de Apple.";
 "paywall_legal_disclaimer" = "Pago único. Puedes restaurar tus compras desde los Ajustes de la app en otros dispositivos con la misma cuenta de Apple.";
 "products_not_available" = "Los productos no están disponibles en este momento.";
 "products_unavailable_title" = "Planes no disponibles aún";
