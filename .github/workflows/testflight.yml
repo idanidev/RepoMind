@@ -41,6 +41,8 @@ on:
       - ".github/workflows/tests.yml"
       - ".github/workflows/release.yml"
       - ".github/workflows/docs.yml"
+      - ".github/workflows/store-status.yml"
+      - "scripts/store-status/**"
   workflow_dispatch:
 
 concurrency:

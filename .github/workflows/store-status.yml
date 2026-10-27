@@ -1,0 +1,90 @@
+# Estado de la App Store para RepoMind: qué versión de cada app está publicada, cuál está en revisión,
+# la última build de TestFlight y las descargas por día. Corre cada día, escribe store.json en la rama
+# `store-data` (una sola confirmación, que se reescribe) y RepoMind lo lee con tu token de GitHub.
+# El contrato está en docs/store-contract.md.
+#
+# La clave de App Store Connect (rol Admin) se queda aquí, en los secretos: una app no puede guardarla.
+# Corre en Linux, que gasta un minuto por minuto, no diez como macOS.
+#
+# Secretos del repo:
+#   ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8   La clave de la API. Ya existen.
+#   ASC_VENDOR_NUMBER                       Opcional: sin él no hay descargas, solo versiones. Está en
+#       App Store Connect → Ventas y tendencias → Informes, arriba a la izquierda.
+#
+# Como todo workflow_dispatch, el botón de lanzarlo a mano solo aparece cuando el fichero está en main;
+# mientras tanto arranca con un push que toque el script o este fichero.
+
+name: Store status
+
+on:
+  schedule:
+    # Apple cierra el día de ventas a la mañana siguiente, hora del Pacífico.
+    - cron: "27 15 * * *"
+  push:
+    branches:
+      - redesign/home-oled
+      - claude/testflight
+    paths:
+      - "scripts/store-status/**"
+      - ".github/workflows/store-status.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: store-status
+  cancel-in-progress: false
+
+jobs:
+  store-status:
+    name: Leer App Store Connect y publicar store.json
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+
+      - name: Gema jwt
+        run: gem install jwt -v 2.10.2 --no-document
+
+      - name: Pruebas del script
+        run: ruby scripts/store-status/test_store_status.rb
+
+      - name: Leer App Store Connect
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          ASC_VENDOR_NUMBER: ${{ secrets.ASC_VENDOR_NUMBER }}
+          STORE_STATUS_OUT: ${{ runner.temp }}/store.json
+        run: |
+          if [ -z "$ASC_KEY_ID" ] || [ -z "$ASC_ISSUER_ID" ] || [ -z "$ASC_KEY_P8" ]; then
+            echo "::error::Faltan secretos: ASC_KEY_ID, ASC_ISSUER_ID y ASC_KEY_P8 (Settings → Secrets → Actions)"; exit 1
+          fi
+          if [ -z "$ASC_VENDOR_NUMBER" ]; then
+            echo "::notice::Sin ASC_VENDOR_NUMBER: solo versiones y builds, sin descargas"
+          fi
+          ruby scripts/store-status/store_status.rb
+
+      - name: Publicar en la rama store-data
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Una sola confirmación que se reescribe cada día: son datos, no historia que merezca guardarse.
+          pub="$RUNNER_TEMP/pub"
+          mkdir -p "$pub"
+          cp "$RUNNER_TEMP/store.json" "$pub/store.json"
+          cd "$pub"
+          git init -q
+          git checkout -q -b store-data
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add store.json
+          git commit -q -m "Estado de la App Store $(date -u +%F)"
+          git remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push -q --force origin store-data
+          echo "Publicado en https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/store-data/store.json"

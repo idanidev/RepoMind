@@ -1,0 +1,8 @@
+{
+  "data": [
+    { "type": "appStoreVersions", "id": "v1", "attributes": { "platform": "IOS", "versionString": "1.5.2", "appStoreState": "READY_FOR_SALE", "createdDate": "2026-09-01T09:00:00-07:00" } },
+    { "type": "appStoreVersions", "id": "v3", "attributes": { "platform": "IOS", "versionString": "1.5.3", "appVersionState": "WAITING_FOR_REVIEW", "createdDate": "2026-10-20T10:00:00-07:00" } },
+    { "type": "appStoreVersions", "id": "v0", "attributes": { "platform": "IOS", "versionString": "1.5.0", "appStoreState": "REPLACED_WITH_NEW_VERSION", "createdDate": "2026-08-10T09:00:00-07:00" } },
+    { "type": "appStoreVersions", "id": "vx", "attributes": { "platform": "MAC_OS", "appStoreState": "PREPARE_FOR_SUBMISSION", "createdDate": "2026-10-21T10:00:00-07:00" } }
+  ]
+}

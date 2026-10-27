@@ -1,0 +1,14 @@
+{
+  "data": [
+    { "type": "builds", "id": "b1",
+      "attributes": { "version": "202610270821", "uploadedDate": "2026-10-27T08:24:00Z", "processingState": "VALID", "expired": false },
+      "relationships": { "preReleaseVersion": { "data": { "type": "preReleaseVersions", "id": "p153" } } } },
+    { "type": "builds", "id": "b0",
+      "attributes": { "version": "202610140900", "uploadedDate": "2026-10-14T09:02:00Z", "processingState": "VALID", "expired": true },
+      "relationships": { "preReleaseVersion": { "data": { "type": "preReleaseVersions", "id": "p152" } } } }
+  ],
+  "included": [
+    { "type": "preReleaseVersions", "id": "p152", "attributes": { "version": "1.5.2" } },
+    { "type": "preReleaseVersions", "id": "p153", "attributes": { "version": "1.5.3" } }
+  ]
+}
