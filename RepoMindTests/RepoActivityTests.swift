@@ -88,8 +88,11 @@ final class RepoActivityStoreTests: XCTestCase {
         container = nil
     }
 
-    func testStartsStaleAndEmptyWithoutACache() throws {
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: "RepoActivityStoreTests-\(UUID().uuidString)"))
+    func testStartsStaleAndEmptyWithoutACache() {
+        // The standard defaults of the test host, with the cache key cleared: a `suiteName`
+        // defaults crashed the simulator's test host on CI at this exact point.
+        let defaults = UserDefaults.standard
+        defaults.removeObject(forKey: "repoActivityCache")
         let store = RepoActivityStore(defaults: defaults)
 
         XCTAssertTrue(store.isStale)

@@ -72,6 +72,13 @@ jobs:
             echo "::group::Últimas 150 líneas del registro"
             tail -n 150 "$RUNNER_TEMP/tests.log"
             echo "::endgroup::"
+            # Si el host de pruebas se ha caído, el informe de crash está dentro del xcresult.
+            echo "::group::Informes de crash"
+            xcrun xcresulttool export diagnostics --path "$RUNNER_TEMP/Tests.xcresult" \
+              --output-path "$RUNNER_TEMP/diagnostics" 2>/dev/null || true
+            find "$RUNNER_TEMP/diagnostics" -type f \( -name "*.crash" -o -name "*.ips" \) 2>/dev/null \
+              | while read -r f; do echo "--- $f"; head -n 160 "$f"; done
+            echo "::endgroup::"
           fi
           exit $estado
 

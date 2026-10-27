@@ -20,8 +20,8 @@ final class RepoActivityStore {
     private(set) var lastRefresh: Date?
     private(set) var isRefreshing = false
 
-    @ObservationIgnored private let defaults: UserDefaults
-    @ObservationIgnored private let maxAge: TimeInterval
+    private let defaults: UserDefaults
+    private let maxAge: TimeInterval
 
     private static let defaultsKey = "repoActivityCache"
 
@@ -89,22 +89,25 @@ final class RepoActivityStore {
 
     // MARK: Persistence
 
-    nonisolated private struct Snapshot: Codable {
-        var lastRefresh: Date?
-        var activities: [Int: RepoActivity]
-    }
-
     private func load() {
         guard let data = defaults.data(forKey: Self.defaultsKey),
-              let snapshot = try? JSONDecoder().decode(Snapshot.self, from: data)
+              let snapshot = try? JSONDecoder().decode(RepoActivitySnapshot.self, from: data)
         else { return }
         activities = snapshot.activities
         lastRefresh = snapshot.lastRefresh
     }
 
     private func save() {
-        let snapshot = Snapshot(lastRefresh: lastRefresh, activities: activities)
+        let snapshot = RepoActivitySnapshot(lastRefresh: lastRefresh, activities: activities)
         guard let data = try? JSONEncoder().encode(snapshot) else { return }
         defaults.set(data, forKey: Self.defaultsKey)
     }
+}
+
+// MARK: - Snapshot
+
+/// What goes to `UserDefaults`: the cache and when it was last refreshed.
+nonisolated private struct RepoActivitySnapshot: Codable {
+    var lastRefresh: Date?
+    var activities: [Int: RepoActivity]
 }
