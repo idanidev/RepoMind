@@ -233,7 +233,16 @@ final class TaskIssueSyncService {
     struct ImportResult: Equatable {
         var completed = 0   // tasks moved into the done column because their issue closed
         var imported = 0    // issues opened outside the app, pulled in as tasks
+        /// Which ones, so the notification can name the first and lead to it.
+        var importedIssues: [ImportedIssue] = []
         var changed: Int { completed + imported }
+    }
+
+    /// An issue opened outside the app and the task it became.
+    struct ImportedIssue: Equatable {
+        let taskID: UUID
+        let number: Int
+        let title: String
     }
 
     enum ImportOutcome: Equatable {
@@ -349,6 +358,8 @@ final class TaskIssueSyncService {
                 task.issueNumber = issue.number
                 context.insert(task)
                 result.imported += 1
+                result.importedIssues.append(
+                    ImportedIssue(taskID: task.id, number: issue.number, title: issue.title))
             }
         }
 
@@ -356,10 +367,14 @@ final class TaskIssueSyncService {
             try? context.save()
             // Only the imported ones are worth a banner: tasks moving to done are the result of
             // work the developer already knows about, but an issue opened elsewhere is news.
-            if result.imported > 0 {
+            if !result.importedIssues.isEmpty {
                 let name = repo.name
-                let count = result.imported
-                Task { await FeedbackNotificationManager.shared.notifyImportedTasks(count, repoName: name) }
+                let repoID = repo.repoID
+                let issues = result.importedIssues
+                Task {
+                    await FeedbackNotificationManager.shared.notifyImportedTasks(
+                        issues, repoID: repoID, repoName: name)
+                }
             }
             return .changed(result)
         }
@@ -392,6 +407,7 @@ final class TaskIssueSyncService {
             case .changed(let r):
                 total.completed += r.completed
                 total.imported += r.imported
+                total.importedIssues += r.importedIssues
                 reachedAny = true
             case .upToDate:
                 reachedAny = true

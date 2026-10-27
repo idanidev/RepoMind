@@ -26,6 +26,8 @@ enum KanbanViewMode: String, CaseIterable {
 
 struct KanbanView: View {
     @Bindable var project: ProjectRepo
+    /// Where a notification wants the board to land; nil when it was opened from the list.
+    let focus: BoardFocus?
     @Environment(\.modelContext) private var context
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
@@ -38,10 +40,12 @@ struct KanbanView: View {
     @State private var showPaywall = false
     @State private var showRepoSettings = false
     @State private var showFeedback = false
+    @State private var feedbackIssueToOpen: UUID?
     @State private var showSyncDisabledAlert = false
 
-    init(project: ProjectRepo) {
+    init(project: ProjectRepo, focus: BoardFocus? = nil) {
         self.project = project
+        self.focus = focus
         let projectID = project.persistentModelID
         let filter = #Predicate<KanbanColumn> { $0.project?.persistentModelID == projectID }
         _columns = Query(filter: filter, sort: \KanbanColumn.orderIndex)
@@ -72,10 +76,27 @@ struct KanbanView: View {
         let vm = KanbanViewModel(project: project, modelContext: context)
         vm.initializeDefaultColumnsIfNeeded()
         viewModel = vm
+        Task { await applyFocus(to: vm) }
         await vm.checkVoicePermissions()
         await vm.reconcileGitHubSyncIfNeeded()
         if project.syncTasksDisabledReason != nil {
             showSyncDisabledAlert = true
+        }
+    }
+
+    /// A notification asked for a task or a report in particular; the classic board shows every
+    /// column, so a column needs nothing. The sheet waits for the board to be on screen.
+    private func applyFocus(to model: KanbanViewModel) async {
+        switch focus {
+        case .task(let id):
+            try? await Task.sleep(for: .milliseconds(450))
+            model.editingTask = (project.tasks ?? []).first { $0.id == id }
+        case .feedback(let id):
+            try? await Task.sleep(for: .milliseconds(450))
+            feedbackIssueToOpen = id
+            showFeedback = true
+        case .column, nil:
+            break
         }
     }
 
@@ -236,8 +257,8 @@ struct KanbanView: View {
         .sheet(isPresented: $showRepoSettings) {
             RepoSettingsSheet(viewModel: viewModel, columns: columns)
         }
-        .sheet(isPresented: $showFeedback) {
-            NavigationStack { FeedbackView(repo: project) }
+        .sheet(isPresented: $showFeedback, onDismiss: { feedbackIssueToOpen = nil }) {
+            NavigationStack { FeedbackView(repo: project, openIssueID: feedbackIssueToOpen) }
         }
         .alert("rename_column_title", isPresented: $viewModel.showRenameColumnAlert) {
             TextField("column_name_placeholder", text: $viewModel.renameColumnText)

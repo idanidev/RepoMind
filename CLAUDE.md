@@ -96,6 +96,14 @@ Sin Mac, lo mismo desde GitHub Actions (`.github/workflows`), con los secretos `
   entitlements. Comparte versión y número de build con la app (los dos en el proyecto). Con la firma
   en la nube (`testflight.yml` sin secretos de match) Xcode crea solo el App ID y el perfil del widget;
   con match, el perfil del widget hay que crearlo una vez con `fastlane ios certificates`
+- **Notificaciones**: `Notifications/`. Toda notificación local lleva en su `userInfo` un
+  `NotificationTarget` (ids y una URL, nunca modelos: un toque puede arrancar la app en frío antes de que
+  exista el store). `NotificationDelegate`, puesto en `AppDelegate` antes de terminar el arranque, lo recoge
+  y lo deja en `NotificationRouter`; `HomeLiveView` (iPhone) y `AdaptiveRepoListView` (iPad/Mac) lo
+  resuelven contra el store (`destination(repos:feedback:)`) y abren el tablero en la tarea, la columna o el
+  reporte (`BoardFocus`), o la página de GitHub en las alertas. Sin delegado un toque solo abre la app y las
+  notificaciones con la app abierta no se ven. Una notificación nueva sin target no lleva a ningún sitio:
+  ponerle uno, y agrupar con `threadIdentifier`
 - **Bridge MCP**: `bridge/` (TypeScript) expone las tareas a agentes de código vía GitHub Issues
 
 ## Estructura de carpetas
@@ -110,6 +118,7 @@ RepoMind/
 │                      # Repos = HomeView con las tarjetas
 ├── Board/             # Tablero rediseñado para iPhone (BoardView sobre KanbanViewModel); iPad/Mac usan KanbanView
 ├── Capture/           # Dictar una tarea fuera de un tablero: hoja, modelo, quién es la app, atajo de Siri
+├── Notifications/     # Adónde lleva cada notificación: target, router, delegado y resolución contra el store
 ├── ViewModels/        # KanbanViewModel.swift
 ├── Models/            # Modelos SwiftData (@Model)
 ├── en.lproj/          # Strings inglés

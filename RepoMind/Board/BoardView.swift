@@ -10,6 +10,8 @@ import SwiftUI
 /// through the same code as the classic board, which iPad and Mac keep.
 struct BoardView: View {
     @Bindable var project: ProjectRepo
+    /// Where a notification wants the board to land; nil when it was opened from the list.
+    let focus: BoardFocus?
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
 
@@ -21,11 +23,13 @@ struct BoardView: View {
     @State private var showPaywall = false
     @State private var showRepoSettings = false
     @State private var showFeedback = false
+    @State private var feedbackIssueToOpen: UUID?
     @State private var showStats = false
     @State private var showSyncDisabledAlert = false
 
-    init(project: ProjectRepo) {
+    init(project: ProjectRepo, focus: BoardFocus? = nil) {
         self.project = project
+        self.focus = focus
         let projectID = project.persistentModelID
         let filter = #Predicate<KanbanColumn> { $0.project?.persistentModelID == projectID }
         _columns = Query(filter: filter, sort: \KanbanColumn.orderIndex)
@@ -54,10 +58,34 @@ struct BoardView: View {
         let model = KanbanViewModel(project: project, modelContext: context)
         model.initializeDefaultColumnsIfNeeded()
         viewModel = model
+        Task { await applyFocus(to: model) }
         await model.checkVoicePermissions()
         await model.reconcileGitHubSyncIfNeeded()
         if project.syncTasksDisabledReason != nil {
             showSyncDisabledAlert = true
+        }
+    }
+
+    /// A notification asked for a task, a column or a report in particular. The page changes at
+    /// once; the sheet waits for the push animation to finish, because a sheet presented while
+    /// the board is still sliding in is dropped.
+    private func applyFocus(to model: KanbanViewModel) async {
+        switch focus {
+        case .task(let id):
+            guard let task = (project.tasks ?? []).first(where: { $0.id == id }) else { return }
+            if let column = task.column, let index = columns.firstIndex(where: { $0.id == column.id }) {
+                page = index
+            }
+            try? await Task.sleep(for: .milliseconds(450))
+            model.editingTask = task
+        case .column(let id):
+            if let index = columns.firstIndex(where: { $0.id == id }) { page = index }
+        case .feedback(let id):
+            try? await Task.sleep(for: .milliseconds(450))
+            feedbackIssueToOpen = id
+            showFeedback = true
+        case nil:
+            break
         }
     }
 
@@ -139,8 +167,8 @@ struct BoardView: View {
         .sheet(item: $viewModel.pendingCapture) { _ in
             VoiceCaptureSheet(viewModel: viewModel, columns: columns.map(\.name))
         }
-        .sheet(isPresented: $showFeedback) {
-            NavigationStack { FeedbackView(repo: project) }
+        .sheet(isPresented: $showFeedback, onDismiss: { feedbackIssueToOpen = nil }) {
+            NavigationStack { FeedbackView(repo: project, openIssueID: feedbackIssueToOpen) }
         }
         .navigationDestination(isPresented: $showStats) {
             BoardStatsView(project: project)

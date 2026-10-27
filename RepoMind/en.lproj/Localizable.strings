@@ -275,10 +275,6 @@
 "feedback_severity_minor" = "Minor bugs";
 "feedback_severity_enhancement" = "Enhancements";
 "feedback_severity_general" = "General feedback";
-"feedback_notif_critical %@" = "🔴 [%@] Critical issue reported";
-"feedback_notif_minor %@" = "🟡 [%@] Minor bug reported";
-"feedback_notif_enhancement %@" = "🟢 [%@] New enhancement request";
-"feedback_notif_general %@" = "💬 [%@] New user feedback";
 "feedback_open_button" = "Feedback";
 "feedback_unread_badge %lld" = "%lld unread";
 
@@ -464,7 +460,6 @@
 "voice_input_changed" = "Recording stopped: the microphone changed.";
 "sync_summary_imported %lld" = "%lld issues imported from GitHub";
 "sync_summary_both %lld %lld" = "%lld completed, %lld imported from GitHub";
-"notif_imported_tasks %lld" = "%lld new issues opened on GitHub";
 
 /* Idea column */
 "idea_column_section" = "Ideas";
@@ -670,9 +665,7 @@
 "alert_release_title %@" = "Release out: %@";
 "alert_release_body %@" = "%@ is the latest release.";
 "alert_security_title %@" = "Security: %@";
-"alert_security_body %lld" = "%lld new security alert(s).";
 "alert_crash_title %@" = "Crashes: %@";
-"alert_crash_body %lld" = "%lld new crash(es) reported.";
 "home_dashboard_security %lld" = "%lld open security alert(s)";
 
 /* Apps panel */
@@ -705,3 +698,15 @@
 "intent_capture_title" = "Add a task by voice";
 "intent_capture_description" = "Opens RepoMind listening: say the app and the task.";
 "intent_capture_short_title" = "Add task";
+
+/* Notifications: what the lock screen shows, and where a tap goes */
+"feedback_notif_kind_critical" = "Critical bug reported";
+"feedback_notif_kind_minor" = "Minor bug reported";
+"feedback_notif_kind_enhancement" = "Improvement requested";
+"feedback_notif_kind_general" = "New feedback";
+"notif_imported_one %@" = "New issue on GitHub: %@";
+"notif_imported_other %lld %@" = "%lld new issues on GitHub, starting with %@";
+"alert_security_body_one" = "GitHub reports one new security alert.";
+"alert_security_body_other %lld" = "GitHub reports %lld new security alerts.";
+"alert_crash_body_one" = "A new crash was reported.";
+"alert_crash_body_other %lld" = "%lld new crashes were reported.";

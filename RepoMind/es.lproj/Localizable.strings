@@ -274,10 +274,6 @@
 "feedback_severity_minor" = "Bugs menores";
 "feedback_severity_enhancement" = "Mejoras";
 "feedback_severity_general" = "Feedback general";
-"feedback_notif_critical %@" = "🔴 [%@] Error crítico reportado";
-"feedback_notif_minor %@" = "🟡 [%@] Bug menor reportado";
-"feedback_notif_enhancement %@" = "🟢 [%@] Nueva mejora solicitada";
-"feedback_notif_general %@" = "💬 [%@] Nuevo feedback de usuario";
 "feedback_open_button" = "Feedback";
 "feedback_unread_badge %lld" = "%lld sin leer";
 
@@ -463,7 +459,6 @@
 "voice_input_changed" = "Grabación detenida: ha cambiado el micrófono.";
 "sync_summary_imported %lld" = "%lld issues importados de GitHub";
 "sync_summary_both %lld %lld" = "%lld completadas, %lld importadas de GitHub";
-"notif_imported_tasks %lld" = "%lld issues nuevos abiertos en GitHub";
 
 /* Columna de ideas */
 "idea_column_section" = "Ideas";
@@ -669,9 +664,7 @@
 "alert_release_title %@" = "Release publicada: %@";
 "alert_release_body %@" = "%@ es la última release.";
 "alert_security_title %@" = "Seguridad: %@";
-"alert_security_body %lld" = "%lld alerta(s) de seguridad nueva(s).";
 "alert_crash_title %@" = "Cierres: %@";
-"alert_crash_body %lld" = "%lld cierre(s) nuevo(s).";
 "home_dashboard_security %lld" = "%lld alerta(s) de seguridad abierta(s)";
 
 /* Panel de apps */
@@ -704,3 +697,15 @@
 "intent_capture_title" = "Añadir una tarea por voz";
 "intent_capture_description" = "Abre RepoMind escuchando: di la app y la tarea.";
 "intent_capture_short_title" = "Añadir tarea";
+
+/* Notificaciones: lo que enseña la pantalla de bloqueo, y adónde lleva un toque */
+"feedback_notif_kind_critical" = "Bug crítico reportado";
+"feedback_notif_kind_minor" = "Bug menor reportado";
+"feedback_notif_kind_enhancement" = "Mejora solicitada";
+"feedback_notif_kind_general" = "Nuevo feedback";
+"notif_imported_one %@" = "Issue nueva en GitHub: %@";
+"notif_imported_other %lld %@" = "%lld issues nuevas en GitHub, empezando por %@";
+"alert_security_body_one" = "GitHub avisa de una alerta de seguridad nueva.";
+"alert_security_body_other %lld" = "GitHub avisa de %lld alertas de seguridad nuevas.";
+"alert_crash_body_one" = "Se ha registrado un cierre nuevo.";
+"alert_crash_body_other %lld" = "Se han registrado %lld cierres nuevos.";

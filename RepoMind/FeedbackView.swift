@@ -5,6 +5,8 @@ import SwiftUI
 
 struct FeedbackView: View {
     let repo: ProjectRepo
+    /// A report to open on its detail as soon as the list is there, when a notification led here.
+    let openIssueID: UUID?
 
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
@@ -12,11 +14,13 @@ struct FeedbackView: View {
 
     @State private var isSyncing = false
     @State private var syncError: String?
+    @State private var openedIssue: FeedbackIssue?
 
     private let repoFullName: String
 
-    init(repo: ProjectRepo) {
+    init(repo: ProjectRepo, openIssueID: UUID? = nil) {
         self.repo = repo
+        self.openIssueID = openIssueID
         let fullName = repo.fullName
         self.repoFullName = fullName
         let predicate = #Predicate<FeedbackIssue> { $0.repoFullName == fullName }
@@ -45,6 +49,14 @@ struct FeedbackView: View {
         }
         .navigationTitle("feedback_title")
         .toolbar { syncButton }
+        .navigationDestination(item: $openedIssue) { issue in
+            FeedbackIssueDetailView(issue: issue, repo: repo)
+        }
+        .onAppear {
+            if let openIssueID, openedIssue == nil {
+                openedIssue = scopedIssues.first { $0.id == openIssueID }
+            }
+        }
         .task { await sync() }
         .alert("feedback_sync_error_title",
                isPresented: Binding(get: { syncError != nil }, set: { if !$0 { syncError = nil } })) {

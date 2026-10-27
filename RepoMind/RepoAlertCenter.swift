@@ -34,6 +34,23 @@ nonisolated enum RepoAlertRules {
         let body: String
     }
 
+    /// Where a tap on the alert leads: the page on GitHub that has the answer (the failing run,
+    /// the release, the security alerts), or the app's statistics for a crash. A repo with no
+    /// GitHub page falls back to its board.
+    static func target(for alert: Alert, htmlURL: String) -> NotificationTarget {
+        let base = htmlURL.hasSuffix("/") ? String(htmlURL.dropLast()) : htmlURL
+        func page(_ path: String) -> NotificationTarget {
+            guard !base.isEmpty, let url = URL(string: base + path) else { return .board(repoID: alert.repoID) }
+            return .web(url)
+        }
+        switch alert.kind {
+        case .ci: return page("/actions")
+        case .releases: return page("/releases/latest")
+        case .security: return page("/security/dependabot")
+        case .crashes: return .stats(repoID: alert.repoID)
+        }
+    }
+
     static func gitHubAlerts(
         previous: Seen?, activity: RepoActivity, repoName: String, enabled: Set<Kind>
     ) -> (alerts: [Alert], seen: Seen) {
@@ -66,7 +83,9 @@ nonisolated enum RepoAlertRules {
                 alerts.append(Alert(
                     kind: .security, repoID: activity.repoID,
                     title: String(format: String(localized: "alert_security_title %@"), repoName),
-                    body: String(format: String(localized: "alert_security_body %lld"), count - known)))
+                    body: count - known == 1
+                        ? String(localized: "alert_security_body_one")
+                        : String(format: String(localized: "alert_security_body_other %lld"), count - known)))
             }
             seen.securityAlerts = count
         }
@@ -92,7 +111,9 @@ nonisolated enum RepoAlertRules {
                 alert = Alert(
                     kind: .crashes, repoID: repoID,
                     title: String(format: String(localized: "alert_crash_title %@"), repoName),
-                    body: String(format: String(localized: "alert_crash_body %lld"), count))
+                    body: count == 1
+                        ? String(localized: "alert_crash_body_one")
+                        : String(format: String(localized: "alert_crash_body_other %lld"), count))
             }
         }
         seen.crashSignature = signature
@@ -167,10 +188,11 @@ final class RepoAlertCenter {
             }
         }
         save()
-        await post(alerts)
+        let htmlURLs = Dictionary(live.map { ($0.repoID, $0.htmlURL) }, uniquingKeysWith: { first, _ in first })
+        await post(alerts, htmlURLs: htmlURLs)
     }
 
-    private func post(_ alerts: [RepoAlertRules.Alert]) async {
+    private func post(_ alerts: [RepoAlertRules.Alert], htmlURLs: [Int: String]) async {
         guard !alerts.isEmpty, await FeedbackNotificationManager.shared.requestAuthorizationIfNeeded() else { return }
         let center = UNUserNotificationCenter.current()
         for alert in alerts {
@@ -178,6 +200,8 @@ final class RepoAlertCenter {
             content.title = alert.title
             content.body = alert.body
             content.sound = .default
+            content.threadIdentifier = "alerts-\(alert.repoID)"
+            content.userInfo = RepoAlertRules.target(for: alert, htmlURL: htmlURLs[alert.repoID] ?? "").userInfo
             let request = UNNotificationRequest(
                 identifier: "alert-\(alert.kind.rawValue)-\(alert.repoID)", content: content, trigger: nil)
             try? await center.add(request)

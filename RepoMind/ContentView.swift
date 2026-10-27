@@ -1586,6 +1586,12 @@ struct AdaptiveRepoListView: View {
     @State private var activeFilter: RepoFilter = .all
     @State private var selectedAccount: GitHubAccount?
     @State private var selectedRepo: ProjectRepo?
+    /// Where a notification wants the selected board to land, and a token that rebuilds the board
+    /// when the tap is for the repo that is already open.
+    @State private var boardFocus: BoardFocus?
+    @State private var boardToken = UUID()
+    @State private var notifications = NotificationRouter.shared
+    @Environment(\.openURL) private var openURL
     @State private var filteredRepos: [ProjectRepo] = []
     @State private var showSettings = false
     @State private var showPaywall = false
@@ -1679,6 +1685,9 @@ struct AdaptiveRepoListView: View {
             updateFilteredRepos()
         }
         .onChange(of: repos) { _, _ in updateFilteredRepos() }
+        .onChange(of: notifications.pending) { _, _ in openPendingNotification() }
+        .onChange(of: repos.count) { _, _ in openPendingNotification() }
+        .task { openPendingNotification() }
         .onChange(of: activeFilter) { _, _ in updateFilteredRepos() }
         .onChange(of: selectedAccount) { _, _ in updateFilteredRepos() }
         .onChange(of: subscription.isPro) { _, _ in updateFilteredRepos() }
@@ -1947,12 +1956,35 @@ struct AdaptiveRepoListView: View {
         }
     }
 
+    // MARK: - Notifications
+
+    /// A tap on a notification: select the repo and, for a task or a report, open it. The iPad and
+    /// Mac list has no statistics screen, so those taps land on the board.
+    private func openPendingNotification() {
+        guard let target = notifications.pending, !repos.isEmpty else { return }
+        notifications.clear()
+        guard let destination = target.destination(repos: repos, feedback: feedbackIssues) else { return }
+        switch destination {
+        case .board(let repo, let focus):
+            boardFocus = focus
+            boardToken = UUID()
+            selectedRepo = repo
+        case .stats(let repo):
+            boardFocus = nil
+            boardToken = UUID()
+            selectedRepo = repo
+        case .web(let url):
+            openURL(url)
+        }
+    }
+
     // MARK: - Detail
 
     @ViewBuilder
     private var detail: some View {
         if let selectedRepo {
-            KanbanView(project: selectedRepo)
+            KanbanView(project: selectedRepo, focus: boardFocus)
+                .id(boardToken)
         } else {
             ContentUnavailableView {
                 Label("select_repo_prompt", systemImage: "sidebar.left")

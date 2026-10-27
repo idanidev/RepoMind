@@ -8,6 +8,8 @@ enum HomeRoute: Hashable {
     case apps
     case digest(HomeDigestKind)
     case stats(ProjectRepo)
+    /// A board opened from a notification, on the task, the column or the report it was about.
+    case board(ProjectRepo, BoardFocus?)
 }
 
 // MARK: - Live home
@@ -35,6 +37,7 @@ struct HomeLiveView: View {
     @State private var subscription = SubscriptionManager.shared
     @State private var activity = RepoActivityStore.shared
     @State private var statsStore = RepoStatsStore.shared
+    @State private var notifications = NotificationRouter.shared
     @State private var path = NavigationPath()
     @State private var tab: HomeTab = .start
     @State private var selectedAccount: String?
@@ -97,8 +100,14 @@ struct HomeLiveView: View {
                             refresh: { await refresh() }))
                 case .digest(let kind): onBlack { HomeDigestView(kind: kind) }
                 case .stats(let repo): BoardStatsView(project: repo)
+                case .board(let repo, let focus): BoardView(project: repo, focus: focus)
                 }
             }
+            // A tap on a notification: now if the repos are here, or when they arrive from iCloud on
+            // a launch that started with the tap.
+            .onChange(of: notifications.pending) { _, _ in openPendingNotification() }
+            .onChange(of: repos.count) { _, _ in openPendingNotification() }
+            .task { openPendingNotification() }
             .sheet(isPresented: $showAddLocalProject) {
                 AddLocalProjectSheet()
                     .environment(\.modelContext, context)
@@ -136,6 +145,27 @@ struct HomeLiveView: View {
                     await statsStore.refresh(repoID: repoID)
                 }
             }
+        }
+    }
+
+    // MARK: Notifications
+
+    /// Takes the target the last tap left in the router and goes there, from the root, so the back
+    /// button leads home and not through whatever was open. A target that no longer resolves (the
+    /// report was deleted, the repo removed) is dropped rather than kept for ever.
+    private func openPendingNotification() {
+        guard let target = notifications.pending, !repos.isEmpty else { return }
+        notifications.clear()
+        guard let destination = target.destination(repos: repos, feedback: feedbackIssues) else { return }
+        switch destination {
+        case .board(let repo, let focus):
+            path = NavigationPath()
+            path.append(HomeRoute.board(repo, focus))
+        case .stats(let repo):
+            path = NavigationPath()
+            path.append(HomeRoute.stats(repo))
+        case .web(let url):
+            openURL(url)
         }
     }
 

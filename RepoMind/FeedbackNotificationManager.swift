@@ -42,15 +42,16 @@ final class FeedbackNotificationManager {
 
         let center = UNUserNotificationCenter.current()
         for issue in new {
-            let repoShortName = issue.repoFullName.split(separator: "/").last.map(String.init) ?? issue.repoFullName
             let content = UNMutableNotificationContent()
-            content.title = title(for: issue.severityEnum, repo: repoShortName)
-            content.body = issue.title
+            // The app first, what kind of report second, the report itself last: the order a
+            // developer reads a lock screen in. Grouped by app, so a burst stacks instead of scrolling.
+            content.title = NotificationText.shortRepoName(issue.repoFullName)
+            content.subtitle = kind(for: issue.severityEnum)
+            content.body = NotificationText.issueLine(number: issue.issueNumber, title: issue.title)
             content.sound = .default
-            content.userInfo = [
-                "feedbackIssueID": issue.id.uuidString,
-                "htmlURL": issue.htmlURL
-            ]
+            content.threadIdentifier = "feedback-\(issue.repoFullName)"
+            content.relevanceScore = relevance(for: issue.severityEnum)
+            content.userInfo = NotificationTarget.feedback(issueID: issue.id).userInfo
             let request = UNNotificationRequest(
                 identifier: "feedback-\(issue.id.uuidString)",
                 content: content,
@@ -65,14 +66,19 @@ final class FeedbackNotificationManager {
     /// The board imports them silently, so tasks a teammate — or a coding agent — opened simply
     /// appeared one day with nothing to say they had. One grouped notification per repo, not one
     /// per issue: a sweep can pull in several at once and a burst of banners is worse than none.
-    func notifyImportedTasks(_ count: Int, repoName: String) async {
-        guard count > 0, await requestAuthorizationIfNeeded() else { return }
+    /// It names the first issue, and a tap lands on that task when it was one, on its column otherwise.
+    func notifyImportedTasks(_ issues: [TaskIssueSyncService.ImportedIssue], repoID: Int, repoName: String) async {
+        guard let first = issues.first, await requestAuthorizationIfNeeded() else { return }
 
+        let line = NotificationText.issueLine(number: first.number, title: first.title)
         let content = UNMutableNotificationContent()
         content.title = repoName
-        content.body = String(format: String(localized: "notif_imported_tasks %lld"), count)
+        content.body = issues.count == 1
+            ? String(format: String(localized: "notif_imported_one %@"), line)
+            : String(format: String(localized: "notif_imported_other %lld %@"), issues.count, line)
         content.sound = .default
-        content.userInfo = ["importedRepo": repoName]
+        content.threadIdentifier = "imported-\(repoName)"
+        content.userInfo = NotificationTarget.tasks(repoID: repoID, taskIDs: issues.map(\.taskID)).userInfo
 
         let request = UNNotificationRequest(
             identifier: "imported-\(repoName)-\(Date.now.timeIntervalSince1970)",
@@ -82,16 +88,22 @@ final class FeedbackNotificationManager {
         try? await UNUserNotificationCenter.current().add(request)
     }
 
-    private func title(for severity: FeedbackSeverity, repo: String) -> String {
+    private func kind(for severity: FeedbackSeverity) -> String {
         switch severity {
-        case .critical:
-            return String(format: String(localized: "feedback_notif_critical %@"), repo)
-        case .minor:
-            return String(format: String(localized: "feedback_notif_minor %@"), repo)
-        case .enhancement:
-            return String(format: String(localized: "feedback_notif_enhancement %@"), repo)
-        case .general:
-            return String(format: String(localized: "feedback_notif_general %@"), repo)
+        case .critical: String(localized: "feedback_notif_kind_critical")
+        case .minor: String(localized: "feedback_notif_kind_minor")
+        case .enhancement: String(localized: "feedback_notif_kind_enhancement")
+        case .general: String(localized: "feedback_notif_kind_general")
+        }
+    }
+
+    /// How high a report sits in the notification summary the system builds.
+    private func relevance(for severity: FeedbackSeverity) -> Double {
+        switch severity {
+        case .critical: 1.0
+        case .minor: 0.6
+        case .enhancement: 0.4
+        case .general: 0.3
         }
     }
 

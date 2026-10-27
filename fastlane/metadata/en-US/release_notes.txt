@@ -8,6 +8,7 @@ A new Home, a new repo list and a new board on iPhone.
 • Voice: it no longer cuts you off or saves by itself. Review the card, edit it, keep dictating, then save. It knows your app names, and on iOS 26 with Apple Intelligence it shapes the title, details, kind and column on your device, even several tasks from one dictation
 • Dictate from anywhere: a Home Screen and Lock Screen widget, Siri ("Add a task in RepoMind") and the Action Button open the app listening. Say the app and the task, like "In InSync, fix the login"
 • Agent: each task carries its kind as a GitHub label and can be handed to a coding agent
+• Notifications: tapping a report or a new issue opens the task or the report itself, they read cleaner and stack by app, and they show up even with the app open
 • Pro: alerts for failing builds, new releases, security alerts and crashes, and a panel with all your apps
 • Profile under Settings, search at the bottom next to the tabs
 

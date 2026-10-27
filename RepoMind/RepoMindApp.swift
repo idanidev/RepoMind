@@ -1,5 +1,6 @@
 import SwiftData
 import SwiftUI
+import UserNotifications
 
 #if canImport(UIKit)
     class AppDelegate: NSObject, UIApplicationDelegate {
@@ -8,6 +9,8 @@ import SwiftUI
             didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
         ) -> Bool {
             application.registerForRemoteNotifications()
+            // Before launch finishes: a tap that launches the app is delivered once this is set.
+            UNUserNotificationCenter.current().delegate = NotificationDelegate.shared
             if let shortcutItem = launchOptions?[.shortcutItem] as? UIApplicationShortcutItem {
                 QuickActionRouter.shared.pendingItem = shortcutItem
             }
