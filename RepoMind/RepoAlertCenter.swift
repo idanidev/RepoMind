@@ -203,6 +203,12 @@ final class RepoAlertCenter {
 
     nonisolated deinit {}
 
+    /// Forgets what was seen, on sign-out: the next account's first sight is recorded, not announced.
+    func reset() {
+        seen = [:]
+        defaults.removeObject(forKey: Self.seenKey)
+    }
+
     static func isEnabled(_ kind: RepoAlertRules.Kind) -> Bool {
         UserDefaults.standard.object(forKey: kind.defaultsKey) as? Bool ?? true
     }

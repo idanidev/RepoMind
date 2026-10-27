@@ -61,6 +61,13 @@ nonisolated enum TaskLabelStore {
         defaults.removeObject(forKey: prefix + taskID.uuidString)
     }
 
+    /// Every task's labels, on sign-out: the tasks go with the account, and the entries would stay.
+    static func removeAll(defaults: UserDefaults = .standard) {
+        for key in defaults.dictionaryRepresentation().keys where key.hasPrefix(prefix) {
+            defaults.removeObject(forKey: key)
+        }
+    }
+
     /// Settings → Agent: whether new tasks go to the agent unless the capture says otherwise.
     static var delegatesNewTasks: Bool {
         UserDefaults.standard.bool(forKey: "delegateNewTasks")

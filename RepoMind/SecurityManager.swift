@@ -31,14 +31,18 @@ actor KeychainManager {
             SecItemDelete(deleteQuery as CFDictionary)
         }
 
-        // Add new item — synced via iCloud Keychain for seamless cross-device login
+        // Add new item — synced via iCloud Keychain for seamless cross-device login.
+        //
+        // After the first unlock, not only while unlocked: the background refresh that powers the
+        // alerts runs with the phone locked, and a `WhenUnlocked` item is unreadable there
+        // (errSecInteractionNotAllowed), which every caller read as "no token" and skipped.
         let addQuery: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: accountKey,
             kSecValueData as String: data,
             kSecAttrSynchronizable as String: true,
-            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlocked,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock,
         ]
 
         let status = SecItemAdd(addQuery as CFDictionary, nil)
@@ -96,6 +100,40 @@ actor KeychainManager {
             guard status == errSecSuccess || status == errSecItemNotFound else {
                 throw KeychainError.deleteFailed(status)
             }
+        }
+    }
+
+    /// Every token this app keeps, synced or not: each account's and the one per connected app.
+    /// Signing out has to take them all, or they survive in iCloud Keychain on every device.
+    func deleteAllTokens() throws {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
+        ]
+        let status = SecItemDelete(query as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else {
+            throw KeychainError.deleteFailed(status)
+        }
+    }
+
+    // MARK: - Accessibility migration
+
+    /// Moves the tokens saved before the change above to the class a background refresh can read.
+    /// One update for the whole service; it needs the items readable, so it runs from the foreground
+    /// at launch, and a failure (a launch with the phone locked) just tries again the next time.
+    func migrateAccessibility(defaults: UserDefaults = .standard) {
+        let doneKey = "keychainAfterFirstUnlock"
+        guard !defaults.bool(forKey: doneKey) else { return }
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
+        ]
+        let update: [String: Any] = [kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock]
+        let status = SecItemUpdate(query as CFDictionary, update as CFDictionary)
+        if status == errSecSuccess || status == errSecItemNotFound {
+            defaults.set(true, forKey: doneKey)
         }
     }
 

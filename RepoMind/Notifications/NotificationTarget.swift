@@ -69,7 +69,7 @@ nonisolated enum NotificationTarget: Hashable, Sendable {
             case "stats":
                 return (userInfo[Key.repoID] as? Int).map { .stats(repoID: $0) }
             case "web":
-                return (userInfo[Key.url] as? String).flatMap(URL.init(string:)).map { .web($0) }
+                return SafeLink.web(userInfo[Key.url] as? String).map { .web($0) }
             default:
                 return nil
             }

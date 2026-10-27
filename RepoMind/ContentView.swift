@@ -892,7 +892,7 @@ struct RepoListView: View {
                 // never matches those, so they stayed visible under "All accounts" to whoever
                 // signed in next.
                 try? context.delete(model: ProjectRepo.self)
-                try? await KeychainManager.shared.deleteToken()
+                await SessionReset.run(context: context)
             }
             SubscriptionManager.shared.isMockPro = false
             lastSyncTimestamp = 0
@@ -2156,7 +2156,7 @@ struct AdaptiveRepoListView: View {
                 // never matches those, so they stayed visible under "All accounts" to whoever
                 // signed in next.
                 try? context.delete(model: ProjectRepo.self)
-                try? await KeychainManager.shared.deleteToken()
+                await SessionReset.run(context: context)
             }
             SubscriptionManager.shared.isMockPro = false
             lastSyncTimestamp = 0

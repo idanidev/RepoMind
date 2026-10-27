@@ -12,9 +12,6 @@ import SwiftData
 //     - repo (optional): repo name to target. If omitted, uses the first repo.
 //     - column (optional): column name. If omitted, uses the first column.
 //
-//   repomind://open-repo?name=my-app
-//     - name (required): repo name to navigate to
-//
 //   repomind://capture
 //     - opens the dictation sheet with the microphone on: say the app and the task. The widget,
 //       the Siri shortcut and the Action Button all end up here.
@@ -22,6 +19,7 @@ import SwiftData
 
 @MainActor
 enum DeepLinkHandler {
+    private static let maxContentLength = 2_000
 
     static func handle(_ url: URL, in context: ModelContext) {
         guard url.scheme == "repomind" else { return }
@@ -45,7 +43,10 @@ enum DeepLinkHandler {
               let queryItems = components.queryItems
         else { return }
 
+        // Any web page, app or Shortcut can open this URL, so the text is bounded: a task is a
+        // sentence or two, and it can be published to GitHub under the owner's name.
         let content = queryItems.first { $0.name == "content" }?.value
+            .map { String($0.trimmingCharacters(in: .whitespacesAndNewlines).prefix(Self.maxContentLength)) }
         let repoName = queryItems.first { $0.name == "repo" }?.value
         let columnName = queryItems.first { $0.name == "column" }?.value
 
@@ -82,7 +83,9 @@ enum DeepLinkHandler {
         let columns = (repo.columns ?? []).sorted { $0.orderIndex < $1.orderIndex }
         let column: KanbanColumn?
         if let columnName {
-            column = columns.first { $0.name.localizedStandardContains(columnName) }
+            // The whole name first: "do" is a part of "To Do" and of "Doing".
+            column = columns.first { $0.name.localizedCompare(columnName) == .orderedSame }
+                ?? columns.first { $0.name.localizedStandardContains(columnName) }
         } else {
             column = columns.first
         }

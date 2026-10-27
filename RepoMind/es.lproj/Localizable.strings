@@ -638,10 +638,10 @@
 "capture_kind_chore" = "Tarea";
 "capture_remove_draft" = "Quitar";
 "capture_ai_unavailable" = "La inteligencia del dispositivo no está disponible aquí, así que esto es el dictado tal cual.";
-"capture_ai_badge" = "Con forma dada en tu dispositivo. Nada ha salido de él.";
+"capture_ai_badge" = "Con forma dada en tu dispositivo.";
 "voice_section_header" = "Voz";
 "voice_ai_toggle" = "Dar forma a las capturas con la inteligencia del dispositivo";
-"voice_ai_footer" = "Convierte lo que dictas en un título limpio y unos detalles, separa asuntos distintos en tareas distintas y elige la columna que nombres. Necesita iOS 26 y Apple Intelligence; nada sale del dispositivo. Apagado, el dictado se guarda tal cual.";
+"voice_ai_footer" = "Convierte lo que dictas en un título limpio y unos detalles, separa asuntos distintos en tareas distintas y elige la columna que nombres. Necesita iOS 26 y Apple Intelligence, y funciona en el dispositivo. Apagado, el dictado se guarda tal cual.";
 
 /* Ajustes de voz */
 "voice_silence_picker" = "Parar tras una pausa de";

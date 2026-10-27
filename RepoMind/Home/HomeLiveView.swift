@@ -465,7 +465,7 @@ struct HomeLiveView: View {
                 isDemoMode = false
                 SubscriptionManager.shared.isDemoMode = false
             } else {
-                try? await KeychainManager.shared.deleteToken()
+                await SessionReset.run(context: context)
             }
             SubscriptionManager.shared.isMockPro = false
             lastSyncTimestamp = 0

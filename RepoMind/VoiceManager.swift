@@ -185,11 +185,18 @@ final class VoiceManager {
     /// `taskHint = .dictation` is the part that matters: the default, `.unspecified`, makes the
     /// recognizer hedge between short commands and free speech. These are dictated notes — often
     /// long, unstructured sentences — and telling it so measurably reduces invented words.
-    private func makeRecognitionRequest() -> SFSpeechAudioBufferRecognitionRequest {
+    ///
+    /// On the device whenever the recognizer can: what is dictated names private repos and customers,
+    /// and the default sends the audio and the vocabulary (`contextualStrings`) to Apple's servers.
+    /// A language without an on-device model still falls back to the server, as it always did.
+    private func makeRecognitionRequest(for recognizer: SFSpeechRecognizer?) -> SFSpeechAudioBufferRecognitionRequest {
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
         request.addsPunctuation = true
         request.taskHint = .dictation
+        if recognizer?.supportsOnDeviceRecognition == true {
+            request.requiresOnDeviceRecognition = true
+        }
         if !contextualStrings.isEmpty {
             request.contextualStrings = contextualStrings
         }
@@ -364,8 +371,8 @@ final class VoiceManager {
             }
 
             // Create SEPARATE requests for each language
-            let requestPrimary = makeRecognitionRequest()
-            let requestSecondary = makeRecognitionRequest()
+            let requestPrimary = makeRecognitionRequest(for: recPrimary)
+            let requestSecondary = makeRecognitionRequest(for: recSecondary)
 
             self.recognitionRequestPrimary = requestPrimary
             self.recognitionRequestSecondary = requestSecondary
@@ -389,7 +396,7 @@ final class VoiceManager {
                 return
             }
 
-            let request = makeRecognitionRequest()
+            let request = makeRecognitionRequest(for: speechRecognizer)
             self.recognitionRequest = request
 
             recognitionTask = speechRecognizer.recognitionTask(with: request) {

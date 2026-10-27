@@ -130,6 +130,7 @@ struct RepoMindApp: App {
                         }
                     }
                     .task {
+                        await KeychainManager.shared.migrateAccessibility()
                         // Skip when not authenticated or in demo mode (no real repos to sync).
                         let isAuth = UserDefaults.standard.bool(forKey: "isAuthenticated")
                         let isDemo = UserDefaults.standard.bool(forKey: "isDemoMode")

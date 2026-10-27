@@ -1,0 +1,6 @@
+/* Cadenas del Info.plist: los avisos de permisos y la acción rápida de la pantalla de inicio. */
+"NSFaceIDUsageDescription" = "RepoMind usa Face ID para desbloquear con seguridad el acceso a tus repositorios de GitHub.";
+"NSMicrophoneUsageDescription" = "RepoMind necesita el micrófono para grabar notas de voz y convertirlas en tareas.";
+"NSSpeechRecognitionUsageDescription" = "RepoMind usa el reconocimiento de voz para transcribir tus notas de voz en tarjetas de tareas. Si el idioma lo admite, el audio se procesa en tu dispositivo; si no, se envía al reconocimiento de voz de Apple.";
+"quick_action_new_task_title" = "Nueva tarea";
+"quick_action_new_task_subtitle" = "Añade una tarea a cualquier repo";

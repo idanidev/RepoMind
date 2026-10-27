@@ -62,6 +62,19 @@ final class RepoStatsStore {
         failures[repoID] = nil
     }
 
+    /// Forgets every connected app (endpoint, token and cache), on sign-out.
+    func disconnectAll() async {
+        let prefix = "repoStatsEndpoint_"
+        for key in defaults.dictionaryRepresentation().keys where key.hasPrefix(prefix) {
+            if let repoID = Int(key.dropFirst(prefix.count)) {
+                await disconnect(repoID: repoID)
+            }
+        }
+        stats = [:]
+        fetchedAt = [:]
+        failures = [:]
+    }
+
     // MARK: Reading
 
     /// What memory holds. Pure, so a view can call it while rendering.

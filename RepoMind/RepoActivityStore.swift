@@ -45,6 +45,14 @@ final class RepoActivityStore {
         activities[repoID]
     }
 
+    /// Forgets everything, on sign-out: the next account must not inherit this one's pull requests
+    /// and builds, nor wait an hour for the first refresh.
+    func reset() {
+        activities = [:]
+        lastRefresh = nil
+        defaults.removeObject(forKey: Self.defaultsKey)
+    }
+
     var isStale: Bool {
         guard let lastRefresh else { return true }
         return Date.now.timeIntervalSince(lastRefresh) > maxAge

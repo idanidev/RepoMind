@@ -57,6 +57,11 @@ final class FeedbackService {
         UserDefaults.standard.set(map, forKey: Self.lastCheckKey)
     }
 
+    /// Forgets where each repo was last polled, on sign-out: the next account polls from scratch.
+    func resetCheckpoints() {
+        UserDefaults.standard.removeObject(forKey: Self.lastCheckKey)
+    }
+
     func lastCheck(for repoFullName: String) -> Date? {
         guard let str = lastCheckMap()[repoFullName] else { return nil }
         return isoFormatter.date(from: str)

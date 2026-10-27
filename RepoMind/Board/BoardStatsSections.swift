@@ -240,7 +240,7 @@ struct BoardStatsIssuesCard: View {
     }
 
     private func row(_ issue: RepoStats.Issue) -> some View {
-        let link = issue.url.flatMap(URL.init(string:))
+        let link = SafeLink.web(issue.url)
         return Button {
             if let link { openURL(link) }
         } label: {
