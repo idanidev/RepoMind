@@ -1,17 +1,23 @@
-# TestFlight sin Mac: un runner macOS de GitHub archiva la app iOS y la sube a
-# TestFlight (pruebas internas). Arranca con cada push a las ramas de abajo; el
-# lanzamiento a mano (Actions → TestFlight → Run workflow) funciona en cuanto
-# el fichero esté también en main, que es la rama que GitHub indexa.
+# TestFlight sin Mac: un runner macOS de GitHub compila la app iOS con `fastlane ios beta` y
+# la sube a TestFlight (pruebas internas). Arranca con cada push a las ramas de abajo; el
+# lanzamiento a mano (Actions → TestFlight → Run workflow) funciona en cuanto el fichero esté
+# también en main, que es la rama que GitHub indexa.
 #
-# Necesita tres secretos del repo (Settings → Secrets and variables → Actions):
-#   ASC_KEY_ID      Key ID de una clave de la API de App Store Connect
-#   ASC_ISSUER_ID   Issuer ID de esa clave
-#   ASC_KEY_P8      El contenido entero del fichero .p8 de la clave
-# La clave tiene que ser de rol Admin: la firma la gestiona Xcode en la nube
-# con ella (no hay certificados en el runner), y eso exige Admin.
+# Firma con `match`, como desde el Mac: el certificado de distribución y el perfil salen del
+# repo privado de certificados, y el runner no pide nada a Apple. Antes se firmaba "en la nube"
+# con -allowProvisioningUpdates, y cada run creaba un certificado de desarrollo nuevo (el runner
+# nunca tiene la clave privada del anterior): a los siete runs la cuenta llegó al máximo y el
+# archive murió con "Choose a certificate to revoke".
 #
-# Se usa el Xcode 26 más nuevo del runner (la tienda aún no acepta builds del
-# 27). El número de build lo pone Xcode al subir (el siguiente libre).
+# Secretos del repo (Settings → Secrets and variables → Actions):
+#   ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8   Clave de la API de App Store Connect (rol Admin):
+#       con ella fastlane sube la build y match habla con Apple si hace falta.
+#   MATCH_GIT_URL      URL https del repo privado de certificados de match.
+#   MATCH_GIT_TOKEN    Un token de GitHub (fine-grained, solo lectura de Contents sobre ese
+#                      repo) para que el runner pueda clonarlo.
+#   MATCH_PASSWORD     La contraseña con la que match cifró ese repo.
+#
+# Se usa el Xcode 26 más nuevo del runner. El número de build lo pone la lane (fecha y hora).
 
 name: TestFlight
 
@@ -42,8 +48,18 @@ jobs:
     env:
       ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
       ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      ASC_KEY_FILEPATH: ${{ runner.temp }}/asc/AuthKey.p8
+      MATCH_GIT_URL: ${{ secrets.MATCH_GIT_URL }}
+      MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+      FASTLANE_SKIP_UPDATE_CHECK: "1"
+      FASTLANE_XCODEBUILD_SETTINGS_TIMEOUT: "120"
     steps:
       - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+          bundler-cache: true
 
       - name: Xcode 26, el más nuevo del runner
         run: |
@@ -54,45 +70,39 @@ jobs:
           sudo xcode-select -s "$app"
           xcodebuild -version
 
-      - name: Clave de App Store Connect
+      - name: Clave de App Store Connect y acceso a match
         env:
           ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          MATCH_GIT_TOKEN: ${{ secrets.MATCH_GIT_TOKEN }}
         run: |
           if [ -z "$ASC_KEY_ID" ] || [ -z "$ASC_ISSUER_ID" ] || [ -z "$ASC_KEY_P8" ]; then
             echo "::error::Faltan secretos: ASC_KEY_ID, ASC_ISSUER_ID y ASC_KEY_P8 (Settings → Secrets → Actions)"; exit 1
           fi
+          if [ -z "$MATCH_GIT_URL" ] || [ -z "$MATCH_GIT_TOKEN" ] || [ -z "$MATCH_PASSWORD" ]; then
+            echo "::error::Faltan secretos de match: MATCH_GIT_URL, MATCH_GIT_TOKEN y MATCH_PASSWORD"; exit 1
+          fi
           mkdir -p "$RUNNER_TEMP/asc"
-          printf '%s\n' "$ASC_KEY_P8" > "$RUNNER_TEMP/asc/AuthKey.p8"
-          chmod 600 "$RUNNER_TEMP/asc/AuthKey.p8"
+          printf '%s\n' "$ASC_KEY_P8" > "$ASC_KEY_FILEPATH"
+          chmod 600 "$ASC_KEY_FILEPATH"
+          # match clona el repo de certificados por https con autenticación básica: usuario
+          # cualquiera y el token como contraseña, en base64. Enmascarado para que no salga en el log.
+          auth=$(printf '%s' "x-access-token:$MATCH_GIT_TOKEN" | base64 | tr -d '\n')
+          echo "::add-mask::$auth"
+          echo "MATCH_GIT_BASIC_AUTHORIZATION=$auth" >> "$GITHUB_ENV"
 
-      - name: Archive
-        run: |
-          set +e
-          xcodebuild archive \
-            -project RepoMind.xcodeproj -scheme RepoMind -configuration Release \
-            -destination 'generic/platform=iOS' \
-            -archivePath "$RUNNER_TEMP/RepoMind.xcarchive" \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath "$RUNNER_TEMP/asc/AuthKey.p8" \
-            -authenticationKeyID "$ASC_KEY_ID" \
-            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
-            > "$RUNNER_TEMP/archive.log" 2>&1
-          estado=$?
-          set -e
-          # Solo lo que importa en pantalla; el registro entero va al artefacto.
-          grep -E "error:|\*\* ARCHIVE" "$RUNNER_TEMP/archive.log" || true
-          exit $estado
+      - name: Compilar y subir a TestFlight
+        run: bundle exec fastlane ios beta
 
-      - name: Subir a TestFlight
+      - name: Registro de gym
+        if: failure()
         run: |
-          xcodebuild -exportArchive \
-            -archivePath "$RUNNER_TEMP/RepoMind.xcarchive" \
-            -exportOptionsPlist .github/ExportOptions.plist \
-            -exportPath "$RUNNER_TEMP/export" \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath "$RUNNER_TEMP/asc/AuthKey.p8" \
-            -authenticationKeyID "$ASC_KEY_ID" \
-            -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+          log=$(ls -t ~/Library/Logs/gym/*.log 2>/dev/null | head -1)
+          if [ -n "$log" ]; then
+            echo "::group::Errores del archive"
+            grep -E "error:|\*\* ARCHIVE|\*\* EXPORT" "$log" | head -60 || true
+            echo "::endgroup::"
+            cp "$log" "$RUNNER_TEMP/archive.log"
+          fi
 
       - name: Registro del archive
         if: always()

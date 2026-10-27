@@ -38,11 +38,27 @@ platform :ios do
       xcodeproj:    PROJECT
     )
 
+    # En GitHub Actions no hay llavero del usuario: match necesita uno temporal.
+    setup_ci if ENV["CI"]
+
     match(
       type:     "appstore",
       api_key:  api_key,
       readonly: true
     )
+
+    profile = ENV["sigh_#{BUNDLE_ID.gsub('.','_')}_appstore_profile-name"]
+
+    # En CI el archive se firma a mano con el certificado de distribución que trae match.
+    # Con la firma automática, Xcode busca un certificado de desarrollo con clave privada en
+    # el runner, no lo encuentra y crea uno nuevo en cada run; a los pocos runs la cuenta
+    # llega al máximo de certificados y el archive falla ("Choose a certificate to revoke").
+    xcargs = ENV["CI"] ? [
+      "CODE_SIGN_STYLE=Manual",
+      "CODE_SIGN_IDENTITY='Apple Distribution'",
+      "PROVISIONING_PROFILE_SPECIFIER='#{profile}'",
+      "DEVELOPMENT_TEAM=AXK73U74AC",
+    ].join(" ") : nil
 
     gym(
       scheme:           SCHEME,
@@ -52,9 +68,11 @@ platform :ios do
       output_directory: "./build",
       output_name:      "RepoMind.ipa",
       clean:            true,
+      xcargs:           xcargs,
       export_options: {
+        signingStyle: "manual",
         provisioningProfiles: {
-          BUNDLE_ID => ENV["sigh_#{BUNDLE_ID.gsub('.','_')}_appstore_profile-name"]
+          BUNDLE_ID => profile
         }
       }
     )

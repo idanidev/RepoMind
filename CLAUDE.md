@@ -32,10 +32,15 @@ bundle exec fastlane ios upload_metadata
 ```
 
 Sin Mac, lo mismo desde GitHub Actions (`.github/workflows`), con los secretos `ASC_KEY_ID`,
-`ASC_ISSUER_ID` y `ASC_KEY_P8` (clave de rol Admin de la API de App Store Connect):
+`ASC_ISSUER_ID` y `ASC_KEY_P8` (clave de rol Admin de la API de App Store Connect) y, para firmar,
+`MATCH_GIT_URL`, `MATCH_GIT_TOKEN` (token de GitHub con lectura del repo de certificados) y
+`MATCH_PASSWORD`:
 
 - `tests.yml` — tests unitarios en simulador, con cada push a las ramas de trabajo y cada PR a main
-- `testflight.yml` — archive firmado en la nube y subida a TestFlight con cada push a las ramas de trabajo
+- `testflight.yml` — `fastlane ios beta` (match + gym + subida a TestFlight) con cada push a las ramas
+  de trabajo. Firma a mano con el certificado de distribución de match: la firma "en la nube" con
+  `-allowProvisioningUpdates` creaba un certificado de desarrollo por run y a los siete la cuenta
+  llegó al máximo ("Choose a certificate to revoke")
 - `release.yml` — a mano: sube metadatos y notas de `fastlane/metadata` y, si se marca, envía a revisión
   la build ya subida. Como todo `workflow_dispatch`, solo aparece en Actions cuando el fichero está en main
 
@@ -83,6 +88,11 @@ RepoMind/
 - Modelos `@Model` SwiftData: todos los campos opcionales o con valor por defecto
 - Mac Catalyst: comprobar `#if targetEnvironment(macCatalyst)` antes de APIs exclusivos de iOS
 - SwiftLint activo: no dejar warnings, no imports sin usar
+- Clase `@MainActor` (o con la aislación por defecto del módulo) que se crea y se destruye, y no
+  solo un `shared`: ponerle `nonisolated deinit {}`. El `deinit` sintetizado queda aislado al main
+  actor y pasa por `swift_task_deinitOnExecutor`, que en el runtime de iOS 26 aborta con "pointer
+  being freed was not allocated" cuando el objeto muere fuera de una tarea. Mató el host de tests
+  en `RepoActivityStoreTests` y antes la app en `BiometricAuthManager` (swiftlang/swift#85663)
 
 ## Publicar una versión
 
