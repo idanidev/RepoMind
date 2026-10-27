@@ -160,6 +160,9 @@ struct HomeLiveView: View {
                 }
             }
             .task {
+                // This task stops while a board or Today is pushed over the home, and restarts on the way
+                // back: a midnight that passed in between is noticed here.
+                if !Calendar.current.isDate(dayTick, inSameDayAs: .now) { dayTick = .now }
                 for await _ in NotificationCenter.default.notifications(named: .NSCalendarDayChanged) {
                     dayTick = .now
                 }
@@ -398,12 +401,18 @@ struct HomeLiveView: View {
         return SubscriptionManager.visible(ordered, limit: subscription.repoLimit, isFavorite: \.isFavorite)
     }
 
-    /// The same repos the list shows: the selected account, archived counted apart.
-    private var dashboard: HomeDashboardData {
+    /// What the home counts: the repos the plan shows for the selected account, and its archived ones
+    /// (counted apart). The start screen and the attention row must agree, so both read this.
+    private var countedRepos: [ProjectRepo] {
         let archived = repos.filter {
             $0.isArchived && (selectedAccount == nil || $0.account?.username == selectedAccount)
         }
-        let mine = entitledRepos + archived
+        return entitledRepos + archived
+    }
+
+    /// The same repos the list shows: the selected account, archived counted apart.
+    private var dashboard: HomeDashboardData {
+        let mine = countedRepos
         let names = Set(mine.map(\.fullName))
         let unread = feedbackIssues.filter {
             !$0.isRead && !$0.isSnoozed && $0.state == "open" && names.contains($0.repoFullName)
@@ -449,7 +458,7 @@ struct HomeLiveView: View {
     /// directly: this used to build the whole start screen (every task walked eight times) just to read
     /// two of its numbers, on every redraw of the Tasks tab.
     private var attentionCount: Int {
-        let scope = entitledRepos
+        let scope = countedRepos
         let names = Set(scope.map(\.fullName))
         let unread = feedbackIssues.filter {
             !$0.isRead && !$0.isSnoozed && $0.state == "open" && names.contains($0.repoFullName)
@@ -550,24 +559,34 @@ struct HomeLiveView: View {
         // Two account rows sharing a username make every refresh insert duplicate repos.
         DuplicateRepair.run(context: context)
 
-        do {
-            for account in accounts {
+        // Account by account: a failure on the first must not skip the second, and the sheet that
+        // replaces an expired token has to be for the account whose token expired.
+        var expired: GitHubAccount?
+        var failure: Error?
+        for account in accounts {
+            do {
                 if let token = try await KeychainManager.shared.retrieveToken(for: account.tokenKey) {
                     try await GitHubService.shared.syncRepos(account: account, token: token, into: context)
                 }
+            } catch GitHubError.invalidToken {
+                expired = expired ?? account
+            } catch {
+                failure = failure ?? error
             }
+        }
+        if let expired {
+            // Not transient: offer to replace the token in place rather than signing out, which
+            // would delete the local repos and their tasks.
+            expiredTokenAccount = expired
+        } else if let failure {
+            if !silent {
+                ToastManager.shared.show(failure.localizedDescription, style: .error)
+            }
+        } else {
             lastSyncTimestamp = Date().timeIntervalSince1970
             if !silent {
                 ToastManager.shared.show(String(localized: "repos_synced_toast"), style: .success)
                 Self.syncSuccessFeedback.notificationOccurred(.success)
-            }
-        } catch GitHubError.invalidToken {
-            // Not transient: offer to replace the token in place rather than signing out, which
-            // would delete the local repos and their tasks.
-            expiredTokenAccount = accounts.first { $0.username != "demo-user" }
-        } catch {
-            if !silent {
-                ToastManager.shared.show(error.localizedDescription, style: .error)
             }
         }
     }

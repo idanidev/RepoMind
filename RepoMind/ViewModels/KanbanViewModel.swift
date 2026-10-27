@@ -195,6 +195,12 @@ final class KanbanViewModel {
         try? modelContext.save()
     }
 
+    /// Whether the new-column alert has a name to create. `createColumn()` returns false both for a blank
+    /// name and for the free-tier limit; callers use this to tell the two apart.
+    var hasColumnName: Bool {
+        !newColumnName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     @discardableResult
     func createColumn() -> Bool {
         let name = newColumnName.trimmingCharacters(in: .whitespacesAndNewlines)

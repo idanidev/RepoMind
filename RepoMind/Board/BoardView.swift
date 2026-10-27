@@ -191,7 +191,8 @@ struct BoardView: View {
                 viewModel.newColumnName = ""
             }
             Button("create_button") {
-                if !viewModel.createColumn() {
+                // A blank name is not a limit: only a column the plan refuses opens the paywall.
+                if viewModel.hasColumnName, !viewModel.createColumn() {
                     showPaywall = true
                 }
             }

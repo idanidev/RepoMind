@@ -5,7 +5,8 @@ import XCTest
 
 @MainActor
 final class RepoColumnRolesTests: XCTestCase {
-    private struct Board {
+    // Main-actor on purpose: `task(_:in:)` builds a model, and a nested type does not take its class's isolation.
+    @MainActor private struct Board {
         let context: ModelContext
         let repo: ProjectRepo
         let todo: KanbanColumn

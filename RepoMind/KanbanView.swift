@@ -254,7 +254,8 @@ struct KanbanView: View {
                 viewModel.newColumnName = ""
             }
             Button("create_button") {
-                if !viewModel.createColumn() {
+                // A blank name is not a limit: only a column the plan refuses opens the paywall.
+                if viewModel.hasColumnName, !viewModel.createColumn() {
                     showPaywall = true
                 }
             }
@@ -332,7 +333,7 @@ struct RepoSettingsSheet: View {
             get: { repo.syncTasksToGitHub },
             set: { newValue in
                 guard newValue else {
-                    repo.syncTasksToGitHub = false
+                    repo.stopSyncingTasks()
                     return
                 }
                 let taskCount = repo.tasks?.count ?? 0

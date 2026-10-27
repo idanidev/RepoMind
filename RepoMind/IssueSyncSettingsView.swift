@@ -81,7 +81,7 @@ struct IssueSyncSettingsView: View {
     /// them behind the user's back is not what "stop syncing" means.
     private func disableAll() {
         for repo in syncableRepos where repo.syncTasksToGitHub {
-            repo.syncTasksToGitHub = false
+            repo.stopSyncingTasks()
         }
         try? context.save()
         ToastManager.shared.show(String(localized: "issue_sync_disabled_toast"), style: .info)
@@ -137,7 +137,7 @@ private struct RepoSyncToggleRow: View {
             get: { repo.syncTasksToGitHub },
             set: { newValue in
                 guard newValue else {
-                    repo.syncTasksToGitHub = false
+                    repo.stopSyncingTasks()
                     try? context.save()
                     return
                 }

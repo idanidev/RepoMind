@@ -179,6 +179,18 @@ extension ProjectRepo {
         guard let idea = ideaColumn, let column = task.column else { return false }
         return column.id == idea.id
     }
+
+    /// The user turned issue sync off. Nothing is waiting to be published any more, and the flag would
+    /// otherwise keep the "not published" badges lit for ever (on every device: it syncs), because
+    /// `reconcile` skips a repo with sync off. Turning sync on again flags every task without an issue.
+    /// Issues already on GitHub are left alone.
+    func stopSyncingTasks() {
+        syncTasksToGitHub = false
+        for task in tasks ?? [] where task.needsIssueSync {
+            task.needsIssueSync = false
+            task.lastSyncError = nil
+        }
+    }
 }
 
 /// A repo's done and idea columns, read once. `doneColumn` sorts the columns, searches their names and
