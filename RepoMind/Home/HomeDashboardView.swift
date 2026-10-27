@@ -6,6 +6,9 @@ import SwiftUI
 struct HomeDashboardActions {
     /// Opens the board of the repo with this `homeCardID`.
     var openRepo: (String) -> Void = { _ in }
+    var selectAccount: (String?) -> Void = { _ in }
+    var upgrade: () -> Void = {}
+    var signOut: () -> Void = {}
     var openDigest: (HomeDigestKind) -> Void = { _ in }
     var openStats: (Int) -> Void = { _ in }
     var openToday: () -> Void = {}
@@ -19,6 +22,7 @@ struct HomeDashboardActions {
 /// `HomeView`: it draws `HomeDashboardData` and asks for nothing else.
 struct HomeDashboardView: View {
     let data: HomeDashboardData
+    var account = HomeAccountMenuData()
     var actions = HomeDashboardActions()
 
     var body: some View {
@@ -58,7 +62,24 @@ struct HomeDashboardView: View {
     // MARK: Header
 
     private var header: some View {
-        HStack(alignment: .top, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                if !account.names.isEmpty {
+                    HomeAccountMenu(
+                        account: account, onSelectAccount: actions.selectAccount,
+                        onUpgrade: actions.upgrade, onSignOut: actions.signOut)
+                }
+                if account.isDemo {
+                    Text("demo_mode_badge")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(HomeTheme.warning, in: Capsule())
+                }
+                Spacer(minLength: 4)
+                HomeIconButton(symbol: "bell", label: "home_notifications_label", action: actions.openToday)
+            }
             VStack(alignment: .leading, spacing: 2) {
                 Text("home_dashboard_title")
                     .font(.largeTitle.weight(.bold))
@@ -67,8 +88,6 @@ struct HomeDashboardView: View {
                     .font(.subheadline)
                     .foregroundStyle(HomeTheme.textSecondary)
             }
-            Spacer(minLength: 4)
-            BoardCircleButton(symbol: "bell", label: "home_notifications_label", action: actions.openToday)
         }
         .padding(.bottom, 2)
     }
@@ -275,7 +294,9 @@ struct HomeDashboardBar: View {
 }
 
 #Preview("Start") {
-    HomeDashboardView(data: HomeMockData.dashboard)
+    HomeDashboardView(
+        data: HomeMockData.dashboard,
+        account: HomeAccountMenuData(names: [HomeMockData.accountName], isPro: true))
         .background(HomeTheme.background)
         .preferredColorScheme(.dark)
 }

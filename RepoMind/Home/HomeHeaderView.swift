@@ -2,7 +2,12 @@ import SwiftUI
 
 // MARK: - Filter
 
-enum HomeFilter: String, CaseIterable, Identifiable {
+/// What a row of filter chips can show: every case, each with a label.
+protocol HomeChipOption: CaseIterable, Identifiable, Hashable where AllCases: RandomAccessCollection {
+    var label: LocalizedStringKey { get }
+}
+
+enum HomeFilter: String, CaseIterable, Identifiable, HomeChipOption {
     case all
     case favorites
     case tasks
@@ -60,7 +65,9 @@ struct HomeHeaderView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 if !account.names.isEmpty {
-                    accountMenu
+                    HomeAccountMenu(
+                        account: account, onSelectAccount: onSelectAccount,
+                        onUpgrade: onUpgrade, onSignOut: onSignOut)
                 }
                 if account.isDemo {
                     Text("demo_mode_badge")
@@ -71,8 +78,8 @@ struct HomeHeaderView: View {
                         .background(HomeTheme.warning, in: Capsule())
                 }
                 Spacer(minLength: 4)
-                iconButton("plus", label: "home_add_label", action: onAdd)
-                iconButton("bell", label: "home_notifications_label", action: onNotifications)
+                HomeIconButton(symbol: "plus", label: "home_add_label", action: onAdd)
+                HomeIconButton(symbol: "bell", label: "home_notifications_label", action: onNotifications)
             }
             Text("home_title")
                 .font(.largeTitle.weight(.bold))
@@ -83,10 +90,19 @@ struct HomeHeaderView: View {
             HomeFilterChips(selection: $filter)
         }
     }
+}
 
-    /// Filter by account, upgrade, sign out — the same menu the classic list keeps behind the
-    /// person icon, hung from the account name instead.
-    private var accountMenu: some View {
+// MARK: - Account menu
+
+/// Filter by account, upgrade, sign out: the same menu the classic list keeps behind the person
+/// icon, hung from the account name instead. Shared by the start screen and the repo list.
+struct HomeAccountMenu: View {
+    let account: HomeAccountMenuData
+    var onSelectAccount: (String?) -> Void = { _ in }
+    var onUpgrade: () -> Void = {}
+    var onSignOut: () -> Void = {}
+
+    var body: some View {
         Menu {
             Picker("accounts_filter", selection: accountSelection) {
                 Text("all_accounts").tag(nil as String?)
@@ -141,10 +157,15 @@ struct HomeHeaderView: View {
     private var accountSelection: Binding<String?> {
         Binding(get: { account.selected }, set: { onSelectAccount($0) })
     }
+}
 
-    private func iconButton(
-        _ symbol: String, label: LocalizedStringKey, action: @escaping () -> Void
-    ) -> some View {
+/// A small square action, hairline on an elevated surface: the header's plus and bell.
+struct HomeIconButton: View {
+    let symbol: String
+    let label: LocalizedStringKey
+    let action: () -> Void
+
+    var body: some View {
         Button(action: action) {
             Image(systemName: symbol)
                 .font(.subheadline.weight(.semibold))
@@ -207,14 +228,14 @@ struct HomeStatsStrip: View {
 
 /// Segmented chips with a pill that slides to the selection. Scrolls sideways if four chips do
 /// not fit at a large Dynamic Type size.
-struct HomeFilterChips: View {
-    @Binding var selection: HomeFilter
+struct HomeFilterChips<Option: HomeChipOption>: View {
+    @Binding var selection: Option
     @Namespace private var namespace
 
     var body: some View {
         ScrollView(.horizontal) {
             HStack(spacing: 2) {
-                ForEach(HomeFilter.allCases) { filter in
+                ForEach(Option.allCases) { filter in
                     Button {
                         withAnimation(.snappy(duration: 0.25)) { selection = filter }
                     } label: {

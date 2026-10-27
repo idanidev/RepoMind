@@ -1,9 +1,10 @@
-A new home and a new board on iPhone.
+A new Home, a new repo list and a new board on iPhone.
 
-• The home is now a dark, dense list of cards: pending tasks, unread reports, tasks not yet published as issues, open pull requests, the latest release and a failing build — each only when there is something to say
-• Folders are sections, favorites come first, and a long press on a repo offers favorite, folder, icon, archive and delete
-• The board shows one column at a time, with the columns as pills above and the add bar and the microphone below
-• Pull down to refresh: your repos, the tasks your agent closed on GitHub, and what GitHub knows about each repo, fetched in a single request that leaves your rate limit alone
-• A Profile tab with your accounts, plan and purchases
+• Home: what you captured today and this week, what needs a hand (abandoned tasks, unpublished ones, failing builds, unread reports, open pull requests, dormant repos), your capture rhythm, the latest captures, where work piles up, what GitHub knows about your repos, and the health of iCloud and GitHub sync
+• Tasks: your whole backlog on one screen, by repo, with pending, recent, done and ideas, plus search
+• Repos: dark, dense cards with the last push, the pending tasks and what only GitHub knows, fetched in a single request
+• Board: one column at a time, with the columns as pills above and the microphone below
+• Statistics: connect your app's backend from the board menu and see who uses it and what gets used, with its crashes and reports
+• Profile under Settings, search at the bottom next to the tabs
 
 iPad and Mac keep the classic layout for now.

@@ -60,11 +60,16 @@ struct HomeLiveView: View {
                     .ignoresSafeArea()
                 switch tab {
                 case .start:
-                    HomeDashboardView(data: dashboard, actions: dashboardActions)
+                    HomeDashboardView(data: dashboard, account: accountMenuData, actions: dashboardActions)
                 case .repos:
                     reposTab
                 case .tasks:
-                    tabPage("today_title") { TodayView() }
+                    HomeTasksView(
+                        rows: taskRows, attention: attentionCount, searchText: searchText,
+                        actions: HomeTasksActions(
+                            openRepo: dashboardActions.openRepo,
+                            openToday: { path.append(HomeRoute.today) },
+                            refresh: { await refresh() }))
                 case .settings:
                     tabPage("settings_title") {
                         SettingsView(embedded: true, onOpenProfile: { path.append(HomeRoute.profile) })
@@ -80,9 +85,9 @@ struct HomeLiveView: View {
             }
             .navigationDestination(for: HomeRoute.self) { route in
                 switch route {
-                case .today: TodayView()
+                case .today: onBlack { TodayView() }
                 case .profile: profilePage
-                case .digest(let kind): HomeDigestView(kind: kind)
+                case .digest(let kind): onBlack { HomeDigestView(kind: kind) }
                 case .stats(let repo): BoardStatsView(project: repo)
                 }
             }
@@ -128,12 +133,23 @@ struct HomeLiveView: View {
 
     // MARK: Tabs
 
+    private var accountMenuData: HomeAccountMenuData {
+        HomeAccountMenuData(
+            names: accountNames, selected: selectedAccount,
+            isPro: subscription.isPro, isDemo: isDemoMode)
+    }
+
+    /// A pushed system list on the home's black, not on the system's gray.
+    private func onBlack<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        content()
+            .scrollContentBackground(.hidden)
+            .background(HomeTheme.background.ignoresSafeArea())
+    }
+
     private var reposTab: some View {
         let cards = self.cards
         return HomeView(
-            account: HomeAccountMenuData(
-                names: accountNames, selected: selectedAccount,
-                isPro: subscription.isPro, isDemo: isDemoMode),
+            account: accountMenuData,
             stats: HomeStats(cards: cards.filter { !$0.isArchived }),
             repos: cards,
             repoLimit: subscription.isPro ? nil : subscription.maxFreeRepos,
@@ -146,17 +162,24 @@ struct HomeLiveView: View {
 
     /// The tab bar with a round search button beside it, the way iOS places search now. Tapping
     /// the button swaps the row for the search field; Cancel brings the bar back.
+    /// Repos and Tasks search their own lists; from the start screen the magnifier jumps to
+    /// Repos, so it is always there to tap.
+    private var tabSearches: Bool { tab == .repos || tab == .tasks }
+
     private var bottomBar: some View {
         HStack(spacing: 10) {
-            if tab == .repos && isSearching {
+            if tabSearches && isSearching {
                 searchField
                 Button("cancel_button") { closeSearch() }
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(HomeTheme.textPrimary)
             } else {
                 HomeTabBar(selection: $tab)
-                if tab == .repos {
+                if tab != .settings {
                     Button {
+                        if !tabSearches {
+                            withAnimation(.snappy(duration: 0.25)) { tab = .repos }
+                        }
                         isSearching = true
                     } label: {
                         Image(systemName: "magnifyingglass")
@@ -185,8 +208,9 @@ struct HomeLiveView: View {
         )
         .animation(.snappy(duration: 0.25), value: isSearching)
         .onChange(of: isSearching) { _, searching in searchFocused = searching }
-        .onChange(of: tab) { _, _ in
-            if isSearching { closeSearch() }
+        .onChange(of: tab) { _, newTab in
+            // Repos and Tasks share the search; leaving both closes it.
+            if isSearching, newTab != .repos, newTab != .tasks { closeSearch() }
         }
     }
 
@@ -303,11 +327,27 @@ struct HomeLiveView: View {
         )
     }
 
+    /// Every task of the selected account's live repos, newest first.
+    private var taskRows: [HomeTaskRow] {
+        HomeTaskRow.rows(in: repos.filter {
+            !$0.isArchived && (selectedAccount == nil || $0.account?.username == selectedAccount)
+        })
+    }
+
+    /// What Today lists: unread reports, tasks never published, and a sync that is failing.
+    private var attentionCount: Int {
+        let digest = dashboard.digest
+        return digest.unreadFeedback + digest.unpublished + (syncMonitor.hasSyncProblem ? 1 : 0)
+    }
+
     private var dashboardActions: HomeDashboardActions {
         HomeDashboardActions(
             openRepo: { id in
                 if let repo = repos.first(where: { $0.homeCardID == id }) { path.append(repo) }
             },
+            selectAccount: { selectedAccount = $0 },
+            upgrade: { showPaywall = true },
+            signOut: { showSignOutConfirm = true },
             openDigest: { kind in
                 // Today already lists these two, with the retry button; no second screen.
                 switch kind {

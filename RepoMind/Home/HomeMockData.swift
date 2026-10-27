@@ -28,6 +28,27 @@ enum HomeMockData {
         [focvs, inSync, repoMind, rentalManagerIOS, clarity, rentalManagerWeb]
     }
 
+    static var taskRows: [HomeTaskRow] {
+        [
+            HomeTaskRow(
+                id: UUID(), title: "Android: un solo canal de realtime por grupo", repoName: "InSync",
+                repoCardID: "mock-insync", columnName: "To Do", createdAt: hoursAgo(1), issueNumber: 142,
+                needsIssueSync: false, state: .pending),
+            HomeTaskRow(
+                id: UUID(), title: "Revisar política de privacidad", repoName: "InSync",
+                repoCardID: "mock-insync", columnName: "To Do", createdAt: hoursAgo(30), issueNumber: nil,
+                needsIssueSync: true, state: .pending),
+            HomeTaskRow(
+                id: UUID(), title: "Pantalla de sesión salta con el teclado", repoName: "FOCVS",
+                repoCardID: "mock-focvs", columnName: "Done", createdAt: hoursAgo(5), issueNumber: 12,
+                needsIssueSync: false, state: .done),
+            HomeTaskRow(
+                id: UUID(), title: "Modo widget en el reloj", repoName: "FOCVS",
+                repoCardID: "mock-focvs", columnName: "Ideas", createdAt: hoursAgo(80), issueNumber: nil,
+                needsIssueSync: false, state: .idea)
+        ]
+    }
+
     static var dashboard: HomeDashboardData {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: .now)

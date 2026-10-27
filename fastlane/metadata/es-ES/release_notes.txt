@@ -1,9 +1,10 @@
-Nueva home y nuevo tablero en iPhone.
+Nuevo Inicio, nueva home y nuevo tablero en iPhone.
 
-• La home es ahora una lista oscura y densa de tarjetas: tareas pendientes, informes sin leer, tareas sin publicar como issue, PRs abiertas, último release y build en rojo, cada dato solo cuando hay algo que decir
-• Las carpetas son secciones, los favoritos van primero, y mantener pulsado un repo ofrece favorito, carpeta, icono, archivar y borrar
-• El tablero enseña una columna cada vez, con las columnas como píldoras arriba y la barra de añadir y el micrófono abajo
-• Tira hacia abajo para refrescar: tus repos, las tareas que tu agente cerró en GitHub y lo que GitHub sabe de cada repo, en una sola petición que no toca tu límite de uso
-• Pestaña Perfil con tus cuentas, plan y compras
+• Inicio: lo capturado hoy y esta semana, lo que necesita mano (tareas abandonadas, sin publicar, builds en rojo, informes sin leer, PRs abiertas, repos dormidos), el ritmo de captura, las últimas capturas, dónde se acumula el trabajo, lo que GitHub sabe de tus repos y el estado de iCloud y GitHub
+• Tareas: todo tu backlog en una pantalla, por repo, con pendientes, recientes, hechas e ideas, y búsqueda
+• Repos: tarjetas oscuras y densas con el último push, las tareas pendientes y lo que solo GitHub sabe, en una sola petición
+• Tablero: una columna cada vez, con las columnas como píldoras arriba y el micrófono abajo
+• Estadísticas: conecta el backend de tu app desde el menú del tablero y ve quién la usa y qué se usa, con sus cierres y reportes
+• Perfil dentro de Ajustes, búsqueda abajo junto a las pestañas
 
 iPad y Mac conservan de momento el diseño clásico.

@@ -612,3 +612,15 @@
 "home_dashboard_github_sync %@" = "GitHub synced %@";
 "home_dashboard_github_never" = "GitHub not synced yet";
 "home_dashboard_activity_refreshed %@" = "activity refreshed %@";
+
+/* Tasks tab */
+"home_tasks_title" = "Tasks";
+"home_tasks_summary %lld %lld %lld" = "%lld pending · %lld done · %lld ideas";
+"home_tasks_filter_pending" = "Pending";
+"home_tasks_filter_recent" = "Recent";
+"home_tasks_filter_done" = "Done";
+"home_tasks_filter_ideas" = "Ideas";
+"home_tasks_attention %lld" = "%lld thing(s) need attention";
+"home_tasks_unpublished_badge" = "unpublished";
+"home_tasks_empty" = "No tasks here";
+"home_tasks_empty_search" = "Nothing matches";
