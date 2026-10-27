@@ -623,3 +623,27 @@
 "home_tasks_unpublished_badge" = "sin publicar";
 "home_tasks_empty" = "No hay tareas aquí";
 "home_tasks_empty_search" = "Nada coincide";
+
+/* Revisión de la captura por voz */
+"capture_title" = "Revisar captura";
+"capture_composing" = "Dándole forma…";
+"capture_title_placeholder" = "Título";
+"capture_details_placeholder" = "Detalles (opcional)";
+"capture_transcript" = "Lo que dijiste";
+"capture_keep_dictating" = "Seguir dictando";
+"capture_stop_dictating" = "Parar";
+"capture_save %lld" = "Guardar %lld";
+"capture_discard" = "Descartar";
+"capture_column" = "Columna";
+"capture_column_current" = "Columna actual";
+"capture_kind" = "Tipo";
+"capture_kind_bug" = "Fallo";
+"capture_kind_feature" = "Mejora";
+"capture_kind_idea" = "Idea";
+"capture_kind_chore" = "Tarea";
+"capture_remove_draft" = "Quitar";
+"capture_ai_unavailable" = "La inteligencia del dispositivo no está disponible aquí, así que esto es el dictado tal cual.";
+"capture_ai_badge" = "Con forma dada en tu dispositivo. Nada ha salido de él.";
+"voice_section_header" = "Voz";
+"voice_ai_toggle" = "Dar forma a las capturas con la inteligencia del dispositivo";
+"voice_ai_footer" = "Convierte lo que dictas en un título limpio y unos detalles, separa asuntos distintos en tareas distintas y elige la columna que nombres. Necesita iOS 26 y Apple Intelligence; nada sale del dispositivo. Apagado, el dictado se guarda tal cual.";

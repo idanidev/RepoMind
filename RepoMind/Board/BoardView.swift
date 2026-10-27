@@ -136,6 +136,9 @@ struct BoardView: View {
         .sheet(isPresented: $showRepoSettings) {
             RepoSettingsSheet(viewModel: viewModel, columns: columns)
         }
+        .sheet(item: $viewModel.pendingCapture) { _ in
+            VoiceCaptureSheet(viewModel: viewModel, columns: columns.map(\.name))
+        }
         .sheet(isPresented: $showFeedback) {
             NavigationStack { FeedbackView(repo: project) }
         }
@@ -257,7 +260,7 @@ struct BoardView: View {
             }
             .buttonStyle(HomeCardButtonStyle())
             VoiceFAB(voiceManager: viewModel.voiceManager) {
-                viewModel.createTaskFromVoice()
+                viewModel.prepareCapture()
             }
         }
         .padding(.horizontal, HomeTheme.gutter)

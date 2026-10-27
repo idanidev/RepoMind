@@ -60,6 +60,8 @@ struct SettingsView: View {
     /// Set by the home, which keeps Profile behind Settings: a row at the top opens it.
     var onOpenProfile: (() -> Void)?
 
+    @AppStorage("voiceAIEnabled") private var voiceAIEnabled = true
+
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var context
 
@@ -288,6 +290,16 @@ struct SettingsView: View {
             #endif
 
             // MARK: - About
+
+            // MARK: - Voice
+
+            Section {
+                Toggle("voice_ai_toggle", isOn: $voiceAIEnabled)
+            } header: {
+                Text("voice_section_header")
+            } footer: {
+                Text("voice_ai_footer")
+            }
 
             Section("about_header") {
                 HStack {

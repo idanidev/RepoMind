@@ -624,3 +624,27 @@
 "home_tasks_unpublished_badge" = "unpublished";
 "home_tasks_empty" = "No tasks here";
 "home_tasks_empty_search" = "Nothing matches";
+
+/* Voice capture review */
+"capture_title" = "Review capture";
+"capture_composing" = "Giving it shape…";
+"capture_title_placeholder" = "Title";
+"capture_details_placeholder" = "Details (optional)";
+"capture_transcript" = "What you said";
+"capture_keep_dictating" = "Keep dictating";
+"capture_stop_dictating" = "Stop";
+"capture_save %lld" = "Save %lld";
+"capture_discard" = "Discard";
+"capture_column" = "Column";
+"capture_column_current" = "Current column";
+"capture_kind" = "Type";
+"capture_kind_bug" = "Bug";
+"capture_kind_feature" = "Feature";
+"capture_kind_idea" = "Idea";
+"capture_kind_chore" = "Chore";
+"capture_remove_draft" = "Remove";
+"capture_ai_unavailable" = "On-device intelligence is not available here, so this is the dictation as it came.";
+"capture_ai_badge" = "Shaped on your device. Nothing left it.";
+"voice_section_header" = "Voice";
+"voice_ai_toggle" = "Shape captures with on-device intelligence";
+"voice_ai_footer" = "Turns what you dictate into a clean title and details, splits distinct subjects into separate tasks and picks the column you name. Needs iOS 26 and Apple Intelligence; nothing leaves the device. Off, the dictation is saved as it came.";

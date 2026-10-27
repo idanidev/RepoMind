@@ -52,7 +52,11 @@ Sin Mac, lo mismo desde GitHub Actions (`.github/workflows`), con los secretos `
 - **Auth**: GitHub OAuth → `GitHubService.swift`
 - **IAP**: StoreKit 2 → `SubscriptionManager.swift`
 - **Biometría**: Face ID → `SecurityManager.swift`
-- **Voz**: Speech framework → `VoiceManager.swift`
+- **Voz**: Speech framework → `VoiceManager.swift`. Al parar, `KanbanViewModel.prepareCapture` abre
+  `VoiceCaptureSheet` (revisar, editar, seguir dictando, guardar) en vez de guardar el dictado tal
+  cual; en iOS 26 con Apple Intelligence, `VoiceComposer` (`VoiceCapture.swift`, Foundation Models,
+  todo en el dispositivo) le da forma: título, detalles, tipo, columna, y varias tareas si hay
+  varios asuntos. Se apaga en Ajustes → Voz
 - **ViewModel**: `KanbanViewModel.swift` (único ViewModel del proyecto)
 - **Tareas ↔ Issues**: `TaskIssueSyncService.swift` publica cada tarea como issue de GitHub
 - **Salud de iCloud**: `CloudKitSyncMonitor.swift` observa `eventChangedNotification` y desglosa

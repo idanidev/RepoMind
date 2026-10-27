@@ -10,6 +10,11 @@ final class KanbanViewModel {
 
     private(set) var voiceManager = VoiceManager()
 
+    /// The dictation under review, from the microphone stopping until Save or Discard.
+    var pendingCapture: VoiceCapture?
+    /// The on-device composer at work on `pendingCapture`; cancelled when the capture changes.
+    @ObservationIgnored var composeTask: Task<Void, Never>?
+
     // Sheet States
     var editingTask: TaskItem?
     var showAddColumnSheet = false
