@@ -73,6 +73,8 @@ struct HomeRepoCardData: Identifiable, Hashable {
     var isBuildFailing = false
     /// Tag of the latest GitHub release, if the repo publishes any.
     var version: String?
+    /// The app's primary statistic, "31 Activas 7 días", when its stats endpoint is connected.
+    var highlight: String?
     /// Unread feedback reports.
     var alerts = 0
     /// Tasks that should be GitHub issues and are not yet.

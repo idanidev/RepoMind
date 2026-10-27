@@ -56,6 +56,10 @@ Sin Mac, lo mismo desde GitHub Actions (`.github/workflows`), con los secretos `
   sabe GitHub de cada repo (PRs abiertas, último release, estado de CI, último push, visibilidad),
   obtenido en una sola consulta GraphQL con `GitHubService.fetchRepoActivity`. A propósito no es
   SwiftData: es volátil, y así no toca el esquema de CloudKit
+- **Estadísticas de cada app**: RepoMind no las recoge, las lee. Cada app sirve un JSON con el
+  contrato de `docs/stats-contract.md`; `RepoStatsStore.swift` guarda la URL en `UserDefaults`, el
+  token en el Keychain y la última respuesta en caché una hora, y `BoardStatsView` la pinta desde el
+  menú del tablero. La primera app que lo sirve es InSync (`supabase/functions/repomind-stats`)
 - **Bridge MCP**: `bridge/` (TypeScript) expone las tareas a agentes de código vía GitHub Issues
 
 ## Estructura de carpetas

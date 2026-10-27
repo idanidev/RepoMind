@@ -512,3 +512,36 @@
 "board_unpublished" = "Not published";
 "board_empty_column" = "Nothing here yet";
 "board_empty_column_hint" = "Add a task below, or dictate one with the microphone.";
+
+/* App statistics */
+"stats_title" = "Statistics";
+"stats_menu_item" = "Statistics";
+"stats_setup_title" = "Connect statistics";
+"stats_setup_footer" = "The app's backend serves a JSON in the RepoMind stats contract at this URL. The token is kept in the Keychain and never leaves this device.";
+"stats_endpoint_placeholder" = "https://…/functions/v1/repomind-stats";
+"stats_token_placeholder" = "Token";
+"stats_configure" = "Connect";
+"stats_remove" = "Disconnect";
+"stats_refresh" = "Refresh";
+"stats_not_configured_title" = "No statistics yet";
+"stats_not_configured_message" = "Connect the app's stats endpoint to see who uses it and what gets used.";
+"stats_loading" = "Loading…";
+"stats_error" = "Could not refresh";
+"stats_error_token" = "The token is missing from the Keychain. Connect again.";
+"stats_error_status %lld" = "The endpoint answered %lld.";
+"stats_invalid_url" = "That is not an https URL.";
+"stats_saved_toast" = "Statistics connected";
+"stats_updated %@" = "updated %@";
+"stats_period %lld" = "Last %lld days";
+"stats_no_data" = "No data yet";
+"stats_section_signals" = "What gets used";
+"stats_section_features" = "Adoption";
+"stats_adoption_row %lld %lld %lld" = "%lld of %lld active · %lld ever";
+"stats_section_versions" = "Versions";
+"stats_version_unknown" = "No version";
+"stats_section_issues" = "Crashes and reports";
+"stats_issue_crash" = "Crash";
+"stats_issue_report" = "Report";
+"stats_times %lld" = "%lld times";
+"stats_show_all" = "Show all";
+"stats_show_less" = "Show less";

@@ -147,6 +147,9 @@ struct HomeRepoCardView: View {
             if let version = repo.version {
                 HomeChip(symbol: "tag.fill", text: version)
             }
+            if let highlight = repo.highlight {
+                HomeChip(symbol: "chart.bar.fill", text: highlight, tint: HomeTheme.info)
+            }
         }
     }
 

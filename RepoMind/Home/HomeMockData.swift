@@ -53,6 +53,7 @@ enum HomeMockData {
             language: "Swift",
             stars: 1,
             pullRequests: 0,
+            highlight: "31 Activas 7 días",
             alerts: 2,
             lastPush: hoursAgo(26),
             lastActivity: hoursAgo(26)

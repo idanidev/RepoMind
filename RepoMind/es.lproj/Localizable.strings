@@ -511,3 +511,36 @@
 "board_unpublished" = "Sin publicar";
 "board_empty_column" = "Nada por aquí todavía";
 "board_empty_column_hint" = "Añade una tarea abajo o díctala con el micrófono.";
+
+/* Estadísticas de apps */
+"stats_title" = "Estadísticas";
+"stats_menu_item" = "Estadísticas";
+"stats_setup_title" = "Conectar estadísticas";
+"stats_setup_footer" = "El backend de la app sirve en esta URL un JSON con el contrato de estadísticas de RepoMind. El token se guarda en el Keychain y no sale de este dispositivo.";
+"stats_endpoint_placeholder" = "https://…/functions/v1/repomind-stats";
+"stats_token_placeholder" = "Token";
+"stats_configure" = "Conectar";
+"stats_remove" = "Desconectar";
+"stats_refresh" = "Actualizar";
+"stats_not_configured_title" = "Sin estadísticas todavía";
+"stats_not_configured_message" = "Conecta el endpoint de estadísticas de la app para ver quién la usa y qué se usa.";
+"stats_loading" = "Cargando…";
+"stats_error" = "No se ha podido actualizar";
+"stats_error_token" = "Falta el token en el Keychain. Vuelve a conectar.";
+"stats_error_status %lld" = "El endpoint ha respondido %lld.";
+"stats_invalid_url" = "Eso no es una URL https.";
+"stats_saved_toast" = "Estadísticas conectadas";
+"stats_updated %@" = "actualizado %@";
+"stats_period %lld" = "Últimos %lld días";
+"stats_no_data" = "Sin datos todavía";
+"stats_section_signals" = "Qué se usa";
+"stats_section_features" = "Adopción";
+"stats_adoption_row %lld %lld %lld" = "%lld de %lld activos · %lld alguna vez";
+"stats_section_versions" = "Versiones";
+"stats_version_unknown" = "Sin versión";
+"stats_section_issues" = "Fallos y reportes";
+"stats_issue_crash" = "Cierre";
+"stats_issue_report" = "Reporte";
+"stats_times %lld" = "%lld veces";
+"stats_show_all" = "Ver todas";
+"stats_show_less" = "Ver menos";

@@ -21,6 +21,7 @@ struct BoardView: View {
     @State private var showPaywall = false
     @State private var showRepoSettings = false
     @State private var showFeedback = false
+    @State private var showStats = false
     @State private var showSyncDisabledAlert = false
 
     init(project: ProjectRepo) {
@@ -138,6 +139,9 @@ struct BoardView: View {
         .sheet(isPresented: $showFeedback) {
             NavigationStack { FeedbackView(repo: project) }
         }
+        .navigationDestination(isPresented: $showStats) {
+            BoardStatsView(project: project)
+        }
         .alert("new_column_title", isPresented: $viewModel.showAddColumnSheet) {
             TextField("column_name_placeholder", text: $viewModel.newColumnName)
             Button("cancel_button", role: .cancel) {
@@ -184,6 +188,13 @@ struct BoardView: View {
                         addColumn(viewModel)
                     } label: {
                         Label("add_column", systemImage: "rectangle.stack.badge.plus")
+                    }
+                    if !project.isLocal {
+                        Button {
+                            showStats = true
+                        } label: {
+                            Label("stats_menu_item", systemImage: "chart.bar")
+                        }
                     }
                     Button {
                         showRepoSettings = true

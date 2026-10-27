@@ -29,6 +29,7 @@ struct HomeLiveView: View {
 
     @State private var subscription = SubscriptionManager.shared
     @State private var activity = RepoActivityStore.shared
+    @State private var statsStore = RepoStatsStore.shared
     @State private var path = NavigationPath()
     @State private var tab: HomeTab = .repos
     @State private var selectedAccount: String?
@@ -110,7 +111,11 @@ struct HomeLiveView: View {
                 if repos.isEmpty {
                     await syncRepos(silent: true)
                 }
+                statsStore.loadCached(for: repos.map(\.repoID))
                 await activity.refresh(repos: repos, accounts: accounts)
+                for repoID in repos.map(\.repoID) where statsStore.isConfigured(repoID) {
+                    await statsStore.refresh(repoID: repoID)
+                }
             }
         }
     }
@@ -253,6 +258,14 @@ struct HomeLiveView: View {
         )
     }
 
+    /// "31 Activas 7 días": the headline the app's stats endpoint marks as primary.
+    private func highlight(for repo: ProjectRepo) -> String? {
+        guard !repo.isLocal, let headline = statsStore.stats(for: repo.repoID)?.primaryHeadline,
+              let value = headline.value
+        else { return nil }
+        return value.formatted() + " " + headline.label
+    }
+
     private func withRepo(_ card: HomeRepoCardData, _ body: (ProjectRepo) -> Void) {
         guard let repo = repos.first(where: { $0.homeCardID == card.id }) else { return }
         body(repo)
@@ -381,11 +394,13 @@ struct HomeLiveView: View {
                 return lhs.updatedAt > rhs.updatedAt
             }
         var cards = sorted.map { repo in
-            HomeRepoCardData(
+            var card = HomeRepoCardData(
                 repo: repo,
                 unreadFeedback: unread[repo.fullName] ?? 0,
                 activity: activity.activity(for: repo.repoID)
             )
+            card.highlight = highlight(for: repo)
+            return card
         }
         if let hero = cards.firstIndex(where: { !$0.isArchived }) {
             cards[hero].isFeatured = true
