@@ -54,6 +54,7 @@ jobs:
         # Sin paralelo: Xcode clona el simulador por cada worker y, en un runner justo de recursos,
         # un clon no llega a arrancar la app ("server died") y un test sin culpa se marca fallado.
         run: |
+          touch "$RUNNER_TEMP/tests.started"
           set +e
           xcodebuild test \
             -project RepoMind.xcodeproj -scheme RepoMind \
@@ -72,12 +73,18 @@ jobs:
             echo "::group::Últimas 150 líneas del registro"
             tail -n 150 "$RUNNER_TEMP/tests.log"
             echo "::endgroup::"
-            # Si el host de pruebas se ha caído, el informe de crash está dentro del xcresult.
+            # Un proceso del simulador que muere deja su informe en el DiagnosticReports del Mac
+            # anfitrión; el xcresult exporta logs, pero no siempre el .ips.
             echo "::group::Informes de crash"
+            find "$HOME/Library/Logs/DiagnosticReports" -type f -name "RepoMind*" -newer "$RUNNER_TEMP/tests.started" \
+              -o -type f -name "xctest*" -newer "$RUNNER_TEMP/tests.started" 2>/dev/null \
+              | while read -r f; do echo "--- $f"; head -c 20000 "$f"; echo; done
             xcrun xcresulttool export diagnostics --path "$RUNNER_TEMP/Tests.xcresult" \
               --output-path "$RUNNER_TEMP/diagnostics" 2>/dev/null || true
+            echo "--- contenido exportado del xcresult:"
+            find "$RUNNER_TEMP/diagnostics" -type f 2>/dev/null | head -n 40
             find "$RUNNER_TEMP/diagnostics" -type f \( -name "*.crash" -o -name "*.ips" \) 2>/dev/null \
-              | while read -r f; do echo "--- $f"; head -n 160 "$f"; done
+              | while read -r f; do echo "--- $f"; head -c 20000 "$f"; echo; done
             echo "::endgroup::"
           fi
           exit $estado
