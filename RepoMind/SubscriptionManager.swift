@@ -89,6 +89,21 @@ final class SubscriptionManager {
         isMockPro || isDemoMode || !purchasedProductIDs.isEmpty
     }
 
+    /// How many repos show on a free account; nil for Pro.
+    var repoLimit: Int? { isPro ? nil : maxFreeRepos }
+
+    /// The repos a free account sees: favorites first, then the rest up to the limit. The cap lived only
+    /// in the Repos list, so a free account with more repos still saw (and captured into) all of them
+    /// everywhere else.
+    nonisolated static func visible<Element>(
+        _ items: [Element], limit: Int?, isFavorite: (Element) -> Bool
+    ) -> [Element] {
+        guard let limit, items.count > limit else { return items }
+        let favorites = Array(items.filter(isFavorite).prefix(limit))
+        let rest = items.filter { !isFavorite($0) }
+        return favorites + Array(rest.prefix(max(0, limit - favorites.count)))
+    }
+
     var lifetimeProduct: Product? {
         products.first { $0.id == ProductID.proLifetime.rawValue }
     }

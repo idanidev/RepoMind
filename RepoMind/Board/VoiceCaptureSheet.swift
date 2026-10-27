@@ -13,14 +13,23 @@ struct VoiceCaptureSheet: View {
 
     private var capture: VoiceCapture? { viewModel.pendingCapture }
 
-    private var drafts: Binding<[CaptureDraft]> {
+    private var drafts: [CaptureDraft] { viewModel.pendingCapture?.drafts ?? [] }
+
+    /// The binding to one card, found by its id every time it is read, so that removing a card or saving
+    /// cannot leave a row reading an index that is gone ("Index out of range").
+    private func binding(for id: UUID) -> Binding<CaptureDraft> {
         Binding(
-            get: { viewModel.pendingCapture?.drafts ?? [] },
-            set: { viewModel.pendingCapture?.drafts = $0 })
+            get: { viewModel.pendingCapture?.drafts.first { $0.id == id } ?? CaptureDraft(title: "") },
+            set: { updated in
+                guard let index = viewModel.pendingCapture?.drafts.firstIndex(where: { $0.id == id }) else { return }
+                viewModel.pendingCapture?.drafts[index] = updated
+            })
     }
 
     private var canSave: Bool {
-        drafts.wrappedValue.contains { !$0.title.trimmingCharacters(in: .whitespaces).isEmpty }
+        drafts.contains { !$0.title.trimmingCharacters(in: .whitespaces).isEmpty }
+            // Not while the microphone is open: the words it has not delivered yet would be lost.
+            && !viewModel.voiceManager.isRecording
     }
 
     var body: some View {
@@ -36,12 +45,12 @@ struct VoiceCaptureSheet: View {
                         } else if capture?.composedByAI == true {
                             CaptureNoteRow(key: "capture_ai_badge", symbol: "sparkles")
                         }
-                        ForEach(drafts) { $draft in
+                        ForEach(drafts) { draft in
                             CaptureDraftCard(
-                                draft: $draft, repos: nil, columns: columns,
+                                draft: binding(for: draft.id), repos: nil, columns: columns,
                                 defaultColumnTitle: String(localized: "capture_column_current"),
-                                canRemove: drafts.wrappedValue.count > 1,
-                                onRemove: { drafts.wrappedValue.removeAll { $0.id == draft.id } })
+                                canRemove: drafts.count > 1,
+                                onRemove: { viewModel.pendingCapture?.drafts.removeAll { $0.id == draft.id } })
                         }
                         if let capture {
                             CaptureTranscriptCard(transcript: capture.transcript)
@@ -61,7 +70,7 @@ struct VoiceCaptureSheet: View {
                     Button("capture_discard", role: .destructive) { viewModel.discardCapture() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(String(format: String(localized: "capture_save %lld"), drafts.wrappedValue.count)) {
+                    Button(String(format: String(localized: "capture_save %lld"), drafts.count)) {
                         viewModel.saveCapture()
                     }
                     .fontWeight(.semibold)

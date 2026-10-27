@@ -19,6 +19,11 @@ struct BoardView: View {
     @Query private var feedbackIssues: [FeedbackIssue]
 
     @State private var viewModel: KanbanViewModel?
+    /// The project `viewModel` was made for, and whether the notification's focus has been applied. The
+    /// board's task runs again whenever it reappears (back from the statistics page, say), which rebuilt
+    /// the view model, dropping whatever was open in it, and opened the notification's sheet once more.
+    @State private var viewModelProject: PersistentIdentifier?
+    @State private var focusApplied = false
     @State private var page = 0
     @State private var showPaywall = false
     @State private var showRepoSettings = false
@@ -47,7 +52,9 @@ struct BoardView: View {
             }
         }
         .toolbar(.hidden, for: .navigationBar)
-        .task(id: project.repoID) {
+        // The project's own identity: local projects all have a `repoID` of zero, and switching between
+        // two of them left the first one's view model on the second one's board.
+        .task(id: project.persistentModelID) {
             await initializeViewModel()
         }
     }
@@ -55,9 +62,12 @@ struct BoardView: View {
     /// Same as the classic board: a fresh view model per project, default columns if the board
     /// is new, voice permissions, then whatever GitHub closed while the user was away.
     private func initializeViewModel() async {
+        guard viewModel == nil || viewModelProject != project.persistentModelID else { return }
         let model = KanbanViewModel(project: project, modelContext: context)
         model.initializeDefaultColumnsIfNeeded()
         viewModel = model
+        viewModelProject = project.persistentModelID
+        focusApplied = false
         Task { await applyFocus(to: model) }
         await model.checkVoicePermissions()
         await model.reconcileGitHubSyncIfNeeded()
@@ -70,6 +80,8 @@ struct BoardView: View {
     /// once; the sheet waits for the push animation to finish, because a sheet presented while
     /// the board is still sliding in is dropped.
     private func applyFocus(to model: KanbanViewModel) async {
+        guard !focusApplied else { return }
+        focusApplied = true
         switch focus {
         case .task(let id):
             guard let task = (project.tasks ?? []).first(where: { $0.id == id }) else { return }

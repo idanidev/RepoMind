@@ -54,11 +54,7 @@ struct HomeView: View {
     }
 
     private var visibleRepos: [HomeRepoCardData] {
-        let matching = matchingRepos
-        guard let repoLimit, matching.count > repoLimit else { return matching }
-        let favorites = Array(matching.filter(\.isFavorite).prefix(repoLimit))
-        let rest = matching.filter { !$0.isFavorite }
-        return favorites + Array(rest.prefix(max(0, repoLimit - favorites.count)))
+        SubscriptionManager.visible(matchingRepos, limit: repoLimit, isFavorite: \.isFavorite)
     }
 
     private var hiddenCount: Int { matchingRepos.count - visibleRepos.count }

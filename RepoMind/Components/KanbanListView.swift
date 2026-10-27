@@ -24,7 +24,7 @@ struct KanbanListView: View {
         .background(Color(.systemGroupedBackground))
         .overlay(alignment: .bottomTrailing) {
             VoiceFAB(voiceManager: viewModel.voiceManager) {
-                viewModel.createTaskFromVoice()
+                viewModel.prepareCapture()
             }
             .padding(.trailing, 20)
             .padding(.bottom, 24)

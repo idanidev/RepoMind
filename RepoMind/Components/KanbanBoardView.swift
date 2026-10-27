@@ -20,7 +20,7 @@ struct KanbanBoardView: View {
         }
         .overlay(alignment: .bottomTrailing) {
             VoiceFAB(voiceManager: viewModel.voiceManager) {
-                viewModel.createTaskFromVoice()
+                viewModel.prepareCapture()
             }
             .padding(.trailing, 20)
             .padding(.bottom, 60)

@@ -16,6 +16,12 @@ final class VoiceManager {
     var permissionGranted = false
     var detectedColumnName: String?
 
+    /// What may follow "añadir a" / "move to": the board's columns, or the apps outside a board. A
+    /// command is only a command when it names one of these; any other sentence that happens to contain
+    /// "add to" ("arreglar el botón de añadir a favoritos") used to be cut there and the recording
+    /// stopped mid-sentence.
+    var routingNames: [String] = []
+
     // MARK: - Configuration
 
     /// Primary speech locale (first preferred language)
@@ -24,10 +30,15 @@ final class VoiceManager {
     /// Secondary speech locale (second preferred language, if different)
     private(set) var secondaryLocale: Locale?
 
-    /// Whether we're using two languages based on user's system settings
-    var useDualLanguage: Bool {
-        secondaryLocale != nil
-    }
+    /// Whether we're using two languages based on user's system settings, and both have a recognizer.
+    /// A language the recognizer does not support (the locale map builds guesses like "sv-SV" for
+    /// languages it does not know) used to leave this true with no recognizer behind it, and every
+    /// recording failed with "dual recognition unavailable".
+    private(set) var useDualLanguage = false
+
+    /// Whether the recording in progress runs both recognizers. It starts out as `useDualLanguage`, and
+    /// falls back to the first language alone when the second one is not available right now.
+    private var dualThisRecording = false
 
     // MARK: - Private State
 
@@ -47,6 +58,14 @@ final class VoiceManager {
     private var speechRecognizerSecondary: SFSpeechRecognizer?
 
     private var isStopping = false
+    /// True from the stop until the recognizer has said its last word. The engine and the timers are
+    /// off and the request is closed, but `isRecording` stays up so whoever reads the transcript waits
+    /// for it; it is what stops the last words of every recording ended by the button from being lost.
+    private(set) var isFinishing = false
+    private var finishTask: Task<Void, Never>?
+    /// How long to wait for that last result after the audio ends. It normally arrives within a
+    /// fraction of a second; this is the limit for when it does not.
+    private static let finalResultGrace = 1_000
 
     // Dual-mode per-recognizer buffers — keeps the two languages separate so a
     // wrong-language recognizer can't overwrite good text mid-stream.
@@ -86,10 +105,6 @@ final class VoiceManager {
 
     // Contextual strings for domain-specific vocabulary (column names, commands)
     var contextualStrings: [String] = []
-
-    // Track smart routing task for cancellation.
-    /// Read from `deinit` — see `silenceTimer` for why this is `nonisolated(unsafe)`.
-    nonisolated(unsafe) private var smartRoutingTask: Task<Void, Never>?
 
     // MARK: - Initialization
 
@@ -164,8 +179,7 @@ final class VoiceManager {
         }
     }
 
-    // ✅ FIX: Explicit cleanup before deallocation to prevent
-    // TaskLocal/malloc crash when smartRoutingTask outlives the object.
+    // ✅ FIX: Explicit cleanup before deallocation, so a repeating timer does not outlive the object.
     deinit {
         // NOT `MainActor.assumeIsolated`. A deinit is not guaranteed to run on the main actor —
         // SwiftUI releases objects while tearing down the view graph, wherever that happens — and
@@ -173,10 +187,8 @@ final class VoiceManager {
         // that took down `BiometricAuthManager`. Hand the teardown to the main actor instead of
         // asserting we are already on it.
         let timer = silenceTimer
-        let routing = smartRoutingTask
         Task { @MainActor in
             timer?.invalidate()
-            routing?.cancel()
         }
     }
 
@@ -203,14 +215,22 @@ final class VoiceManager {
         return request
     }
 
-    private func configureRecognizers() {
-        if let secondary = secondaryLocale {
+    private func configureRecognizers(allowDual: Bool = true) {
+        if allowDual, let secondary = secondaryLocale,
+           let primaryRecognizer = SFSpeechRecognizer(locale: speechLocale),
+           let secondaryRecognizer = SFSpeechRecognizer(locale: secondary) {
             // Dual mode: use both primary and secondary languages
-            speechRecognizerPrimary = SFSpeechRecognizer(locale: speechLocale)
-            speechRecognizerSecondary = SFSpeechRecognizer(locale: secondary)
+            speechRecognizerPrimary = primaryRecognizer
+            speechRecognizerSecondary = secondaryRecognizer
+            speechRecognizer = nil
+            useDualLanguage = true
         } else {
-            // Single mode: just the primary language
+            // Single mode: just the primary language, which is also where a second language the
+            // recognizer cannot handle ends up.
+            speechRecognizerPrimary = nil
+            speechRecognizerSecondary = nil
             speechRecognizer = SFSpeechRecognizer(locale: speechLocale)
+            useDualLanguage = false
         }
     }
 
@@ -303,7 +323,21 @@ final class VoiceManager {
             return
         }
 
+        // A recording started while the previous one was still finishing, or twice in a row, left the
+        // first one's timers running: the second recording was cut at 55 s counted from the first.
+        finishTask?.cancel()
+        finishTask = nil
+        isFinishing = false
+        stopSilenceTimer()
+        calibrationTask?.cancel()
+        calibrationTask = nil
+        maxDurationTask?.cancel()
+        maxDurationTask = nil
         cleanupAudioResources()
+
+        // Both recognizers or, when the second language is not available right now, only the first.
+        dualThisRecording = useDualLanguage
+            && speechRecognizerPrimary?.isAvailable == true && speechRecognizerSecondary?.isAvailable == true
 
         #if DEBUG
             print(
@@ -360,13 +394,11 @@ final class VoiceManager {
         let engine = AVAudioEngine()
         self.audioEngine = engine
 
-        if useDualLanguage {
+        if dualThisRecording {
             // DUAL MODE: Use primary + secondary languages from system settings
-            guard let recPrimary = speechRecognizerPrimary,
-                let recSecondary = speechRecognizerSecondary,
-                recPrimary.isAvailable, recSecondary.isAvailable
-            else {
+            guard let recPrimary = speechRecognizerPrimary, let recSecondary = speechRecognizerSecondary else {
                 errorMessage = String(localized: "dual_recognition_unavailable")
+                deactivateAudioSession()
                 return
             }
 
@@ -390,16 +422,17 @@ final class VoiceManager {
             }
 
         } else {
-            // SINGLE MODE logic
-            guard let speechRecognizer, speechRecognizer.isAvailable else {
+            // SINGLE MODE logic. In a dual configuration whose second language is down, the first one.
+            guard let recognizer = speechRecognizer ?? speechRecognizerPrimary, recognizer.isAvailable else {
                 errorMessage = String(localized: "recognition_unavailable")
+                deactivateAudioSession()
                 return
             }
 
-            let request = makeRecognitionRequest(for: speechRecognizer)
+            let request = makeRecognitionRequest(for: recognizer)
             self.recognitionRequest = request
 
-            recognitionTask = speechRecognizer.recognitionTask(with: request) {
+            recognitionTask = recognizer.recognitionTask(with: request) {
                 [weak self] result, error in
                 self?.handleRecognitionResult(result, error: error, isPrimary: true)
             }
@@ -407,7 +440,7 @@ final class VoiceManager {
 
         let inputNode = engine.inputNode
         let recordingFormat = inputNode.outputFormat(forBus: 0)
-        let isDual = useDualLanguage
+        let isDual = dualThisRecording
 
         // A hardware format of 0 Hz means the input route is not ready — it happens when the
         // session was just activated, or when headphones are being swapped. `installTap` throws an
@@ -415,12 +448,15 @@ final class VoiceManager {
         guard recordingFormat.sampleRate > 0, recordingFormat.channelCount > 0 else {
             errorMessage = String(localized: "audio_input_unavailable")
             cleanupAudioResources()
+            deactivateAudioSession()
             return
         }
 
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) {
             [weak self] buffer, _ in
-            guard let self else { return }
+            // Once the stop has begun the requests are closed (`endAudio`), and a buffer that was
+            // already on its way must not be appended to them.
+            guard let self, !self.isStopping else { return }
 
             if isDual {
                 self.recognitionRequestPrimary?.append(buffer)
@@ -457,6 +493,7 @@ final class VoiceManager {
         } catch {
             errorMessage = String(format: String(localized: "audio_engine_error"), error.localizedDescription)
             cleanupAudioResources()
+            deactivateAudioSession()
         }
     }
 
@@ -464,13 +501,15 @@ final class VoiceManager {
         _ result: SFSpeechRecognitionResult?, error: Error?, isPrimary: Bool
     ) {
         Task { @MainActor in
-            guard !self.isStopping else { return }
+            // After the stop the recognizer still gets a moment to say its last words: those results
+            // are kept, everything else is ignored.
+            guard !self.isStopping || self.isFinishing else { return }
 
             if let result {
                 let text = result.bestTranscription.formattedString
                 guard !text.isEmpty else { return }
 
-                if self.useDualLanguage {
+                if self.dualThisRecording {
                     // Keep each recognizer's stream separate and let `chooseDualTranscript`
                     // decide which to surface — the secondary language can no longer overwrite
                     // good primary text just because it emitted more (hallucinated) words.
@@ -491,6 +530,14 @@ final class VoiceManager {
                     self.processSmartRouting(text: text)
                 }
 
+                if self.isFinishing {
+                    // The last words are in once every recognizer in use has finalized.
+                    let allFinal = self.dualThisRecording
+                        ? (self.primaryIsFinal && self.secondaryIsFinal) : result.isFinal
+                    if allFinal { self.finishStop() }
+                    return
+                }
+
                 // Si ya llevamos suficiente silencio cuando llega el texto, parar de inmediato
                 let silentSinceLastAudio = Date.now.timeIntervalSince(self.lastAudioDetectedTime)
                 if self.silenceDuration > 0, silentSinceLastAudio > self.silenceDuration {
@@ -500,21 +547,30 @@ final class VoiceManager {
             }
 
             if let error {
-                // Ignore cancellation errors
+                // A task that fails while the last words are awaited has nothing more to say.
+                if self.isFinishing {
+                    self.finishStop()
+                    return
+                }
+
+                // Cancellation, or the recognizer ending its task on its own (nothing heard for a
+                // while). Nothing more can come from that task, yet the microphone went on until the
+                // one-minute cap, with "Listening…" on screen and nothing being transcribed.
                 let nsError = error as NSError
                 if nsError.domain == "kAFAssistantErrorDomain"
                     && [216, 1110].contains(nsError.code)
                 {
+                    if !self.dualThisRecording { self.stopRecording(immediately: true) }
                     return
                 }
 
                 // In dual mode, one recognizer failing is acceptable — the other may still work.
-                if self.useDualLanguage && !isPrimary {
+                if self.dualThisRecording && !isPrimary {
                     return
                 }
 
                 self.errorMessage = error.localizedDescription
-                self.stopRecording()
+                self.stopRecording(immediately: true)
             }
         }
     }
@@ -537,28 +593,50 @@ final class VoiceManager {
         processSmartRouting(text: chosen)
     }
 
-    func stopRecording() {
+    /// Stops listening. With `immediately` false (the default) the recognizer gets a moment to report
+    /// its last words, and `isRecording` goes down when it has, or after `finalResultGrace`.
+    func stopRecording(immediately: Bool = false) {
         guard !isStopping else { return }
         isStopping = true
 
         stopSilenceTimer()
-        // ✅ FIX: Cancel smart routing task
-        smartRoutingTask?.cancel()
-        smartRoutingTask = nil
         calibrationTask?.cancel()
         calibrationTask = nil
         maxDurationTask?.cancel()
         maxDurationTask = nil
         removeInterruptionObservers()
-
-        cleanupAudioResources()
-
-        isRecording = false
         audioLevel = 0
+        closeAudioInput()
 
+        let hasRecognition = recognitionTask != nil || recognitionTaskPrimary != nil || recognitionTaskSecondary != nil
+        guard !immediately, hasRecognition else {
+            finishStop()
+            return
+        }
+
+        // After `endAudio` the recognizer delivers a final result within a moment. Cancelling at once,
+        // as this used to, threw away whatever it had not yet reported as a partial: the last word or
+        // two of every recording that was ended by the button.
+        isFinishing = true
+        finishTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(Self.finalResultGrace))
+            guard !Task.isCancelled else { return }
+            self?.finishStop()
+        }
+    }
+
+    private func finishStop() {
+        finishTask?.cancel()
+        finishTask = nil
+        isFinishing = false
+        cancelRecognition()
+        isRecording = false
+        deactivateAudioSession()
+    }
+
+    private func deactivateAudioSession() {
         #if !os(macOS)
-            try? AVAudioSession.sharedInstance().setActive(
-                false, options: .notifyOthersOnDeactivation)
+            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
         #endif
     }
 
@@ -605,7 +683,20 @@ final class VoiceManager {
                 }
             }
 
-            interruptionObservers = [interruption, route]
+            // A route change that is not the old device leaving (headphones plugged in, Bluetooth
+            // connecting) stops the engine too, and `isRecording` stayed true with a dead engine until
+            // the one-minute cap.
+            let configuration = center.addObserver(
+                forName: .AVAudioEngineConfigurationChange, object: audioEngine, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    guard let self, self.isRecording, !self.isStopping else { return }
+                    self.errorMessage = String(localized: "voice_input_changed")
+                    self.stopRecording()
+                }
+            }
+
+            interruptionObservers = [interruption, route, configuration]
         #endif
     }
 
@@ -630,42 +721,44 @@ final class VoiceManager {
         // Without this the button was decorative: it swapped the label and the stored locale, but
         // `speechRecognizer` was still the object built for the previous language in `init`, so
         // recognition carried on in the language you had just switched away from.
-        configureRecognizers()
+        configureRecognizers(allowDual: false)
     }
 
     private func processSmartRouting(text: String) {
-        // Cancel previous task before starting new one
-        smartRoutingTask?.cancel()
+        guard !routingNames.isEmpty, let found = Self.routing(in: text, names: routingNames) else { return }
+        transcribedText = found.text
+        detectedColumnName = found.name
+        // A command at the end of the sentence is how a dictation says "that is all".
+        stopRecording()
+    }
 
-        smartRoutingTask = Task.detached(priority: .userInitiated) { [weak self] in
-            guard !Task.isCancelled else { return }
-
-            // Support both Spanish and English commands in regex
-            let pattern = "(?i)\\s+(añadir a|mover a|add to|move to)\\s+(.+)$"
-
-            guard let regex = try? NSRegularExpression(pattern: pattern) else { return }
-
-            let range = NSRange(text.startIndex..<text.endIndex, in: text)
-            guard let match = regex.firstMatch(in: text, options: [], range: range) else { return }
-
-            guard !Task.isCancelled else { return }
-
-            guard let columnRange = Range(match.range(at: 2), in: text),
-                let commandRange = Range(match.range(at: 0), in: text)
-            else { return }
-
-            let columnName = String(text[columnRange])
-            let cleanText = text.replacingCharacters(in: commandRange, with: "")
-
-            await MainActor.run { [weak self] in
-                guard !Task.isCancelled else { return }
-                self?.transcribedText = cleanText.trimmingCharacters(in: .whitespacesAndNewlines)
-                self?.detectedColumnName = columnName.trimmingCharacters(
-                    in: .whitespacesAndNewlines)
-                // If we detected a valid command, stop recording immediately (success!)
-                self?.stopRecording()
-            }
+    /// "… añadir a Hecho" → the dictation without the command, and the name it asked for.
+    ///
+    /// Nil unless what follows the command is one of `names`, whole, and something precedes it. The
+    /// pattern used to take any "add to" in the sentence: "arreglar el botón de añadir a favoritos" was
+    /// cut at "de", "favoritos" became a column that does not exist, and the recording stopped
+    /// mid-sentence. The last command that names something wins, so "add to cart, move to Done" is
+    /// about Done.
+    nonisolated static func routing(in text: String, names: [String]) -> (text: String, name: String)? {
+        guard let regex = try? NSRegularExpression(pattern: "(?i)\\s(?:añadir a|mover a|add to|move to)\\s+")
+        else { return nil }
+        let whole = NSRange(text.startIndex..., in: text)
+        for match in regex.matches(in: text, range: whole).reversed() {
+            guard let command = Range(match.range, in: text) else { continue }
+            let spoken = normalizedName(String(text[command.upperBound...]))
+            guard !spoken.isEmpty, let name = names.first(where: { normalizedName($0) == spoken }) else { continue }
+            let before = text[..<command.lowerBound]
+                .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: ",;:-–")))
+            guard !before.isEmpty else { continue }
+            return (before, name)
         }
+        return nil
+    }
+
+    /// Without case, accents or the punctuation the recognizer adds around the last words.
+    nonisolated private static func normalizedName(_ text: String) -> String {
+        text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
+            .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines.union(.punctuationCharacters))
     }
 
     // MARK: - Silence Detection
@@ -735,7 +828,9 @@ final class VoiceManager {
         silenceTimer = nil
     }
 
-    private func cleanupAudioResources() {
+    /// Stops listening: the engine and its tap off, and the requests told that no more audio is coming.
+    /// The recognition tasks are left alone so that what they still have to say can arrive.
+    private func closeAudioInput() {
         if let engine = audioEngine, engine.isRunning {
             engine.stop()
             engine.inputNode.removeTap(onBus: 0)
@@ -743,11 +838,13 @@ final class VoiceManager {
         audioEngine = nil
 
         recognitionRequest?.endAudio()
-        recognitionRequest = nil
-
         recognitionRequestPrimary?.endAudio()
-        recognitionRequestPrimary = nil
         recognitionRequestSecondary?.endAudio()
+    }
+
+    private func cancelRecognition() {
+        recognitionRequest = nil
+        recognitionRequestPrimary = nil
         recognitionRequestSecondary = nil
 
         recognitionTask?.cancel()
@@ -757,5 +854,10 @@ final class VoiceManager {
         recognitionTaskPrimary = nil
         recognitionTaskSecondary?.cancel()
         recognitionTaskSecondary = nil
+    }
+
+    private func cleanupAudioResources() {
+        closeAudioInput()
+        cancelRecognition()
     }
 }

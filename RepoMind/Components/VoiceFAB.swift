@@ -78,7 +78,8 @@ struct VoiceFAB: View {
                     .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10))
                     .frame(maxWidth: 200)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
-                    .accessibilityLabel("Live transcript: \(voiceManager.transcribedText)")
+                    .accessibilityLabel(
+                        String(format: String(localized: "voice_live_transcript %@"), voiceManager.transcribedText))
             }
 
             // FAB button
@@ -148,13 +149,17 @@ struct VoiceFAB: View {
             }
         }
         .alert(
-            "permission_required_title",
+            voiceManager.permissionGranted ? "voice_error_title" : "permission_required_title",
             isPresented: isAlertPresented
         ) {
-            Button("open_settings_button") {
-                openSettings()
+            // Settings only helps when it is a permission that is missing; every voice error was
+            // offering it, an interrupted recording included.
+            if !voiceManager.permissionGranted {
+                Button("open_settings_button") {
+                    openSettings()
+                }
             }
-            Button("cancel", role: .cancel) {}
+            Button(voiceManager.permissionGranted ? "ok" : "cancel", role: .cancel) {}
         } message: {
             Text(voiceManager.errorMessage ?? "")
         }

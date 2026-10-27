@@ -15,6 +15,9 @@ struct FeedbackView: View {
     @State private var isSyncing = false
     @State private var syncError: String?
     @State private var openedIssue: FeedbackIssue?
+    /// The requested report has been opened already. Without this, popping its detail went back to the
+    /// list, `onAppear` ran again and pushed the same detail, and the list was unreachable.
+    @State private var didOpenRequestedIssue = false
 
     private let repoFullName: String
 
@@ -52,11 +55,9 @@ struct FeedbackView: View {
         .navigationDestination(item: $openedIssue) { issue in
             FeedbackIssueDetailView(issue: issue, repo: repo)
         }
-        .onAppear {
-            if let openIssueID, openedIssue == nil {
-                openedIssue = scopedIssues.first { $0.id == openIssueID }
-            }
-        }
+        .onAppear { openRequestedIssue() }
+        // The report may arrive with the sync that this screen starts itself.
+        .onChange(of: scopedIssues.count) { _, _ in openRequestedIssue() }
         .task { await sync() }
         .alert("feedback_sync_error_title",
                isPresented: Binding(get: { syncError != nil }, set: { if !$0 { syncError = nil } })) {
@@ -64,6 +65,14 @@ struct FeedbackView: View {
         } message: {
             Text(syncError ?? "")
         }
+    }
+
+    private func openRequestedIssue() {
+        guard let openIssueID, !didOpenRequestedIssue,
+            let issue = scopedIssues.first(where: { $0.id == openIssueID })
+        else { return }
+        didOpenRequestedIssue = true
+        openedIssue = issue
     }
 
     // MARK: - Subviews

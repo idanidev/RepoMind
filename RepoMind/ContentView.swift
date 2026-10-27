@@ -1589,6 +1589,9 @@ struct AdaptiveRepoListView: View {
     /// Where a notification wants the selected board to land, and a token that rebuilds the board
     /// when the tap is for the repo that is already open.
     @State private var boardFocus: BoardFocus?
+    /// The repo `boardFocus` was meant for. Picking another one in the sidebar kept the same board
+    /// identity, so the sheet a notification asked for opened on the wrong repo.
+    @State private var boardFocusRepo: PersistentIdentifier?
     @State private var boardToken = UUID()
     @State private var notifications = NotificationRouter.shared
     @Environment(\.openURL) private var openURL
@@ -1967,10 +1970,12 @@ struct AdaptiveRepoListView: View {
         switch destination {
         case .board(let repo, let focus):
             boardFocus = focus
+            boardFocusRepo = repo.persistentModelID
             boardToken = UUID()
             selectedRepo = repo
         case .stats(let repo):
             boardFocus = nil
+            boardFocusRepo = nil
             boardToken = UUID()
             selectedRepo = repo
         case .web(let url):
@@ -1983,7 +1988,9 @@ struct AdaptiveRepoListView: View {
     @ViewBuilder
     private var detail: some View {
         if let selectedRepo {
-            KanbanView(project: selectedRepo, focus: boardFocus)
+            KanbanView(
+                project: selectedRepo,
+                focus: selectedRepo.persistentModelID == boardFocusRepo ? boardFocus : nil)
                 .id(boardToken)
         } else {
             ContentUnavailableView {

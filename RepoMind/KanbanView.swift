@@ -36,6 +36,9 @@ struct KanbanView: View {
 
     // ✅ FIX: Non-optional ViewModel initialized in .task
     @State private var viewModel: KanbanViewModel?
+    /// See `BoardView`: one view model per project, and the notification's focus applied once.
+    @State private var viewModelProject: PersistentIdentifier?
+    @State private var focusApplied = false
     @State private var viewMode: KanbanViewMode = .board
     @State private var showPaywall = false
     @State private var showRepoSettings = false
@@ -62,7 +65,7 @@ struct KanbanView: View {
         }
         .navigationTitle(project.name)
         .toolbar { toolbarContent }
-        .task(id: project.repoID) {
+        .task(id: project.persistentModelID) {
             await initializeViewModel()
         }
     }
@@ -73,9 +76,12 @@ struct KanbanView: View {
         // Always create a fresh VM — .task(id:) ensures this only runs when the project changes
         // Making this async lets checkVoicePermissions participate in structured concurrency:
         // if the user switches projects quickly, the task is cancelled automatically.
+        guard viewModel == nil || viewModelProject != project.persistentModelID else { return }
         let vm = KanbanViewModel(project: project, modelContext: context)
         vm.initializeDefaultColumnsIfNeeded()
         viewModel = vm
+        viewModelProject = project.persistentModelID
+        focusApplied = false
         Task { await applyFocus(to: vm) }
         await vm.checkVoicePermissions()
         await vm.reconcileGitHubSyncIfNeeded()
@@ -87,6 +93,8 @@ struct KanbanView: View {
     /// A notification asked for a task or a report in particular; the classic board shows every
     /// column, so a column needs nothing. The sheet waits for the board to be on screen.
     private func applyFocus(to model: KanbanViewModel) async {
+        guard !focusApplied else { return }
+        focusApplied = true
         switch focus {
         case .task(let id):
             try? await Task.sleep(for: .milliseconds(450))
@@ -256,6 +264,11 @@ struct KanbanView: View {
         }
         .sheet(isPresented: $showRepoSettings) {
             RepoSettingsSheet(viewModel: viewModel, columns: columns)
+        }
+        // The same review as on the phone: without it a dictation was saved as it came, with no kind,
+        // no agent switch and no chance to correct it, and Settings → Agent did nothing here.
+        .sheet(item: $viewModel.pendingCapture) { _ in
+            VoiceCaptureSheet(viewModel: viewModel, columns: columns.map(\.name))
         }
         .sheet(isPresented: $showFeedback, onDismiss: { feedbackIssueToOpen = nil }) {
             NavigationStack { FeedbackView(repo: project, openIssueID: feedbackIssueToOpen) }

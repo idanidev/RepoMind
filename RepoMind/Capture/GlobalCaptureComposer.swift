@@ -13,15 +13,23 @@ enum GlobalCaptureRouting {
     /// The dictation as it came, filed under the app it names: "en InSync, arreglar el login"
     /// becomes the task "Arreglar el login" in InSync. With no app named, the draft has none and
     /// the sheet asks, unless there is only one app to choose from.
+    ///
+    /// In order: an app named as a prefix or a suffix (the phrase leaves the title); the app a trailing
+    /// "…, añadir a X" asked for (`hint`); an app only mentioned in passing, as a guess. A passing
+    /// mention used to win over the explicit command: "the widget of RepoMind … añadir a InSync" went
+    /// to RepoMind.
     static func fallbackDraft(
         transcript: String, options: [CaptureRepoOption], hint: String? = nil
     ) -> CaptureDraft {
         var draft = CaptureDraft.fallback(transcript: transcript, columnName: nil)
-        if let found = CaptureRepoResolver.detect(in: transcript, options: options) {
+        let found = CaptureRepoResolver.detect(in: transcript, options: options)
+        if let found, found.stripped {
             if !found.rest.isEmpty { draft.title = found.rest }
             draft.repoID = found.option.id
         } else if let hint, let option = CaptureRepoResolver.match(hint, in: options) {
             draft.repoID = option.id
+        } else if let found {
+            draft.repoID = found.option.id
         } else if options.count == 1 {
             draft.repoID = options.first?.id
         }
@@ -35,9 +43,16 @@ enum GlobalCaptureRouting {
         title: String, details: String, kind: String, repo: String, column: String,
         transcript: String, options: [CaptureRepoOption]
     ) -> CaptureDraft {
+        // What the dictation says goes first. The model's own pick only counts when the dictation mentions
+        // that app in some form: a model that names one nobody said would otherwise pass for "the app was
+        // said", and the sheet, which is meant to ask, would file the task there without a word.
         let named = repo.trimmingCharacters(in: .whitespacesAndNewlines)
-        let option = (named.isEmpty ? nil : CaptureRepoResolver.match(named, in: options))
-            ?? CaptureRepoResolver.detect(in: transcript, options: options)?.option
+        let mentioned = CaptureRepoResolver.squash(transcript)
+        let modelsPick = named.isEmpty ? nil : CaptureRepoResolver.match(named, in: options).flatMap { option in
+            mentioned.contains(CaptureRepoResolver.squash(option.name)) ? option : nil
+        }
+        let option = CaptureRepoResolver.detect(in: transcript, options: options)?.option
+            ?? modelsPick
             ?? (options.count == 1 ? options.first : nil)
         var draft = CaptureDraft(
             title: title, details: details, kind: kind, column: column,

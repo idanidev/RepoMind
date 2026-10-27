@@ -62,10 +62,10 @@ struct CaptureDraftCard: View {
         return Menu {
             Picker("global_capture_app", selection: $draft.repoID) {
                 if current == nil {
-                    Text("global_capture_pick_app").tag(nil as Int?)
+                    Text("global_capture_pick_app").tag(nil as String?)
                 }
                 ForEach(repos) { repo in
-                    Text(repo.name).tag(repo.id as Int?)
+                    Text(repo.name).tag(repo.id as String?)
                 }
             }
         } label: {

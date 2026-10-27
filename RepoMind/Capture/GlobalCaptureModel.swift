@@ -36,12 +36,14 @@ final class GlobalCaptureModel {
         options.first { $0.id == draft.repoID }?.columns ?? []
     }
 
-    /// The apps a task can go to: favorites first, then the rest as they come.
-    static func options(from repos: [ProjectRepo]) -> [CaptureRepoOption] {
+    /// The apps a task can go to: favorites first, then the rest as they come. A free account gets the
+    /// ones its home shows (`limit`), not every repo it has synced.
+    static func options(from repos: [ProjectRepo], limit: Int? = nil) -> [CaptureRepoOption] {
         let live = repos.filter { !$0.isArchived }
-        return (live.filter(\.isFavorite) + live.filter { !$0.isFavorite }).map { repo in
+        let ordered = live.filter(\.isFavorite) + live.filter { !$0.isFavorite }
+        return ordered.prefix(limit ?? ordered.count).map { repo in
             CaptureRepoOption(
-                id: repo.repoID,
+                id: repo.homeCardID,
                 name: repo.name,
                 columns: (repo.columns ?? []).sorted { $0.orderIndex < $1.orderIndex }.map(\.name),
                 ideaColumn: repo.ideaColumn?.name,
@@ -54,20 +56,29 @@ final class GlobalCaptureModel {
     /// Teaches the recognizer the names of every app and column, then starts listening: the way
     /// in was a tap on a microphone, so there is nothing else to press.
     func start(options: [CaptureRepoOption]) async {
-        self.options = options
+        refreshOptions(options)
         voiceManager.contextualStrings = VoiceVocabulary.terms(
             repoNames: options.map(\.name), columns: options.flatMap(\.columns))
         await startListening()
     }
 
+    /// The apps changed under an open sheet (CloudKit delivering repos late, a favorite starred): the
+    /// list the drafts are checked against follows, and "añadir a …" can name the new ones.
+    func refreshOptions(_ options: [CaptureRepoOption]) {
+        self.options = options
+        voiceManager.routingNames = options.map(\.name)
+    }
+
     func startListening() async {
         guard !voiceManager.isRecording else { return }
-        hasListened = true
         await voiceManager.toggleRecording()
+        // After, not before: while the permission prompt is up this is still "not yet", and it was
+        // reading "I didn't hear anything" behind the prompt.
+        hasListened = true
     }
 
     /// The microphone stopped, by hand, by silence or by "añadir a …": what it heard becomes the
-    /// capture to review, or is appended to the one already open.
+    /// capture to review, or is added to the one already open.
     func prepare() {
         let text = voiceManager.transcribedText.trimmingCharacters(in: .whitespacesAndNewlines)
         voiceManager.transcribedText = ""
@@ -75,32 +86,51 @@ final class GlobalCaptureModel {
         let hint = voiceManager.detectedColumnName
         guard !text.isEmpty else { return }
 
-        let transcript = capture.map { $0.transcript + "\n" + text } ?? text
+        let options = options
+        let hinted = hint.flatMap { CaptureRepoResolver.match($0, in: options) }
         let useAI = shapesWithAI && VoiceComposer.isAvailable
-        let opened = VoiceCapture(
-            transcript: transcript,
-            drafts: [GlobalCaptureRouting.fallbackDraft(transcript: transcript, options: options, hint: hint)],
-            isComposing: useAI)
-        capture = opened
+        let addition = VoiceCapture.adding(text, to: capture, isComposing: useAI) {
+            GlobalCaptureRouting.fallbackDraft(transcript: $0, options: options, hint: hint)
+        }
+        capture = addition.capture
         composeTask?.cancel()
         guard useAI else { return }
 
-        let options = options
+        let id = addition.capture.id
+        let revision = addition.capture.revision
+        let target = addition.target
+        let dictated = addition.dictated
         let names = VoiceVocabulary.terms(repoNames: options.map(\.name), columns: [])
         composeTask = Task { [weak self] in
-            let drafts = await VoiceComposer.composeGlobal(transcript: transcript, options: options, names: names)
-            guard let self, !Task.isCancelled, capture?.id == opened.id else { return }
+            let drafts = await VoiceComposer.composeGlobal(transcript: dictated, options: options, names: names)
+            guard let self, !Task.isCancelled, capture?.id == id, capture?.revision == revision else { return }
             if let drafts, !drafts.isEmpty {
-                capture?.drafts = drafts
-                capture?.composedByAI = true
+                let filled = drafts.map {
+                    Self.settingApp($0, named: hinted?.id, fallback: target.first?.repoID)
+                }
+                capture?.applyComposed(filled, replacing: target)
             }
             capture?.isComposing = false
         }
     }
 
+    /// "…, añadir a InSync" was taken out of the text before the model saw it, so the app it named is put
+    /// back here, over the model's own guess. Failing that, the one the raw draft found.
+    nonisolated static func settingApp(
+        _ draft: CaptureDraft, named hinted: String?, fallback: String?
+    ) -> CaptureDraft {
+        var draft = draft
+        if let hinted {
+            draft.repoID = hinted
+        } else if draft.repoID == nil {
+            draft.repoID = fallback
+        }
+        return draft
+    }
+
     func discard() {
         composeTask?.cancel()
-        if voiceManager.isRecording { voiceManager.stopRecording() }
+        if voiceManager.isRecording { voiceManager.stopRecording(immediately: true) }
         voiceManager.transcribedText = ""
         capture = nil
     }
@@ -114,14 +144,17 @@ final class GlobalCaptureModel {
     func save(repos: [ProjectRepo], context: ModelContext) -> Bool {
         guard let capture else { return false }
         composeTask?.cancel()
+        if voiceManager.isRecording { voiceManager.stopRecording(immediately: true) }
+        voiceManager.transcribedText = ""
 
         var created: [(task: TaskItem, repo: ProjectRepo)] = []
         var nextOrder: [UUID: Int] = [:]
         for draft in capture.drafts where !draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            guard let repo = repos.first(where: { $0.repoID == draft.repoID }) else { continue }
-            if (repo.columns ?? []).isEmpty {
-                KanbanViewModel(project: repo, modelContext: context).initializeDefaultColumnsIfNeeded()
-            }
+            // Only the apps the sheet offered: a draft can carry the id of one a free account cannot see.
+            guard options.contains(where: { $0.id == draft.repoID }),
+                let repo = repos.first(where: { $0.homeCardID == draft.repoID })
+            else { continue }
+            KanbanViewModel.createDefaultColumnsIfNeeded(for: repo, in: context)
             let ordered = (repo.columns ?? []).sorted { $0.orderIndex < $1.orderIndex }
             let column = ordered.first { $0.name == draft.columnName }
                 ?? (draft.kind == .idea ? repo.ideaColumn : nil)
@@ -146,7 +179,13 @@ final class GlobalCaptureModel {
         do {
             try context.save()
         } catch {
-            // Never claim success for something that was not persisted.
+            // Never claim success for something that was not persisted. And do not leave the tasks
+            // inserted: the capture stays open, and the next Save, or the autosave, would write them
+            // twice.
+            for entry in created {
+                TaskLabelStore.remove(for: entry.task.id)
+                context.delete(entry.task)
+            }
             ToastManager.shared.show(String(localized: "task_save_failed"), style: .error)
             return false
         }

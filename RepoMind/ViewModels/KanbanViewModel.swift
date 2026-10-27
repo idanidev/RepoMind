@@ -162,45 +162,24 @@ final class KanbanViewModel {
         await voiceManager.checkAndRequestPermissions()
     }
 
-    /// Updates the recognizer's vocabulary with column names and routing commands.
-    /// Call this whenever columns change or before starting recording.
+    /// Updates the recognizer's vocabulary with column names and routing commands, and tells it what
+    /// "añadir a …" may name. Call this whenever columns change or before starting recording.
     func updateVoiceContextualStrings() {
-        let columnNames = (project.columns ?? []).map(\.name)
+        let columnNames = (project.columns ?? []).sorted { $0.orderIndex < $1.orderIndex }.map(\.name)
         let commands = ["añadir a", "mover a", "add to", "move to"]
         voiceManager.contextualStrings = columnNames + commands + VoiceVocabulary.terms(for: project)
-    }
-
-    func createTaskFromVoice() {
-        let text = voiceManager.transcribedText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
-
-        var targetColumn: KanbanColumn?
-
-        if let detectedName = voiceManager.detectedColumnName {
-            targetColumn = (project.columns ?? []).first { col in
-                col.name.localizedStandardContains(detectedName)
-            }
-        }
-
-        if targetColumn == nil {
-            // Usar la columna visible actualmente; si no, la primera
-            targetColumn =
-                currentColumn
-                ?? (project.columns ?? [])
-                .sorted { $0.orderIndex < $1.orderIndex }
-                .first
-        }
-
-        if let targetColumn {
-            createTask(content: text, column: targetColumn)
-        }
-
-        voiceManager.transcribedText = ""
+        voiceManager.routingNames = columnNames
     }
 
     // MARK: - Column Actions
 
     func initializeDefaultColumnsIfNeeded() {
+        Self.createDefaultColumnsIfNeeded(for: project, in: modelContext)
+    }
+
+    /// Also for callers without a board, such as the global capture: they used to build a whole view
+    /// model, speech recognizers included, just to reach this.
+    static func createDefaultColumnsIfNeeded(for project: ProjectRepo, in modelContext: ModelContext) {
         guard project.columns?.isEmpty ?? true else { return }
 
         let defaults = [
@@ -324,6 +303,9 @@ final class KanbanViewModel {
         let repo = project
         let shouldSync = repo.syncTasksToGitHub && !isDemoMode
 
+        // Its labels live in UserDefaults by task id and nothing else removed them: one entry per task
+        // ever captured, for ever.
+        TaskLabelStore.remove(for: task.id)
         withAnimation(.snappy) {
             modelContext.delete(task)
         }

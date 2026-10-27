@@ -47,17 +47,18 @@ struct CaptureDraft: Identifiable, Hashable {
     var columnName: String?
     /// Goes to the agent: the issue gets the `agent` label and the repo's workflow picks it up.
     var delegate = false
-    /// `ProjectRepo.repoID` of the app it goes to. Only set when the capture starts outside a
+    /// `ProjectRepo.homeCardID` of the app it goes to. Only set when the capture starts outside a
     /// board (widget, Siri, the shortcut): on a board the app is the board's own, and nil.
-    var repoID: Int?
+    var repoID: String?
 
     var labels: TaskLabels { TaskLabels(kind: kind, delegated: delegate) }
 
     /// What goes into `TaskItem.content`: the title on the first line, which is what becomes the
     /// issue's title, and the details after a blank line, which the issue body carries whole.
     var content: String {
+        let head = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let detail = details.trimmingCharacters(in: .whitespacesAndNewlines)
-        return detail.isEmpty ? title : title + "\n\n" + detail
+        return detail.isEmpty ? head : head + "\n\n" + detail
     }
 
     /// The dictation as it came, when nothing could give it shape.
@@ -90,7 +91,7 @@ struct CaptureDraft: Identifiable, Hashable {
 
     init(
         id: UUID = UUID(), title: String, details: String = "", kind: CaptureKind = .feature,
-        columnName: String? = nil, delegate: Bool = false, repoID: Int? = nil
+        columnName: String? = nil, delegate: Bool = false, repoID: String? = nil
     ) {
         self.id = id
         self.repoID = repoID
@@ -104,13 +105,112 @@ struct CaptureDraft: Identifiable, Hashable {
 
 /// A recording turned into drafts, open in the review sheet until saved or discarded.
 struct VoiceCapture: Identifiable {
-    let id = UUID()
+    /// Stays the same while the capture is open, "keep dictating" included: the sheet is presented by
+    /// this identity, and a new one dismissed it and presented it again.
+    var id = UUID()
     /// Everything dictated, including what "keep dictating" added, separated by newlines.
     var transcript: String
     var drafts: [CaptureDraft]
     /// The on-device model is still working; the drafts shown are the fallback meanwhile.
     var isComposing: Bool
     var composedByAI = false
+    /// Counts the dictations that have been added, so a late answer from the model can tell whether
+    /// it is for the last one.
+    var revision = 0
+    /// The drafts as the app last made them (the raw dictation, or what the model shaped). Anything
+    /// different is something the person changed.
+    private(set) var baseline: [CaptureDraft]
+    private var sawEdits = false
+
+    init(transcript: String, drafts: [CaptureDraft], isComposing: Bool) {
+        self.transcript = transcript
+        self.drafts = drafts
+        self.isComposing = isComposing
+        self.baseline = drafts
+    }
+
+    /// Whether the person has edited, picked or removed anything since the app made the drafts, and
+    /// stays true from the first time: later dictation must not wipe it.
+    var hasUserEdits: Bool { sawEdits || drafts != baseline }
+
+    /// "Keep dictating" with nothing edited: the new text joins the transcript and everything is
+    /// worked out again from the whole of it.
+    mutating func recompute(transcript: String, drafts: [CaptureDraft], isComposing: Bool) {
+        self.transcript = transcript
+        self.drafts = drafts
+        self.baseline = drafts
+        self.isComposing = isComposing
+        composedByAI = false
+        sawEdits = false
+        revision += 1
+    }
+
+    /// "Keep dictating" after the person edited something: the new text becomes a draft of its own and
+    /// what they changed stays. Recomputing from the whole transcript rebuilt every card from scratch,
+    /// losing every title they had fixed and every app or column they had picked.
+    mutating func append(segment: CaptureDraft, text: String, isComposing: Bool) {
+        if drafts != baseline { sawEdits = true }
+        transcript += "\n" + text
+        drafts.append(segment)
+        self.isComposing = isComposing
+        revision += 1
+    }
+
+    /// Puts the model's drafts in the place of `snapshot`, but only when those drafts are still exactly
+    /// as they were when the model was asked: if the person edited the title, picked another app or kind,
+    /// or removed a card while "Giving it shape…" was showing, the model's answer is dropped and their
+    /// work stays. Returns whether it was applied.
+    @discardableResult
+    mutating func applyComposed(_ composed: [CaptureDraft], replacing snapshot: [CaptureDraft]) -> Bool {
+        if drafts != baseline { sawEdits = true }
+        let ids = Set(snapshot.map(\.id))
+        let current = drafts.filter { ids.contains($0.id) }
+        guard !composed.isEmpty, current == snapshot, let first = drafts.firstIndex(where: { ids.contains($0.id) })
+        else { return false }
+        drafts.removeAll { ids.contains($0.id) }
+        drafts.insert(contentsOf: composed, at: min(first, drafts.count))
+        composedByAI = true
+        baseline = drafts
+        return true
+    }
+}
+
+// MARK: - Adding a dictation
+
+extension VoiceCapture {
+    /// What a finished dictation does to the capture under review, shared by the board and the global
+    /// sheet so the two behave the same.
+    struct Addition {
+        var capture: VoiceCapture
+        /// The drafts the model's answer may replace.
+        var target: [CaptureDraft]
+        /// The text the model is asked to shape.
+        var dictated: String
+    }
+
+    /// Starts a capture from `text`, or adds it to `open`. Nothing touched yet: the new text joins the
+    /// transcript and everything is worked out again from the whole of it. Something edited: the new
+    /// text becomes a card of its own, so what the person changed stays. `draft` makes the raw card for
+    /// a piece of text (the board and the global sheet route it differently).
+    static func adding(
+        _ text: String, to open: VoiceCapture?, isComposing: Bool, draft: (String) -> CaptureDraft
+    ) -> Addition {
+        guard var open else {
+            let whole = draft(text)
+            return Addition(
+                capture: VoiceCapture(transcript: text, drafts: [whole], isComposing: isComposing),
+                target: [whole], dictated: text)
+        }
+        if open.hasUserEdits {
+            let segment = draft(text)
+            open.append(segment: segment, text: text, isComposing: isComposing)
+            return Addition(capture: open, target: [segment], dictated: text)
+        }
+        let transcript = open.transcript + "\n" + text
+        let whole = draft(transcript)
+        open.recompute(transcript: transcript, drafts: [whole], isComposing: isComposing)
+        return Addition(capture: open, target: [whole], dictated: transcript)
+    }
 }
 
 // MARK: - Vocabulary
@@ -264,35 +364,48 @@ extension KanbanViewModel {
     }
 
     /// Turns what the microphone heard into a capture to review. With one already open, "keep
-    /// dictating" lands here too: the new text is appended and the drafts are recomputed.
+    /// dictating" lands here too. If nothing was touched, the new text is appended and everything is
+    /// worked out again from the whole dictation; if the person has edited a card, the new text becomes a
+    /// card of its own and what they changed stays.
     func prepareCapture() {
         let text = voiceManager.transcribedText.trimmingCharacters(in: .whitespacesAndNewlines)
         voiceManager.transcribedText = ""
         guard !text.isEmpty else { return }
 
-        let transcript = pendingCapture.map { $0.transcript + "\n" + text } ?? text
         let routed = voiceManager.detectedColumnName.flatMap { detected in
-            columnNames.first { $0.localizedStandardContains(detected) }
+            columnNames.first { $0.localizedCaseInsensitiveCompare(detected) == .orderedSame }
+                ?? columnNames.first { $0.localizedStandardContains(detected) }
         }
         let useAI = shapesCapturesWithAI && VoiceComposer.isAvailable
-        let capture = VoiceCapture(
-            transcript: transcript,
-            drafts: [CaptureDraft.fallback(transcript: transcript, columnName: routed)],
-            isComposing: useAI)
-        pendingCapture = capture
+
+        let addition = VoiceCapture.adding(text, to: pendingCapture, isComposing: useAI) {
+            CaptureDraft.fallback(transcript: $0, columnName: routed)
+        }
+        let target = addition.target
+        let dictated = addition.dictated
+        pendingCapture = addition.capture
         composeTask?.cancel()
         guard useAI else { return }
 
+        let id = addition.capture.id
+        let revision = addition.capture.revision
         let columns = columnNames
         let idea = project.ideaColumn?.name
         let names = VoiceVocabulary.names(for: project)
         composeTask = Task { [weak self] in
             let drafts = await VoiceComposer.compose(
-                transcript: transcript, columns: columns, ideaColumn: idea, names: names)
-            guard let self, !Task.isCancelled, pendingCapture?.id == capture.id else { return }
+                transcript: dictated, columns: columns, ideaColumn: idea, names: names)
+            guard let self, !Task.isCancelled, pendingCapture?.id == id, pendingCapture?.revision == revision
+            else { return }
             if let drafts, !drafts.isEmpty {
-                pendingCapture?.drafts = drafts
-                pendingCapture?.composedByAI = true
+                // "…, añadir a Hecho" was taken out of the text before the model saw it, so the column
+                // it named is put back here; the model is only asked for the ones it hears itself.
+                let filled = drafts.map { draft -> CaptureDraft in
+                    var draft = draft
+                    if draft.columnName == nil { draft.columnName = routed }
+                    return draft
+                }
+                pendingCapture?.applyComposed(filled, replacing: target)
             }
             pendingCapture?.isComposing = false
         }
@@ -302,6 +415,7 @@ extension KanbanViewModel {
     func saveCapture() {
         guard let capture = pendingCapture else { return }
         composeTask?.cancel()
+        stopDictating()
         let ordered = (project.columns ?? []).sorted { $0.orderIndex < $1.orderIndex }
         for draft in capture.drafts where !draft.title.trimmingCharacters(in: .whitespaces).isEmpty {
             let column = draft.columnName.flatMap { name in ordered.first { $0.name == name } }
@@ -315,6 +429,14 @@ extension KanbanViewModel {
 
     func discardCapture() {
         composeTask?.cancel()
+        stopDictating()
         pendingCapture = nil
+    }
+
+    /// The microphone may still be open — "keep dictating" and then Save or Discard — and whatever it
+    /// hears next would reopen the sheet as a capture nobody asked for.
+    private func stopDictating() {
+        if voiceManager.isRecording { voiceManager.stopRecording(immediately: true) }
+        voiceManager.transcribedText = ""
     }
 }

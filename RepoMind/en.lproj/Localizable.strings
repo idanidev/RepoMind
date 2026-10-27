@@ -756,3 +756,7 @@
 
 /* Task sync */
 "sync_tasks_error_rate_limited" = "GitHub is limiting requests for a while. The rest will be published later.";
+
+/* Voice */
+"voice_error_title" = "Voice dictation";
+"voice_live_transcript %@" = "Live transcript: %@";

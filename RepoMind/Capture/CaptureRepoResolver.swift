@@ -5,8 +5,10 @@ import Foundation
 /// A board a capture can be filed in, as the resolver and the model see it: plain values, no
 /// SwiftData, so the routing can be tested without a store.
 nonisolated struct CaptureRepoOption: Hashable, Sendable, Identifiable {
-    /// `ProjectRepo.repoID`, the key the app already uses for a repo's settings.
-    var id: Int
+    /// `ProjectRepo.homeCardID`, the identity the home already uses. Not `repoID`: every local project
+    /// and every repo restored from a backup has a `repoID` of zero, so two of them were one option and
+    /// a task meant for the second was filed in the first.
+    var id: String
     var name: String
     /// The board's columns in order; empty for a repo that has not opened its board yet.
     var columns: [String] = []
@@ -80,8 +82,16 @@ nonisolated enum CaptureRepoResolver {
         "anade", "anadir", "agrega", "agregar", "apunta", "apuntar", "anota", "anotar", "crea", "crear",
         "pon", "poner", "mete", "meter", "guarda", "guardar", "nueva", "nuevo", "una", "un", "tarea",
         "tareas", "nota", "idea", "bug", "incidencia", "issue", "add", "create", "new", "note", "task",
-        "an", "the", "please", "por", "favor", "oye", "vale", "ok", "quiero", "quisiera", "necesito",
+        "an", "a", "the", "please", "por", "favor", "oye", "vale", "ok", "quiero", "quisiera", "necesito",
         "me", "te", "puedes", "podrias", "hay", "que", "la", "el", "de", "of", "app", "repo",
+    ]
+
+    /// What can sit between the end of the task and the name once the preposition is found: "en la app
+    /// InSync", "del proyecto RepoMind", "to the repo InSync". All of it goes with the name; stopping at
+    /// the article left the task ending in a dangling "en" or "del".
+    private static let linkWords: Set<String> = [
+        "la", "el", "the", "app", "aplicacion", "repo", "repositorio", "proyecto", "project", "de", "del", "al",
+        "of", "en", "in", "a", "para", "for", "to", "on", "into",
     ]
 
     private nonisolated struct Hit {
@@ -103,7 +113,7 @@ nonisolated enum CaptureRepoResolver {
         let words = transcript.split(whereSeparator: \.isWhitespace).map(String.init)
         guard !words.isEmpty else { return nil }
         let cleaned = words.map(fold)
-        let hits = findHits(cleaned: cleaned, options: options)
+        let hits = findHits(words: words, cleaned: cleaned, options: options)
         guard !hits.isEmpty else { return nil }
 
         for hit in hits {
@@ -124,8 +134,9 @@ nonisolated enum CaptureRepoResolver {
         return Detection(option: first.option, rest: transcript, stripped: false)
     }
 
-    /// Every place a name appears, one to three words long, longest names first.
-    private static func findHits(cleaned: [String], options: [CaptureRepoOption]) -> [Hit] {
+    /// Every place a name appears, one to three words long, longest names first. A name never spans a
+    /// comma or a colon: "En InSync, web: arreglar el login" is the app InSync, not "InSync Web".
+    private static func findHits(words: [String], cleaned: [String], options: [CaptureRepoOption]) -> [Hit] {
         var hits: [Hit] = []
         let ordered = options.sorted { squash($0.name).count > squash($1.name).count }
         for option in ordered {
@@ -134,6 +145,7 @@ nonisolated enum CaptureRepoResolver {
             for start in cleaned.indices {
                 var joined = ""
                 for end in start..<min(start + 3, cleaned.count) {
+                    if end > start, endsSentence(words[end - 1]) { break }
                     joined += cleaned[end].replacingOccurrences(of: " ", with: "")
                     if joined == target {
                         hits.append(Hit(option: option, start: start, end: end + 1))
@@ -153,15 +165,13 @@ nonisolated enum CaptureRepoResolver {
         if prepositions.contains(before) {
             // "en la app de InSync" / "in the app of InSync": step back over the article and the noun.
             var index = hit.start - 1
-            while index > 0, ["la", "el", "the", "app", "repo", "de", "of"].contains(cleaned[index - 1]) { index -= 1 }
+            while index > 0, linkWords.contains(cleaned[index - 1]) { index -= 1 }
             return index
         }
         if ["de", "of"].contains(before), hit.start >= 2,
             ["app", "aplicacion", "repo", "repositorio", "proyecto", "project"].contains(cleaned[hit.start - 2]) {
             var index = hit.start - 2
-            while index > 0, ["la", "el", "the", "en", "in", "a", "para", "for", "to"].contains(cleaned[index - 1]) {
-                index -= 1
-            }
+            while index > 0, linkWords.contains(cleaned[index - 1]) { index -= 1 }
             return index
         }
         return nil
@@ -176,10 +186,17 @@ nonisolated enum CaptureRepoResolver {
         return ":,;.-–—".contains(last)
     }
 
+    /// Trimmed of the separators the naming phrase leaves around the task, and with a capital letter at
+    /// the start unless the first word already has its own capitals: "iCloud no sincroniza" is not
+    /// "ICloud", and ".gitignore" keeps its dot.
     private static func tidy(_ words: ArraySlice<String>) -> String {
-        let joined = words.joined(separator: " ")
-            .trimmingCharacters(in: CharacterSet(charactersIn: " ,:;.-–—\n"))
+        var joined = words.joined(separator: " ")
+            .trimmingCharacters(in: CharacterSet(charactersIn: " ,:;-–—\n"))
+        while joined.hasSuffix(".") { joined.removeLast() }
+        while joined.hasPrefix(". ") { joined.removeFirst(2) }
         guard let first = joined.first else { return "" }
+        let firstWord = joined.prefix { !$0.isWhitespace }
+        if firstWord.dropFirst().contains(where: \.isUppercase) { return joined }
         return first.uppercased() + joined.dropFirst()
     }
 }

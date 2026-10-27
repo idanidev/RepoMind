@@ -13,13 +13,21 @@ struct GlobalCaptureSheet: View {
     @State private var model = GlobalCaptureModel()
     @AppStorage("voiceAIEnabled") private var aiEnabled = true
 
-    private var options: [CaptureRepoOption] { GlobalCaptureModel.options(from: allRepos) }
+    private var options: [CaptureRepoOption] {
+        GlobalCaptureModel.options(from: allRepos, limit: SubscriptionManager.shared.repoLimit)
+    }
     private var voice: VoiceManager { model.voiceManager }
 
-    private var drafts: Binding<[CaptureDraft]> {
+    /// The binding to one card, found by its id every time it is read. A binding made from the array
+    /// and an index (`ForEach($drafts)`) reads `drafts[index]` after the card has been removed, or after
+    /// Save emptied the capture, and traps with "Index out of range"; this one falls back to an empty draft.
+    private func binding(for id: UUID) -> Binding<CaptureDraft> {
         Binding(
-            get: { model.capture?.drafts ?? [] },
-            set: { model.capture?.drafts = $0 })
+            get: { model.capture?.drafts.first { $0.id == id } ?? CaptureDraft(title: "") },
+            set: { updated in
+                guard let index = model.capture?.drafts.firstIndex(where: { $0.id == id }) else { return }
+                model.capture?.drafts[index] = updated
+            })
     }
 
     var body: some View {
@@ -59,7 +67,8 @@ struct GlobalCaptureSheet: View {
                             if model.save(repos: allRepos, context: context) { dismiss() }
                         }
                         .fontWeight(.semibold)
-                        .disabled(!model.canSave)
+                        // Not while the microphone is open: the words it has not delivered yet would be lost.
+                        .disabled(!model.canSave || voice.isRecording)
                     }
                 }
             }
@@ -67,20 +76,30 @@ struct GlobalCaptureSheet: View {
         .presentationDetents([.large])
         .presentationBackground(HomeTheme.background)
         .interactiveDismissDisabled(model.capture != nil)
-        .task {
-            guard !options.isEmpty else { return }
+        // Again when the first repos arrive: on a cold start from Siri they can come after the sheet, and
+        // the microphone never started, with a spinner for ever.
+        .task(id: options.isEmpty) {
+            guard !options.isEmpty, !model.hasListened else { return }
             await model.start(options: options)
         }
+        .onChange(of: options) { _, new in model.refreshOptions(new) }
         .onChange(of: voice.isRecording) { old, recording in
             // Stopped by hand, by silence or by "añadir a …": what was heard becomes the card.
             if old, !recording { model.prepare() }
         }
         .onDisappear { model.discard() }
-        .alert("permission_required_title", isPresented: permissionAlert) {
-            Button("open_settings_button") {
-                if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
+        .alert(
+            voice.permissionGranted ? "voice_error_title" : "permission_required_title",
+            isPresented: permissionAlert
+        ) {
+            // Settings only helps when it is a permission that is missing; the other errors (a call
+            // took the microphone, the recognizer is unavailable) were all offering it.
+            if !voice.permissionGranted {
+                Button("open_settings_button") {
+                    if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
+                }
             }
-            Button("cancel", role: .cancel) {}
+            Button(voice.permissionGranted ? "ok" : "cancel", role: .cancel) {}
         } message: {
             Text(voice.errorMessage ?? "")
         }
@@ -186,12 +205,12 @@ struct GlobalCaptureSheet: View {
                     listeningStrip
                 }
                 notes
-                ForEach(drafts) { $draft in
+                ForEach(model.capture?.drafts ?? []) { draft in
                     CaptureDraftCard(
-                        draft: $draft, repos: options, columns: model.columns(for: draft),
+                        draft: binding(for: draft.id), repos: options, columns: model.columns(for: draft),
                         defaultColumnTitle: String(localized: "global_capture_column_first"),
-                        canRemove: drafts.wrappedValue.count > 1,
-                        onRemove: { drafts.wrappedValue.removeAll { $0.id == draft.id } })
+                        canRemove: (model.capture?.drafts.count ?? 0) > 1,
+                        onRemove: { model.capture?.drafts.removeAll { $0.id == draft.id } })
                 }
                 if !model.canSave, model.capture?.isComposing != true {
                     CaptureNoteRow(key: "global_capture_needs_app", symbol: "exclamationmark.circle")
