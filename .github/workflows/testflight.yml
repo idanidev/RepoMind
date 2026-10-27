@@ -48,7 +48,6 @@ jobs:
     env:
       ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
       ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
-      ASC_KEY_FILEPATH: ${{ runner.temp }}/asc/AuthKey.p8
       MATCH_GIT_URL: ${{ secrets.MATCH_GIT_URL }}
       MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
       FASTLANE_SKIP_UPDATE_CHECK: "1"
@@ -82,8 +81,10 @@ jobs:
             echo "::error::Faltan secretos de match: MATCH_GIT_URL, MATCH_GIT_TOKEN y MATCH_PASSWORD"; exit 1
           fi
           mkdir -p "$RUNNER_TEMP/asc"
-          printf '%s\n' "$ASC_KEY_P8" > "$ASC_KEY_FILEPATH"
-          chmod 600 "$ASC_KEY_FILEPATH"
+          printf '%s\n' "$ASC_KEY_P8" > "$RUNNER_TEMP/asc/AuthKey.p8"
+          chmod 600 "$RUNNER_TEMP/asc/AuthKey.p8"
+          # Para el api_key del Fastfile. No puede ir en el env del job: ahí `runner` no existe.
+          echo "ASC_KEY_FILEPATH=$RUNNER_TEMP/asc/AuthKey.p8" >> "$GITHUB_ENV"
           # match clona el repo de certificados por https con autenticación básica: usuario
           # cualquiera y el token como contraseña, en base64. Enmascarado para que no salga en el log.
           auth=$(printf '%s' "x-access-token:$MATCH_GIT_TOKEN" | base64 | tr -d '\n')
