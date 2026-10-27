@@ -32,6 +32,9 @@ struct HomeLiveView: View {
     @State private var path = NavigationPath()
     @State private var tab: HomeTab = .repos
     @State private var selectedAccount: String?
+    @State private var isSearching = false
+    @State private var searchText = ""
+    @FocusState private var searchFocused: Bool
     @State private var isSyncing = false
     @State private var showAddLocalProject = false
     @State private var showPaywall = false
@@ -65,18 +68,7 @@ struct HomeLiveView: View {
                 }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                HomeTabBar(selection: $tab)
-                    .padding(.horizontal, HomeTheme.gutter)
-                    .padding(.top, 8)
-                    .padding(.bottom, 4)
-                    .background(
-                        LinearGradient(
-                            colors: [HomeTheme.background.opacity(0), HomeTheme.background],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                        .ignoresSafeArea()
-                    )
+                bottomBar
             }
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: ProjectRepo.self) { repo in
@@ -134,8 +126,92 @@ struct HomeLiveView: View {
             stats: HomeStats(cards: cards.filter { !$0.isArchived }),
             repos: cards,
             repoLimit: subscription.isPro ? nil : subscription.maxFreeRepos,
+            searchText: searchText,
             actions: actions
         )
+    }
+
+    // MARK: Bottom bar
+
+    /// The tab bar with a round search button beside it, the way iOS places search now. Tapping
+    /// the button swaps the row for the search field; Cancel brings the bar back.
+    private var bottomBar: some View {
+        HStack(spacing: 10) {
+            if tab == .repos && isSearching {
+                searchField
+                Button("cancel_button") { closeSearch() }
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(HomeTheme.textPrimary)
+            } else {
+                HomeTabBar(selection: $tab)
+                if tab == .repos {
+                    Button {
+                        isSearching = true
+                    } label: {
+                        Image(systemName: "magnifyingglass")
+                            .font(.title3.weight(.semibold))
+                            .foregroundStyle(HomeTheme.textPrimary)
+                            .frame(width: 52, height: 52)
+                            .background(Circle().fill(HomeTheme.surface))
+                            .overlay(Circle().strokeBorder(HomeTheme.hairline, lineWidth: 0.5))
+                            .shadow(color: .black.opacity(0.35), radius: 14, y: 6)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("home_search_label")
+                }
+            }
+        }
+        .padding(.horizontal, HomeTheme.gutter)
+        .padding(.top, 8)
+        .padding(.bottom, 4)
+        .background(
+            LinearGradient(
+                colors: [HomeTheme.background.opacity(0), HomeTheme.background],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
+        )
+        .animation(.snappy(duration: 0.25), value: isSearching)
+        .onChange(of: isSearching) { _, searching in searchFocused = searching }
+        .onChange(of: tab) { _, _ in
+            if isSearching { closeSearch() }
+        }
+    }
+
+    private var searchField: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(HomeTheme.textSecondary)
+            TextField("search_placeholder", text: $searchText)
+                .textFieldStyle(.plain)
+                .foregroundStyle(HomeTheme.textPrimary)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+                .submitLabel(.search)
+                .focused($searchFocused)
+            if !searchText.isEmpty {
+                Button {
+                    searchText = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(HomeTheme.textSecondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("home_clear_search_label")
+            }
+        }
+        .font(.subheadline)
+        .padding(.horizontal, 14)
+        .frame(height: 52)
+        .background(Capsule().fill(HomeTheme.surface))
+        .overlay(Capsule().strokeBorder(HomeTheme.hairline, lineWidth: 0.5))
+        .shadow(color: .black.opacity(0.35), radius: 14, y: 6)
+    }
+
+    private func closeSearch() {
+        searchText = ""
+        isSearching = false
     }
 
     private func tabPage<Content: View>(

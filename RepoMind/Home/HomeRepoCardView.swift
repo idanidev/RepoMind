@@ -95,7 +95,7 @@ struct HomeRepoCardView: View {
                         .foregroundStyle(HomeTheme.accent)
                     Text(task.title)
                         .foregroundStyle(HomeTheme.textPrimary)
-                        .lineLimit(1)
+                        .lineLimit(2)
                 }
                 .font(.caption)
             }

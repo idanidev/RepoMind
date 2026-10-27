@@ -105,7 +105,7 @@ struct HomeRepoLogo: View {
                     .resizable()
                     .scaledToFill()
             } else if let url = repo.logoURL ?? repo.ownerAvatarURL {
-                CachedAsyncImage(url: url) { monogram }
+                StoredRepoIcon(url: url, tokenKey: repo.iconTokenKey) { monogram }
             } else {
                 monogram
             }

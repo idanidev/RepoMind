@@ -273,7 +273,6 @@ struct BoardTaskCard: View {
                     .font(.subheadline)
                     .foregroundStyle(isDone ? HomeTheme.textSecondary : HomeTheme.textPrimary)
                     .strikethrough(isDone, color: HomeTheme.textSecondary)
-                    .lineLimit(3)
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 6) {
@@ -316,6 +315,7 @@ struct BoardTaskCard: View {
                 .strokeBorder(HomeTheme.hairline, lineWidth: 0.5)
         )
         .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 16, style: .continuous))
         .onTapGesture(perform: onTap)
         .contextMenu {
             Button(action: onTap) {

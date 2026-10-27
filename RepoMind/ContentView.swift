@@ -1068,7 +1068,7 @@ struct RepoRow: View {
         // Prioridad: 1. Logo del repo, 2. Avatar del owner, 3. Placeholder
         if let logoURL = repo.logoURL, let url = URL(string: logoURL) {
             // Logo del repositorio
-            CachedAsyncImage(url: url) { ownerAvatarOrPlaceholder }
+            StoredRepoIcon(url: url, tokenKey: repo.account?.tokenKey) { ownerAvatarOrPlaceholder }
                 .frame(width: 44, height: 44)
                 .clipShape(RoundedRectangle(cornerRadius: 10))
         } else {
@@ -1256,6 +1256,7 @@ struct AddLocalProjectSheet: View {
 struct RepoIconConfigSheet: View {
     @Bindable var repo: ProjectRepo
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var context
 
     @State private var token: String?
     @State private var pathStack: [RepoContentItem] = []
@@ -1343,15 +1344,10 @@ struct RepoIconConfigSheet: View {
                 Section("icon_current_header") {
                     HStack {
                         Spacer()
-                        AsyncImage(url: url) { phase in
-                            switch phase {
-                            case .success(let image):
-                                image.resizable().aspectRatio(contentMode: .fit)
-                            default:
-                                Image(systemName: "photo")
-                                    .font(.title2)
-                                    .foregroundStyle(.secondary)
-                            }
+                        StoredRepoIcon(url: url, tokenKey: repo.account?.tokenKey) {
+                            Image(systemName: "photo")
+                                .font(.title2)
+                                .foregroundStyle(.secondary)
                         }
                         .frame(width: 64, height: 64)
                         .clipShape(RoundedRectangle(cornerRadius: 14))
@@ -1444,15 +1440,10 @@ struct RepoIconConfigSheet: View {
                 Section("icon_current_header") {
                     HStack {
                         Spacer()
-                        AsyncImage(url: url) { phase in
-                            switch phase {
-                            case .success(let image):
-                                image.resizable().aspectRatio(contentMode: .fit)
-                            default:
-                                Image(systemName: "photo")
-                                    .font(.title2)
-                                    .foregroundStyle(.secondary)
-                            }
+                        StoredRepoIcon(url: url, tokenKey: repo.account?.tokenKey) {
+                            Image(systemName: "photo")
+                                .font(.title2)
+                                .foregroundStyle(.secondary)
                         }
                         .frame(width: 64, height: 64)
                         .clipShape(RoundedRectangle(cornerRadius: 14))
@@ -1522,7 +1513,10 @@ struct RepoIconConfigSheet: View {
 
     private func selectImage(_ item: RepoContentItem) {
         guard let downloadUrl = item.downloadUrl else { return }
-        repo.logoURL = downloadUrl
+        // Without the query token: it expires in minutes, and `RepoIconStore` sends the
+        // account's token in a header instead.
+        repo.logoURL = RepoIconStore.canonicalString(downloadUrl)
+        try? context.save()
         ToastManager.shared.show(String(localized: "icon_configured_toast"), style: .success)
         dismiss()
     }
@@ -1547,6 +1541,7 @@ struct RepoIconConfigSheet: View {
         try? jpegData.write(to: fileURL)
 
         repo.logoURL = fileURL.absoluteString
+        try? context.save()
         ToastManager.shared.show(String(localized: "icon_configured_toast"), style: .success)
         dismiss()
     }

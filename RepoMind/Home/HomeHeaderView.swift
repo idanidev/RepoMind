@@ -43,53 +43,23 @@ struct HomeAccountMenuData: Hashable {
 
 // MARK: - Header
 
-/// Title, account menu, the three actions, the stats strip and the filter chips — everything
-/// above the first card. Search is inline: tapping the glass opens a field under the title instead
-/// of pushing the whole screen into a navigation bar it does not otherwise have. Filtering lives
-/// in the chips, so there is no separate filter button.
+/// Everything above the first card: the account menu and the two actions on the first row, the
+/// title on its own line below, then the stats strip and the filter chips. Search is not here:
+/// it sits at the bottom, next to the tab bar, where iOS puts it now.
 struct HomeHeaderView: View {
     var account = HomeAccountMenuData()
     let stats: HomeStats
     @Binding var filter: HomeFilter
-    @Binding var isSearching: Bool
-    @Binding var searchText: String
     var onSelectAccount: (String?) -> Void = { _ in }
     var onUpgrade: () -> Void = {}
     var onSignOut: () -> Void = {}
     var onAdd: () -> Void = {}
     var onNotifications: () -> Void = {}
 
-    @FocusState private var searchFocused: Bool
-
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            titleRow
-            if isSearching {
-                searchField
-                    .transition(.move(edge: .top).combined(with: .opacity))
-            }
-            HomeStatsStrip(stats: stats)
-            HomeFilterChips(selection: $filter)
-        }
-        .onChange(of: isSearching) { _, searching in
-            searchFocused = searching
-            if !searching {
-                searchText = ""
-            }
-        }
-    }
-
-    private var titleRow: some View {
-        HStack(spacing: 10) {
-            HStack(spacing: 6) {
-                Text("home_title")
-                    .font(.headline.weight(.bold))
-                    .foregroundStyle(HomeTheme.textPrimary)
-                    .lineLimit(1)
-                    .layoutPriority(1)
+            HStack(spacing: 8) {
                 if !account.names.isEmpty {
-                    Text(verbatim: "•")
-                        .foregroundStyle(HomeTheme.textSecondary)
                     accountMenu
                 }
                 if account.isDemo {
@@ -100,15 +70,17 @@ struct HomeHeaderView: View {
                         .padding(.vertical, 2)
                         .background(HomeTheme.warning, in: Capsule())
                 }
-            }
-            Spacer(minLength: 4)
-            HStack(spacing: 5) {
-                iconButton("magnifyingglass", label: "home_search_label") {
-                    withAnimation(.snappy(duration: 0.25)) { isSearching.toggle() }
-                }
+                Spacer(minLength: 4)
                 iconButton("plus", label: "home_add_label", action: onAdd)
                 iconButton("bell", label: "home_notifications_label", action: onNotifications)
             }
+            Text("home_title")
+                .font(.largeTitle.weight(.bold))
+                .foregroundStyle(HomeTheme.textPrimary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+            HomeStatsStrip(stats: stats)
+            HomeFilterChips(selection: $filter)
         }
     }
 
@@ -132,7 +104,9 @@ struct HomeHeaderView: View {
                 Label("sign_out", systemImage: "rectangle.portrait.and.arrow.right")
             }
         } label: {
-            HStack(spacing: 3) {
+            HStack(spacing: 5) {
+                Image(systemName: "person.crop.circle")
+                    .font(.subheadline)
                 accountTitle
                 if account.isPro {
                     Image(systemName: "crown.fill")
@@ -142,9 +116,13 @@ struct HomeHeaderView: View {
                 Image(systemName: "chevron.down")
                     .font(.caption2.weight(.semibold))
             }
-            .font(.subheadline)
-            .foregroundStyle(HomeTheme.textSecondary)
+            .font(.subheadline.weight(.medium))
+            .foregroundStyle(HomeTheme.textPrimary)
             .lineLimit(1)
+            .padding(.horizontal, 10)
+            .frame(height: 32)
+            .background(Capsule().fill(HomeTheme.surfaceElevated))
+            .overlay(Capsule().strokeBorder(HomeTheme.hairline, lineWidth: 0.5))
         }
         .accessibilityLabel("account_menu_label")
     }
@@ -162,38 +140,6 @@ struct HomeHeaderView: View {
 
     private var accountSelection: Binding<String?> {
         Binding(get: { account.selected }, set: { onSelectAccount($0) })
-    }
-
-    private var searchField: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "magnifyingglass")
-                .foregroundStyle(HomeTheme.textSecondary)
-            TextField("search_placeholder", text: $searchText)
-                .textFieldStyle(.plain)
-                .foregroundStyle(HomeTheme.textPrimary)
-                .autocorrectionDisabled()
-                .textInputAutocapitalization(.never)
-                .submitLabel(.search)
-                .focused($searchFocused)
-            if !searchText.isEmpty {
-                Button {
-                    searchText = ""
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(HomeTheme.textSecondary)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("home_clear_search_label")
-            }
-        }
-        .font(.subheadline)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(HomeTheme.surface))
-        .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .strokeBorder(HomeTheme.hairline, lineWidth: 0.5)
-        )
     }
 
     private func iconButton(

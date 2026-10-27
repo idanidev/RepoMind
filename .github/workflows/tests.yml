@@ -58,13 +58,26 @@ jobs:
             -destination "platform=iOS Simulator,id=${{ steps.sim.outputs.udid }}" \
             -only-testing:RepoMindTests \
             -resultBundlePath "$RUNNER_TEMP/Tests.xcresult" \
-            CODE_SIGNING_ALLOWED=NO \
             > "$RUNNER_TEMP/tests.log" 2>&1
           estado=$?
           set -e
-          # Solo lo que importa en pantalla; el registro entero va al artefacto.
-          grep -E "error:|Test Suite '.*' (passed|failed)|Executed [0-9]+ tests|\*\* TEST" "$RUNNER_TEMP/tests.log" || true
+          # Solo lo que importa en pantalla; el registro entero va al artefacto. Xcode 26 escribe
+          # "Test case ... passed/failed" y "Test run with N tests ...", no las líneas clásicas.
+          grep -iE "error:|error \(|failed|Test run with|Executed [0-9]+ tests|\*\* TEST" "$RUNNER_TEMP/tests.log" \
+            | grep -v "warning:" | head -80 || true
+          if [ "$estado" -ne 0 ]; then
+            echo "::group::Últimas 150 líneas del registro"
+            tail -n 150 "$RUNNER_TEMP/tests.log"
+            echo "::endgroup::"
+          fi
           exit $estado
+
+      - name: Empaquetar resultados
+        if: always()
+        run: |
+          if [ -d "$RUNNER_TEMP/Tests.xcresult" ]; then
+            ditto -c -k --sequesterRsrc --keepParent "$RUNNER_TEMP/Tests.xcresult" "$RUNNER_TEMP/Tests.xcresult.zip"
+          fi
 
       - name: Registro y resultados
         if: always()
@@ -73,5 +86,5 @@ jobs:
           name: tests
           path: |
             ${{ runner.temp }}/tests.log
-            ${{ runner.temp }}/Tests.xcresult
+            ${{ runner.temp }}/Tests.xcresult.zip
           if-no-files-found: ignore

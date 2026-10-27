@@ -206,6 +206,30 @@ actor GitHubService {
         return results
     }
 
+    // MARK: - Raw downloads (icons)
+
+    /// Bytes of a file by URL: a repo file through raw.githubusercontent.com, an avatar, anything
+    /// public. The token travels in a header, so a private repo's file loads for as long as the
+    /// token is valid rather than for the minutes a `download_url` query token lasts.
+    func download(_ url: URL, token: String?) async throws -> Data {
+        var request = URLRequest(url: url)
+        if let token {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        let (data, response) = try await performRequestWithRetry(request)
+        guard let http = response as? HTTPURLResponse else {
+            throw GitHubError.invalidResponse(0)
+        }
+        switch http.statusCode {
+        case 200:
+            return data
+        case 401:
+            throw GitHubError.invalidToken
+        default:
+            throw GitHubError.invalidResponse(http.statusCode)
+        }
+    }
+
     // MARK: - Fetch Repo Contents (File Browser)
 
     func fetchContents(owner: String, repo: String, path: String, token: String) async throws -> [RepoContentItem] {

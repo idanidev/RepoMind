@@ -35,11 +35,11 @@ struct HomeView: View {
     /// `nil` for Pro. A free account sees at most this many repos per filter, favorites first,
     /// and a banner says how many are hidden — the same gate `RepoListView` applies.
     var repoLimit: Int?
+    /// Typed in the search field at the bottom; empty means no search.
+    var searchText = ""
     var actions = HomeActions()
 
     @State private var filter: HomeFilter = .all
-    @State private var isSearching = false
-    @State private var searchText = ""
     @State private var repoToDelete: HomeRepoCardData?
 
     private var query: String { searchText.trimmingCharacters(in: .whitespaces) }
@@ -47,7 +47,7 @@ struct HomeView: View {
     /// Filter chip and search applied, before the free-tier gate.
     private var matchingRepos: [HomeRepoCardData] {
         let filtered = filter.apply(to: repos)
-        guard isSearching, !query.isEmpty else { return filtered }
+        guard !query.isEmpty else { return filtered }
         return filtered.filter {
             $0.name.localizedStandardContains(query) || $0.description.localizedStandardContains(query)
         }
@@ -101,8 +101,6 @@ struct HomeView: View {
                     account: account,
                     stats: stats,
                     filter: $filter,
-                    isSearching: $isSearching,
-                    searchText: $searchText,
                     onSelectAccount: actions.selectAccount,
                     onUpgrade: actions.upgrade,
                     onSignOut: actions.signOut,
@@ -263,7 +261,7 @@ struct HomeView: View {
 
     private var emptyState: some View {
         ContentUnavailableView {
-            if isSearching && !query.isEmpty {
+            if !query.isEmpty {
                 Label("no_results_title", systemImage: "magnifyingglass")
             } else if filter == .archived {
                 Label("no_archived_title", systemImage: "archivebox")
@@ -271,7 +269,7 @@ struct HomeView: View {
                 Label("no_repos_title", systemImage: "tray")
             }
         } description: {
-            if isSearching && !query.isEmpty {
+            if !query.isEmpty {
                 Text("no_results_message")
             } else if filter == .archived {
                 Text("no_archived_message")

@@ -64,6 +64,8 @@ struct HomeRepoCardData: Identifiable, Hashable {
     /// An image from the asset catalog, for bundled logos and previews.
     var logoAssetName: String?
     var ownerAvatarURL: URL?
+    /// Keychain key of the account that can read a private repo's icon file.
+    var iconTokenKey: String?
     var language: String?
     var stars = 0
     /// Open pull requests, when the activity cache has an answer. Shown only when non-zero.
@@ -143,6 +145,7 @@ extension HomeRepoCardData {
             },
             logoURL: repo.logoURL.flatMap(URL.init(string:)),
             ownerAvatarURL: repo.account?.avatarURL.flatMap(URL.init(string:)),
+            iconTokenKey: repo.account?.tokenKey,
             language: repo.language,
             stars: repo.stargazersCount,
             pullRequests: activity?.openPullRequests,
