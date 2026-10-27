@@ -1,0 +1,5 @@
+"widget_name" = "Dictar una tarea";
+"widget_description" = "Abre RepoMind escuchando. Di la app y la tarea.";
+"widget_title" = "Dictar una tarea";
+"widget_hint_short" = "Di la app y la tarea";
+"widget_example" = "«En InSync, arreglar el login»";

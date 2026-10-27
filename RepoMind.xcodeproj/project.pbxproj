@@ -6,7 +6,18 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		7A1C0DE02F5A00010000000D /* RepoMindWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 7A1C0DE02F5A000100000001 /* RepoMindWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
+		7A1C0DE02F5A00010000000B /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 33213BB62F2AD53400344A3A /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 7A1C0DE02F5A000100000004;
+			remoteInfo = RepoMindWidget;
+		};
 		33213BCC2F2AD53500344A3A /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 33213BB62F2AD53400344A3A /* Project object */;
@@ -23,10 +34,25 @@
 		};
 /* End PBXContainerItemProxy section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		7A1C0DE02F5A00010000000E /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				7A1C0DE02F5A00010000000D /* RepoMindWidget.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
 		33213BBE2F2AD53400344A3A /* RepoMind.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RepoMind.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		33213BCB2F2AD53500344A3A /* RepoMindTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RepoMindTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		33213BD52F2AD53500344A3A /* RepoMindUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RepoMindUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		7A1C0DE02F5A000100000001 /* RepoMindWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = RepoMindWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -51,6 +77,13 @@
 			);
 			target = 33213BD42F2AD53500344A3A /* RepoMindUITests */;
 		};
+		7A1C0DE02F5A000100000003 /* Exceptions for "RepoMindWidget" folder in "RepoMindWidget" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 7A1C0DE02F5A000100000004 /* RepoMindWidget */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -72,6 +105,14 @@
 		33213BD82F2AD53500344A3A /* RepoMindUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = RepoMindUITests;
+			sourceTree = "<group>";
+		};
+		7A1C0DE02F5A000100000002 /* RepoMindWidget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				7A1C0DE02F5A000100000003 /* Exceptions for "RepoMindWidget" folder in "RepoMindWidget" target */,
+			);
+			path = RepoMindWidget;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -98,6 +139,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		7A1C0DE02F5A000100000006 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -107,6 +155,7 @@
 				33213BC02F2AD53400344A3A /* RepoMind */,
 				33213BCE2F2AD53500344A3A /* RepoMindTests */,
 				33213BD82F2AD53500344A3A /* RepoMindUITests */,
+				7A1C0DE02F5A000100000002 /* RepoMindWidget */,
 				33213BBF2F2AD53400344A3A /* Products */,
 			);
 			sourceTree = "<group>";
@@ -117,6 +166,7 @@
 				33213BBE2F2AD53400344A3A /* RepoMind.app */,
 				33213BCB2F2AD53500344A3A /* RepoMindTests.xctest */,
 				33213BD52F2AD53500344A3A /* RepoMindUITests.xctest */,
+				7A1C0DE02F5A000100000001 /* RepoMindWidget.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -131,10 +181,12 @@
 				33213BBA2F2AD53400344A3A /* Sources */,
 				33213BBB2F2AD53400344A3A /* Frameworks */,
 				33213BBC2F2AD53400344A3A /* Resources */,
+				7A1C0DE02F5A00010000000E /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				7A1C0DE02F5A00010000000C /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				33213BC02F2AD53400344A3A /* RepoMind */,
@@ -192,6 +244,28 @@
 			productReference = 33213BD52F2AD53500344A3A /* RepoMindUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		7A1C0DE02F5A000100000004 /* RepoMindWidget */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 7A1C0DE02F5A000100000008 /* Build configuration list for PBXNativeTarget "RepoMindWidget" */;
+			buildPhases = (
+				7A1C0DE02F5A000100000005 /* Sources */,
+				7A1C0DE02F5A000100000006 /* Frameworks */,
+				7A1C0DE02F5A000100000007 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				7A1C0DE02F5A000100000002 /* RepoMindWidget */,
+			);
+			name = RepoMindWidget;
+			packageProductDependencies = (
+			);
+			productName = RepoMindWidget;
+			productReference = 7A1C0DE02F5A000100000001 /* RepoMindWidget.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -213,6 +287,9 @@
 						CreatedOnToolsVersion = 26.2;
 						TestTargetID = 33213BBD2F2AD53400344A3A;
 					};
+					7A1C0DE02F5A000100000004 = {
+						CreatedOnToolsVersion = 26.2;
+					};
 				};
 			};
 			buildConfigurationList = 33213BB92F2AD53400344A3A /* Build configuration list for PBXProject "RepoMind" */;
@@ -233,6 +310,7 @@
 				33213BBD2F2AD53400344A3A /* RepoMind */,
 				33213BCA2F2AD53500344A3A /* RepoMindTests */,
 				33213BD42F2AD53500344A3A /* RepoMindUITests */,
+				7A1C0DE02F5A000100000004 /* RepoMindWidget */,
 			);
 		};
 /* End PBXProject section */
@@ -253,6 +331,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		33213BD32F2AD53500344A3A /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7A1C0DE02F5A000100000007 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -283,6 +368,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		7A1C0DE02F5A000100000005 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -295,6 +387,11 @@
 			isa = PBXTargetDependency;
 			target = 33213BBD2F2AD53400344A3A /* RepoMind */;
 			targetProxy = 33213BD62F2AD53500344A3A /* PBXContainerItemProxy */;
+		};
+		7A1C0DE02F5A00010000000C /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 7A1C0DE02F5A000100000004 /* RepoMindWidget */;
+			targetProxy = 7A1C0DE02F5A00010000000B /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -580,6 +677,58 @@
 			};
 			name = Release;
 		};
+		7A1C0DE02F5A000100000009 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 202608241249;
+				DEVELOPMENT_TEAM = AXK73U74AC;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = RepoMindWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = RepoMind;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.5.3;
+				PRODUCT_BUNDLE_IDENTIFIER = idanidev.RepoMind.Widget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SUPPORTS_MACCATALYST = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1";
+			};
+			name = Debug;
+		};
+		7A1C0DE02F5A00010000000A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 202608241249;
+				DEVELOPMENT_TEAM = AXK73U74AC;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = RepoMindWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = RepoMind;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.5.3;
+				PRODUCT_BUNDLE_IDENTIFIER = idanidev.RepoMind.Widget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SUPPORTS_MACCATALYST = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -615,6 +764,15 @@
 			buildConfigurations = (
 				33213BE62F2AD53500344A3A /* Debug */,
 				33213BE72F2AD53500344A3A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		7A1C0DE02F5A000100000008 /* Build configuration list for PBXNativeTarget "RepoMindWidget" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				7A1C0DE02F5A000100000009 /* Debug */,
+				7A1C0DE02F5A00010000000A /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

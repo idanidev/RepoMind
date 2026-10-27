@@ -1,0 +1,5 @@
+"widget_name" = "Dictate a task";
+"widget_description" = "Opens RepoMind listening. Say the app and the task.";
+"widget_title" = "Dictate a task";
+"widget_hint_short" = "Say the app and the task";
+"widget_example" = "“In InSync, fix the login”";

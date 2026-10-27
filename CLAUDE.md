@@ -89,6 +89,13 @@ Sin Mac, lo mismo desde GitHub Actions (`.github/workflows`), con los secretos `
   en iOS 26 `VoiceComposer.composeGlobal` lee mejor el dictado, y la hoja pide la app si nadie la dijo
   en vez de adivinarla. Las tarjetas de revisión (`CaptureDraftCard`) son las mismas que las del tablero.
   `GlobalCaptureRouter` guarda la petición hasta que haya interfaz (arranque en frío desde Siri)
+- **Widget**: `RepoMindWidget/`, una extensión de WidgetKit (bundle `idanidev.RepoMind.Widget`) con un
+  solo widget, "Dictar una tarea": pequeño y mediano en la pantalla de inicio, y circular, rectangular
+  y en línea en la de bloqueo. Es un botón: un widget no puede grabar audio, así que su `widgetURL`
+  (`repomind://capture`) abre la app ya escuchando. No guarda datos, por eso no hay App Group ni
+  entitlements. Comparte versión y número de build con la app (los dos en el proyecto). Con la firma
+  en la nube (`testflight.yml` sin secretos de match) Xcode crea solo el App ID y el perfil del widget;
+  con match, el perfil del widget hay que crearlo una vez con `fastlane ios certificates`
 - **Bridge MCP**: `bridge/` (TypeScript) expone las tareas a agentes de código vía GitHub Issues
 
 ## Estructura de carpetas

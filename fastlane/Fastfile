@@ -3,6 +3,10 @@ default_platform(:ios)
 SCHEME       = "RepoMind"
 BUNDLE_ID    = "idanidev.RepoMind"
 PROJECT      = "RepoMind.xcodeproj"
+# El widget de la pantalla de inicio (RepoMindWidget): una extensión dentro de la app, con su
+# propio bundle id y su propio perfil de aprovisionamiento.
+WIDGET_TARGET    = "RepoMindWidget"
+WIDGET_BUNDLE_ID = "#{BUNDLE_ID}.Widget"
 
 platform :ios do
 
@@ -41,31 +45,46 @@ platform :ios do
     # En GitHub Actions no hay llavero del usuario: match necesita uno temporal.
     setup_ci if ENV["CI"]
 
+    # La app y el widget: dos bundle ids, dos perfiles. Si el del widget no existe todavía en el
+    # repo de certificados, hay que crearlo una vez con `fastlane ios certificates`.
     match(
-      type:     "appstore",
-      api_key:  api_key,
-      readonly: true
+      type:           "appstore",
+      api_key:        api_key,
+      readonly:       true,
+      app_identifier: [BUNDLE_ID, WIDGET_BUNDLE_ID]
     )
 
-    # match deja el perfil en lane_context y en ENV["sigh_<bundle id>_appstore_profile-name"],
+    # match deja los perfiles en lane_context y en ENV["sigh_<bundle id>_appstore_profile-name"],
     # con los puntos del bundle id tal cual (no con guiones bajos).
-    profile = (lane_context[SharedValues::MATCH_PROVISIONING_PROFILE_MAPPING] || {})[BUNDLE_ID] ||
-              ENV["sigh_#{BUNDLE_ID}_appstore_profile-name"]
+    profiles = [BUNDLE_ID, WIDGET_BUNDLE_ID].to_h do |bundle_id|
+      [bundle_id,
+       (lane_context[SharedValues::MATCH_PROVISIONING_PROFILE_MAPPING] || {})[bundle_id] ||
+       ENV["sigh_#{bundle_id}_appstore_profile-name"]]
+    end
     identity = ENV["sigh_#{BUNDLE_ID}_appstore_certificate-name"] || "Apple Distribution"
-    UI.user_error!("match no ha dejado perfil para #{BUNDLE_ID}") if ENV["CI"] && profile.to_s.empty?
+    if ENV["CI"]
+      profiles.each do |bundle_id, profile|
+        UI.user_error!("match no ha dejado perfil para #{bundle_id}") if profile.to_s.empty?
+      end
 
-    # En CI el archive se firma a mano con el certificado de distribución que trae match.
-    # Con la firma automática, Xcode busca un certificado de desarrollo con clave privada en
-    # el runner, no lo encuentra y crea uno nuevo en cada run; a los pocos runs la cuenta
-    # llega al máximo de certificados y el archive falla ("Choose a certificate to revoke").
-    # Vale para todo el build porque el scheme solo archiva la app: no hay extensiones ni
-    # paquetes de Swift a los que un perfil impuesto les sobre.
-    xcargs = ENV["CI"] ? [
-      "CODE_SIGN_STYLE=Manual",
-      "CODE_SIGN_IDENTITY='#{identity}'",
-      "PROVISIONING_PROFILE_SPECIFIER='#{profile}'",
-      "DEVELOPMENT_TEAM=AXK73U74AC",
-    ].join(" ") : nil
+      # En CI el archive se firma a mano con el certificado de distribución que trae match.
+      # Con la firma automática, Xcode busca un certificado de desarrollo con clave privada en
+      # el runner, no lo encuentra y crea uno nuevo en cada run; a los pocos runs la cuenta
+      # llega al máximo de certificados y el archive falla ("Choose a certificate to revoke").
+      # Cada target con su perfil: un perfil impuesto a todo el build no vale para la extensión.
+      { SCHEME => BUNDLE_ID, WIDGET_TARGET => WIDGET_BUNDLE_ID }.each do |target, bundle_id|
+        update_code_signing_settings(
+          use_automatic_signing: false,
+          path:                  PROJECT,
+          targets:               [target],
+          build_configurations:  ["Release"],
+          team_id:               "AXK73U74AC",
+          code_sign_identity:    identity,
+          profile_name:          profiles[bundle_id],
+          bundle_identifier:     bundle_id
+        )
+      end
+    end
 
     gym(
       scheme:           SCHEME,
@@ -75,12 +94,9 @@ platform :ios do
       output_directory: "./build",
       output_name:      "RepoMind.ipa",
       clean:            true,
-      xcargs:           xcargs,
       export_options: {
         signingStyle: "manual",
-        provisioningProfiles: {
-          BUNDLE_ID => profile
-        }
+        provisioningProfiles: profiles
       }
     )
   end
@@ -240,7 +256,7 @@ platform :mac do
     match(
       type:           "appstore",
       platform:       "ios",
-      app_identifier: [MAC_BUNDLE_ID],
+      app_identifier: [MAC_BUNDLE_ID, "maccatalyst.#{WIDGET_BUNDLE_ID}"],
       api_key:        api_key,
       readonly:       false
     )
