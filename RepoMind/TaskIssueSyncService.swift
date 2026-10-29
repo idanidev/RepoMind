@@ -258,9 +258,10 @@ final class TaskIssueSyncService {
     struct ImportResult: Equatable {
         var completed = 0   // tasks moved into the done column because their issue closed
         var imported = 0    // issues opened outside the app, pulled in as tasks
+        var moved = 0       // tasks moved to another column because their `col:*` label changed
         /// Which ones, so the notification can name the first and lead to it.
         var importedIssues: [ImportedIssue] = []
-        var changed: Int { completed + imported }
+        var changed: Int { completed + imported + moved }
     }
 
     /// An issue opened outside the app and the task it became.
@@ -291,7 +292,35 @@ final class TaskIssueSyncService {
         if result.imported > 0 {
             return String(localized: "sync_summary_imported \(result.imported)")
         }
+        if result.completed == 0 && result.moved > 0 {
+            return String(localized: "sync_summary_moved \(result.moved)")
+        }
         return String(localized: "tasks_completed_by_agent \(result.completed)")
+    }
+
+    /// The column a linked, still-open task should move to because its issue's `col:*` label now
+    /// names a different column — or `nil` to leave it where it is.
+    ///
+    /// Agents and people move work on GitHub by swapping the label (`col:pendiente` →
+    /// `col:totest`). That label used to matter only when an issue was first imported, so a task
+    /// already on the board never followed it. Deliberately conservative:
+    /// - only a label that matches a column of this board counts, first in board order (the same
+    ///   rule as importing);
+    /// - never into done (closing the issue is how a task gets there) or the ideas column (ideas
+    ///   never reach GitHub), and never out of done (see `syncIssues`);
+    /// - the caller skips tasks with a local change still unsent (`needsIssueSync`), so a move made
+    ///   offline is not undone by the old label it has not managed to replace yet.
+    static func columnForRelabel(
+        current: KanbanColumn?,
+        labels: Set<String>,
+        columns: [KanbanColumn],
+        done: KanbanColumn,
+        ideas: KanbanColumn?
+    ) -> KanbanColumn? {
+        guard current?.id != done.id else { return nil }
+        guard let target = columns.first(where: { labels.contains(columnLabel(for: $0)) }) else { return nil }
+        guard target.id != current?.id, target.id != done.id, target.id != ideas?.id else { return nil }
+        return target
     }
 
     /// Reconciles a repo's board against its GitHub issues, in both directions.
@@ -378,6 +407,13 @@ final class TaskIssueSyncService {
                     task.column = done
                     task.orderIndex = ((done.tasks ?? []).map(\.orderIndex).max() ?? -1) + 1
                     result.completed += 1
+                } else if issue.state == "open", !task.needsIssueSync,
+                          let target = Self.columnForRelabel(
+                            current: task.column, labels: labels, columns: columns,
+                            done: done, ideas: repo.ideaColumn(from: columns)) {
+                    task.column = target
+                    task.orderIndex = ((target.tasks ?? []).map(\.orderIndex).max() ?? -1) + 1
+                    result.moved += 1
                 }
             } else if let published = Self.taskMarker(in: issue.body).flatMap({ byID[$0] }) {
                 // This app published it and the number is not recorded here yet: a sync round ran while
@@ -454,6 +490,7 @@ final class TaskIssueSyncService {
             case .changed(let r):
                 total.completed += r.completed
                 total.imported += r.imported
+                total.moved += r.moved
                 total.importedIssues += r.importedIssues
                 reachedAny = true
             case .upToDate:

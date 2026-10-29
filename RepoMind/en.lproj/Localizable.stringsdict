@@ -322,6 +322,22 @@
 			<string>%lld issues imported from GitHub</string>
 		</dict>
 	</dict>
+	<key>sync_summary_moved %lld</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@count@</string>
+		<key>count</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>one</key>
+			<string>%lld task moved to another column on GitHub</string>
+			<key>other</key>
+			<string>%lld tasks moved to another column on GitHub</string>
+		</dict>
+	</dict>
 	<key>sync_tasks_confirm_bulk %lld</key>
 	<dict>
 		<key>NSStringLocalizedFormatKey</key>

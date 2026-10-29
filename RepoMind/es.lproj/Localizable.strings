@@ -455,6 +455,7 @@
 "voice_interrupted" = "Grabación detenida: otra app ha tomado el micrófono.";
 "voice_input_changed" = "Grabación detenida: ha cambiado el micrófono.";
 "sync_summary_imported %lld" = "%lld issues importados de GitHub";
+"sync_summary_moved %lld" = "%lld tareas cambiadas de columna en GitHub";
 "sync_summary_both %lld %lld" = "%lld completadas, %lld importadas de GitHub";
 
 /* Columna de ideas */

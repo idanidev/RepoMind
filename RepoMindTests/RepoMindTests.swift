@@ -792,3 +792,78 @@ final class DuplicateRepairTests: XCTestCase {
         XCTAssertFalse(DuplicateRepair.run(context: context).changed)
     }
 }
+
+// MARK: - Moving a task when its GitHub column label changes (#43)
+
+/// An agent or a person moves work on GitHub by swapping the `col:*` label. These pin which
+/// swaps move a task already on the board, and which leave it alone.
+@MainActor
+final class IssueRelabelTests: XCTestCase {
+    var container: ModelContainer!
+    var context: ModelContext!
+    var project: ProjectRepo!
+    var pendiente: KanbanColumn!
+    var toTest: KanbanColumn!
+    var hecho: KanbanColumn!
+    var ideas: KanbanColumn!
+
+    override func setUp() async throws {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none)
+        container = try ModelContainer(
+            for: ProjectRepo.self, TaskItem.self, KanbanColumn.self, GitHubAccount.self,
+            configurations: config)
+        context = container.mainContext
+        project = ProjectRepo(repoID: 1, name: "InSync")
+        context.insert(project)
+        pendiente = KanbanColumn(name: "Pendiente", orderIndex: 0, project: project)
+        toTest = KanbanColumn(name: "ToTest", orderIndex: 1, project: project)
+        hecho = KanbanColumn(name: "Hecho", orderIndex: 2, project: project)
+        ideas = KanbanColumn(name: "Ideas", orderIndex: 3, project: project)
+        for column in [pendiente, toTest, hecho, ideas] { context.insert(column!) }
+    }
+
+    override func tearDown() {
+        project = nil
+        context = nil
+        container = nil
+    }
+
+    private func destino(desde actual: KanbanColumn?, _ labels: Set<String>) -> KanbanColumn? {
+        TaskIssueSyncService.columnForRelabel(
+            current: actual, labels: labels, columns: [pendiente, toTest, hecho, ideas],
+            done: hecho, ideas: ideas)
+    }
+
+    func testToTestLabelSlug() {
+        XCTAssertEqual(TaskIssueSyncService.columnLabel(for: toTest), "col:totest")
+    }
+
+    func testMovesToTheColumnTheLabelNames() {
+        XCTAssertEqual(destino(desde: pendiente, ["repomind-task", "col:totest"])?.id, toTest.id)
+    }
+
+    func testStaysWhenTheLabelIsItsOwnColumn() {
+        XCTAssertNil(destino(desde: pendiente, ["repomind-task", "col:pendiente"]))
+    }
+
+    func testStaysWithoutAColumnLabel() {
+        XCTAssertNil(destino(desde: pendiente, ["repomind-task"]))
+        XCTAssertNil(destino(desde: pendiente, ["repomind-task", "col:no-existe"]))
+    }
+
+    func testNeverIntoDoneOrIdeas() {
+        XCTAssertNil(destino(desde: pendiente, ["col:hecho"]), "closing the issue is how a task reaches done")
+        XCTAssertNil(destino(desde: pendiente, ["col:ideas"]), "ideas never reach GitHub")
+    }
+
+    func testNeverOutOfDone() {
+        XCTAssertNil(destino(desde: hecho, ["col:totest"]))
+    }
+
+    func testSummaryForMovesOnly() {
+        var result = TaskIssueSyncService.ImportResult()
+        result.moved = 2
+        XCTAssertEqual(result.changed, 2)
+        XCTAssertTrue(TaskIssueSyncService.summary(for: result).contains("2"))
+    }
+}
