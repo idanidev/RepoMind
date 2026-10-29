@@ -463,6 +463,7 @@
 "voice_interrupted" = "Recording stopped: another app took the microphone.";
 "voice_input_changed" = "Recording stopped: the microphone changed.";
 "sync_summary_imported %lld" = "%lld issues imported from GitHub";
+"sync_summary_moved %lld" = "%lld tasks moved to another column on GitHub";
 "sync_summary_both %lld %lld" = "%lld completed, %lld imported from GitHub";
 "notif_imported_tasks %lld" = "%lld new issues opened on GitHub";
 
